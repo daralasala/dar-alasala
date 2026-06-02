@@ -832,18 +832,27 @@ function renderOrders(){
     filtered=filtered.filter(o=>o.current_stage===currentUser.department||o.worker===currentUser.name);
   }
   const sm={building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
   document.getElementById('orders-list').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">📋</div><div>${T('no_data')}</div></div>`
-    : filtered.map(o=>`
+    : filtered.map(o=>{
+      var firstImg='';
+      try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+      var thumb = firstImg
+        ? '<img src="'+firstImg+'" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px">'
+        : '<div style="width:100%;height:80px;background:var(--surface2);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;font-size:30px">🛋️</div>';
+      return `
       <div class="card" onclick="openOrderDetail(${o.id})" style="cursor:pointer">
+        ${thumb}
         <div class="card-header">
-          <div><div class="card-title">${o.product}</div><div class="card-sub">${o.customer_name} · ${o.id_code||''}</div></div>
+          <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${o.id_code||''}</div></div>
           <span class="badge ${sm[o.status]||'badge-blue'}">${T('status_'+(o.status||'building'))}</span>
         </div>
         <div class="row"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
         <div class="row" style="margin-bottom:0"><span class="row-label">🏭 ${lang==='en'?'Stage':lang==='ar'?'المرحلة':'مرحله'}</span><span class="row-value">${o.current_stage||'-'}</span></div>
         ${o.progress>0?`<div class="progress-bar"><div class="progress-fill" style="width:${o.progress}%"></div></div><div class="progress-label">${o.progress}%</div>`:''}
-      </div>`).join('');
+      </div>`;
+    }).join('');
 }
 
 // ===== ORDER DETAIL =====
@@ -858,23 +867,33 @@ async function openOrderDetail(id){
   }).join('');
   const canTransfer = currentUser&&(currentUser.role==='manager'||currentUser.department===o.current_stage);
   const isManager = currentUser&&currentUser.role==='manager';
+  const canSeeMoney = isManager||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش';
+  // Build images html
+  let imagesHtml='';
+  try {
+    var imgs = o.images ? (typeof o.images==='string'?JSON.parse(o.images):o.images) : [];
+    if(imgs&&imgs.length>0){
+      imagesHtml='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">'+(lang==='en'?'Photos':lang==='ar'?'الصور':'عکس‌ها')+'</div><div class="img-grid" style="margin-bottom:12px">'+imgs.map(function(u){return '<div class="img-thumb" onclick="window.open(\''+u+'\')"><img src="'+u+'"></div>';}).join('')+'</div>';
+    }
+  } catch(e){ imagesHtml=''; }
   document.getElementById('order-detail-content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;gap:8px">
       <div><div style="font-size:16px;font-weight:800">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${o.id_code||''}</div></div>
       <span class="badge ${sm[o.status]||'badge-blue'}">${T('status_'+(o.status||'building'))}</span>
     </div>
     <div class="card" style="margin-bottom:9px">
-      <div class="row"><span class="row-label">👤</span><span class="row-value">${o.customer_name}</span></div>
-      <div class="row"><span class="row-label">📱</span><span class="row-value">${o.customer_phone||'-'}</span></div>
+      ${canSeeMoney?`<div class="row"><span class="row-label">👤</span><span class="row-value">${o.customer_name}</span></div>
+      <div class="row"><span class="row-label">📱</span><span class="row-value">${o.customer_phone||'-'}</span></div>`:''}
       <div class="row"><span class="row-label">🏭</span><span class="row-value">${o.current_stage||'-'}</span></div>
       <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
     </div>
-    <div class="card" style="margin-bottom:9px">
+    ${canSeeMoney?`<div class="card" style="margin-bottom:9px">
       <div class="row"><span class="row-label">💰 Total</span><span class="row-value" style="color:var(--accent)">${(o.total_price||0).toLocaleString()} QAR</span></div>
       <div class="row"><span class="row-label">✅ Paid</span><span class="row-value" style="color:var(--green)">${(o.prepay||0).toLocaleString()} QAR</span></div>
       <div class="row" style="margin-bottom:0"><span class="row-label">⏳ Due</span><span class="row-value" style="color:var(--red)">${rem.toLocaleString()} QAR</span></div>
-    </div>
+    </div>`:''}
     ${o.description?`<div class="card" style="margin-bottom:9px;font-size:12px;color:var(--text2)">${o.description}</div>`:''}
+    ${imagesHtml}
     <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='en'?'Production Stages':lang==='ar'?'مراحل الإنتاج':'مراحل تولید'}</div>
     <div class="timeline" style="margin-bottom:14px">${stepsHtml}</div>
     ${isManager?`<div style="margin-bottom:10px"><label class="form-label">${lang==='en'?'Progress':'پیشرفت'}: <span id="pv">${o.progress||0}</span>%</label><input type="range" min="0" max="100" value="${o.progress||0}" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById('pv').textContent=this.value" onchange="updateProgress(${o.id},this.value)"></div>`:''}
@@ -957,11 +976,19 @@ function renderProduction(){
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
         const canTransfer=currentUser&&(currentUser.role==='manager'||currentUser.department===o.current_stage);
+        const canSeeCust=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
+        var firstImg='';
+        try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+        var thumb = firstImg
+          ? '<img src="'+firstImg+'" onclick="openOrderDetail('+o.id+')" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px;cursor:pointer">'
+          : '';
         return `<div class="card" style="cursor:pointer">
+          ${thumb}
           <div class="card-header">
-            <div><div class="card-title">${o.product}</div><div class="card-sub">${o.customer_name} · ${o.id_code||''}</div></div>
+            <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${o.id_code||''}</div></div>
             <span class="badge badge-blue">${o.current_stage||'-'}</span>
           </div>
+          ${o.description?'<div style="font-size:12px;color:var(--text2);margin-bottom:7px">'+o.description+'</div>':''}
           <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${o.progress||0}%"></div></div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
@@ -1148,7 +1175,8 @@ async function saveOrder(){
     prepay:parseFloat(document.getElementById('f-prepay').value)||0,
     description:document.getElementById('f-desc').value,
     status:'building', progress:0, id_code:idCode,
-    current_stage:firstStage, worker:currentUser?.name||''
+    current_stage:firstStage, worker:currentUser?.name||'',
+    images: pendingImages.length>0 ? pendingImages : null
   };
   const res=await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
   if(!res.ok){ showToast(await res.text(),'error'); return; }
@@ -1164,15 +1192,37 @@ async function saveOrder(){
 function handleImages(input, previewId){
   const preview=document.getElementById(previewId);
   Array.from(input.files).forEach(file=>{
-    pendingImages.push(file);
     const reader=new FileReader();
     reader.onload=e=>{
-      const div=document.createElement('div'); div.className='img-thumb';
-      div.innerHTML='<img src="'+e.target.result+'"><button class="img-del" onclick="this.parentElement.remove()">✕</button>';
-      preview.appendChild(div);
+      // Compress image before storing
+      const img=new Image();
+      img.onload=function(){
+        const canvas=document.createElement('canvas');
+        let w=img.width, h=img.height;
+        const maxDim=900;
+        if(w>h && w>maxDim){ h=h*maxDim/w; w=maxDim; }
+        else if(h>maxDim){ w=w*maxDim/h; h=maxDim; }
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL('image/jpeg',0.6);
+        pendingImages.push(compressed);
+        const div=document.createElement('div'); div.className='img-thumb';
+        div.setAttribute('data-img',compressed);
+        div.innerHTML='<img src="'+compressed+'"><button class="img-del" onclick="removeImg(this)">✕</button>';
+        preview.appendChild(div);
+      };
+      img.src=e.target.result;
     };
     reader.readAsDataURL(file);
   });
+}
+
+function removeImg(btn){
+  const div=btn.parentElement;
+  const img=div.getAttribute('data-img');
+  const idx=pendingImages.indexOf(img);
+  if(idx>-1) pendingImages.splice(idx,1);
+  div.remove();
 }
 
 // ===== MODAL =====
