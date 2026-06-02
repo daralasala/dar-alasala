@@ -885,7 +885,7 @@ async function openOrderDetail(id){
       : s.name===o.current_stage ? 'active' : 'pending';
     return `<div class="tl-item"><div class="tl-dot ${d}"></div><div style="font-size:12px;font-weight:600">${s.name}</div></div>`;
   }).join('');
-  const canTransfer = currentUser&&(currentUser.role==='manager'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name);
+  const canTransfer = currentUser&&currentUser.role!=='manager'?(deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name):true;
   const isManager = currentUser&&currentUser.role==='manager';
   const canSeeMoney = isManager||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش';
   // Build images html
@@ -932,7 +932,13 @@ async function updateProgress(id,val){
 }
 
 async function markDelivered(id){
+  const o=allOrders.find(x=>x.id===id);
+  const rem=(o?.total_price||0)-(o?.prepay||0);
   await api('PATCH','orders',{status:'delivered',progress:100},`?id=eq.${id}`);
+  // Register remaining payment as income
+  if(rem>0){
+    await api('POST','transactions',{type:'income',amount:rem,description:(lang==='ar'?'دفعة نهائية - ':'تسویه نهایی - ')+(o?.customer_name||''),category:(lang==='ar'?'دفعة الطلب':'پرداخت سفارش'),user_id:currentUser?.id});
+  }
   closeModal('orderDetailModal'); await loadAll(); showToast(T('saved'),'success');
 }
 
@@ -948,7 +954,7 @@ function openStageTransfer(orderId){
   const o=allOrders.find(x=>x.id===orderId); if(!o) return;
   stageImages=[];
   const currIdx = allStages.findIndex(s=>s.name===o.current_stage);
-  const nextStages = allStages.slice(currIdx+1);
+  const nextStages = currIdx>=0 ? allStages.slice(currIdx+1) : allStages;
   document.getElementById('stage-modal-content').innerHTML=`
     <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${o.current_stage||'-'}</div></div>
     <div class="form-group">
@@ -1000,15 +1006,18 @@ async function doStageTransfer(orderId){
   const notes=document.getElementById('stage-notes').value;
   var status=next.indexOf('آماده')>-1||next==='ready'?'ready':'building';
   const o=allOrders.find(x=>x.id===orderId);
+  if(!o){ showToast('Error','error'); return; }
   // Merge stage images into order images
   var existingImgs=[];
   try { existingImgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; } catch(e){ existingImgs=[]; }
   var allImgs=existingImgs.concat(stageImages);
-  await api('PATCH','orders',{current_stage:next,status,progress:Math.min((o?.progress||0)+20,95),images:allImgs},`?id=eq.${orderId}`);
-  await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes,started_at:new Date().toISOString()});
+  var newProgress=Math.min((o.progress||0)+20,95);
+  if(status==='ready') newProgress=100;
+  const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs},'?id=eq.'+orderId);
+  await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes:notes,started_at:new Date().toISOString()});
   stageImages=[];
   closeModal('stageModal'); await loadAll();
-  showToast('Transferred to: ' + next,'success');
+  showToast('✅ '+next,'success');
 }
 
 // ===== PRODUCTION =====
@@ -1036,7 +1045,7 @@ function renderProduction(){
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
-        const canTransfer=currentUser&&(currentUser.role==='manager'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name);
+        const canTransfer=currentUser&&currentUser.role!=='manager'?(deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name):true;
         const canSeeCust=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
         var firstImg='';
         try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
@@ -1241,6 +1250,11 @@ async function saveOrder(){
   };
   const res=await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
   if(!res.ok){ showToast(await res.text(),'error'); return; }
+  // Auto-register prepayment as income
+  var prepayVal=parseFloat(document.getElementById('f-prepay').value)||0;
+  if(prepayVal>0){
+    await api('POST','transactions',{type:'income',amount:prepayVal,description:(lang==='ar'?'دفعة مقدمة - ':'پیش‌پرداخت - ')+cname,category:(lang==='ar'?'دفعة مقدمة':'پیش‌پرداخت'),user_id:currentUser?.id});
+  }
   closeModal('newOrderModal');
   ['f-cname','f-phone','f-price','f-prepay','f-desc'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('order-preview').innerHTML='';
