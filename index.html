@@ -481,6 +481,12 @@ body.en .search-icon{right:auto;left:10px;}
 
 <button class="fab" id="fab" onclick="openModal('newOrderModal')">➕ <span id="fab-text">سفارش جدید</span></button>
 
+<!-- LIGHTBOX -->
+<div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;flex-direction:column" onclick="closeLightbox()">
+  <img id="lightbox-img" style="max-width:95%;max-height:85%;object-fit:contain;border-radius:8px">
+  <button style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.2);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer">✕</button>
+</div>
+
 <script>
 window.onerror=function(m,s,l,c,e){console.log('JS Error:',m,l,c);return true;};
 
@@ -822,14 +828,28 @@ function setFilter(f){
   renderOrders();
 }
 
+// Maps a department/job to which production stages they handle
+function deptStageMatch(dept){
+  var map={
+    'نجار':['نجاری','نجار'],
+    'جوشکار':['جوشکاری','جوشکار'],
+    'رنگ‌کار':['رنگ','رنگ‌کاری','رنگ کار'],
+    'روکش‌کار':['روکش‌کاری','روکش کاری','روکش‌کار'],
+    'بازرس':['کنترل کیفیت','کنترل','بازرسی'],
+    'فورمن':['نجاری','جوشکاری','رنگ','روکش‌کاری','کنترل کیفیت','آماده تحویل']
+  };
+  return map[dept]||[dept];
+}
+
 function renderOrders(){
   const q=(document.getElementById('order-search').value||'').toLowerCase();
   let filtered=allOrders;
   if(currentFilter!=='all') filtered=filtered.filter(o=>o.status===currentFilter);
   if(q) filtered=filtered.filter(o=>(o.customer_name+o.product+(o.id_code||'')).toLowerCase().includes(q));
-  // Workers see only their orders
+  // Workers see only their orders - match department to stage
   if(currentUser&&currentUser.role!=='manager'){
-    filtered=filtered.filter(o=>o.current_stage===currentUser.department||o.worker===currentUser.name);
+    var dm=deptStageMatch(currentUser.department);
+    filtered=filtered.filter(o=>dm.indexOf(o.current_stage)>-1||o.worker===currentUser.name);
   }
   const sm={building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
@@ -865,7 +885,7 @@ async function openOrderDetail(id){
       : s.name===o.current_stage ? 'active' : 'pending';
     return `<div class="tl-item"><div class="tl-dot ${d}"></div><div style="font-size:12px;font-weight:600">${s.name}</div></div>`;
   }).join('');
-  const canTransfer = currentUser&&(currentUser.role==='manager'||currentUser.department===o.current_stage);
+  const canTransfer = currentUser&&(currentUser.role==='manager'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name);
   const isManager = currentUser&&currentUser.role==='manager';
   const canSeeMoney = isManager||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش';
   // Build images html
@@ -873,7 +893,7 @@ async function openOrderDetail(id){
   try {
     var imgs = o.images ? (typeof o.images==='string'?JSON.parse(o.images):o.images) : [];
     if(imgs&&imgs.length>0){
-      imagesHtml='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">'+(lang==='en'?'Photos':lang==='ar'?'الصور':'عکس‌ها')+'</div><div class="img-grid" style="margin-bottom:12px">'+imgs.map(function(u){return '<div class="img-thumb" onclick="window.open(\''+u+'\')"><img src="'+u+'"></div>';}).join('')+'</div>';
+      imagesHtml='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">'+(lang==='en'?'Photos':lang==='ar'?'الصور':'عکس‌ها')+'</div><div class="img-grid" style="margin-bottom:12px">'+imgs.map(function(u,i){return '<div class="img-thumb" onclick="showLightbox(\''+o.id+'\','+i+')"><img src="'+u+'"></div>';}).join('')+'</div>';
     }
   } catch(e){ imagesHtml=''; }
   document.getElementById('order-detail-content').innerHTML=`
@@ -923,16 +943,27 @@ async function deleteOrder(id){
 }
 
 // ===== STAGE TRANSFER =====
+let stageImages=[];
 function openStageTransfer(orderId){
   const o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  stageImages=[];
   const currIdx = allStages.findIndex(s=>s.name===o.current_stage);
   const nextStages = allStages.slice(currIdx+1);
   document.getElementById('stage-modal-content').innerHTML=`
-    <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product} - ${o.customer_name}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${o.current_stage||'-'}</div></div>
+    <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${o.current_stage||'-'}</div></div>
+    <div class="form-group">
+      <label class="form-label">📸 ${lang==='en'?'Photo of finished work':lang==='ar'?'صورة العمل المنجز':'عکس کار تمام‌شده'}</label>
+      <div class="upload-area" onclick="document.getElementById('stage-img').click()">
+        <input type="file" id="stage-img" accept="image/*" capture="environment" multiple onchange="handleStageImages(this)">
+        <div style="font-size:24px;margin-bottom:4px">📷</div>
+        <div style="font-size:12px;color:var(--text2)">${lang==='en'?'Tap to take/upload photo':lang==='ar'?'انقر لالتقاط صورة':'برای گرفتن عکس ضربه بزنید'}</div>
+      </div>
+      <div class="img-grid" id="stage-preview"></div>
+    </div>
     <div class="form-group"><label class="form-label">${lang==='en'?'Transfer to':'انتقال به'}</label>
       <select class="form-control" id="next-stage">
         ${nextStages.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
-        <option value="آماده تحویل">Ready to Deliver</option>
+        <option value="آماده تحویل">${lang==='en'?'Ready to Deliver':'آماده تحویل'}</option>
       </select>
     </div>
     <div class="form-group"><label class="form-label">${lang==='en'?'Notes':'یادداشت'}</label><textarea class="form-control" id="stage-notes" style="min-height:60px"></textarea></div>
@@ -940,12 +971,42 @@ function openStageTransfer(orderId){
   openModal('stageModal');
 }
 
+function handleStageImages(input){
+  const preview=document.getElementById('stage-preview');
+  Array.from(input.files).forEach(file=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=function(){
+        const canvas=document.createElement('canvas');
+        let w=img.width,h=img.height; const maxDim=900;
+        if(w>h&&w>maxDim){h=h*maxDim/w;w=maxDim;}else if(h>maxDim){w=w*maxDim/h;h=maxDim;}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        const compressed=canvas.toDataURL('image/jpeg',0.6);
+        stageImages.push(compressed);
+        const div=document.createElement('div');div.className='img-thumb';
+        div.innerHTML='<img src="'+compressed+'">';
+        preview.appendChild(div);
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 async function doStageTransfer(orderId){
   const next=document.getElementById('next-stage').value;
   const notes=document.getElementById('stage-notes').value;
   var status=next.indexOf('آماده')>-1||next==='ready'?'ready':'building';
-  await api('PATCH','orders',{current_stage:next,status,progress:Math.min((allOrders.find(x=>x.id===orderId)?.progress||0)+20,95)},`?id=eq.${orderId}`);
+  const o=allOrders.find(x=>x.id===orderId);
+  // Merge stage images into order images
+  var existingImgs=[];
+  try { existingImgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; } catch(e){ existingImgs=[]; }
+  var allImgs=existingImgs.concat(stageImages);
+  await api('PATCH','orders',{current_stage:next,status,progress:Math.min((o?.progress||0)+20,95),images:allImgs},`?id=eq.${orderId}`);
   await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes,started_at:new Date().toISOString()});
+  stageImages=[];
   closeModal('stageModal'); await loadAll();
   showToast('Transferred to: ' + next,'success');
 }
@@ -975,12 +1036,12 @@ function renderProduction(){
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
-        const canTransfer=currentUser&&(currentUser.role==='manager'||currentUser.department===o.current_stage);
+        const canTransfer=currentUser&&(currentUser.role==='manager'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name);
         const canSeeCust=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
         var firstImg='';
         try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
         var thumb = firstImg
-          ? '<img src="'+firstImg+'" onclick="openOrderDetail('+o.id+')" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px;cursor:pointer">'
+          ? '<img src="'+firstImg+'" onclick="event.stopPropagation();showLightbox(\''+o.id+'\',0)" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px;cursor:pointer">'
           : '';
         return `<div class="card" style="cursor:pointer">
           ${thumb}
@@ -1228,6 +1289,17 @@ function removeImg(btn){
 // ===== MODAL =====
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+
+// ===== LIGHTBOX =====
+function showLightbox(orderId,idx){
+  var o=allOrders.find(x=>String(x.id)===String(orderId)); if(!o) return;
+  var imgs=[]; try{ imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; }catch(e){}
+  if(imgs[idx]){
+    document.getElementById('lightbox-img').src=imgs[idx];
+    document.getElementById('lightbox').style.display='flex';
+  }
+}
+function closeLightbox(){ document.getElementById('lightbox').style.display='none'; }
 
 // ===== TOAST =====
 function showToast(msg,type){
