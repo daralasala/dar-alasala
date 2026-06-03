@@ -520,6 +520,7 @@ let currentUser = null;
 let allOrders = [];
 let allUsers = [];
 let allTransactions = [];
+let allPurchases = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -763,7 +764,8 @@ function enterApp(){
       document.getElementById('tab-finance').style.display='none';
       document.getElementById('tab-staff').style.display='none';
     }
-    if(currentUser.department==='مسئول خرید'){
+    // Purchasing and Accountant can see finance
+    if(currentUser.department==='مسئول خرید'||currentUser.department==='حسابدار'){
       document.getElementById('tab-finance').style.display='';
     }
     loadAll();
@@ -797,14 +799,16 @@ function showTab(tab){
 
 // ===== LOAD =====
 async function loadAll(){
-  const [orders, users, trans] = await Promise.all([
+  const [orders, users, trans, purch] = await Promise.all([
     api('GET','orders','','?select=*&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
-    api('GET','transactions','','?select=*&order=created_at.desc&limit=50')
+    api('GET','transactions','','?select=*&order=created_at.desc&limit=50'),
+    api('GET','purchases','','?select=*&order=created_at.desc&limit=50')
   ]);
   allOrders = orders||[];
   allUsers = users||[];
   allTransactions = trans||[];
+  allPurchases = purch||[];
   renderDashboard();
   renderOrders();
   renderStages();
@@ -942,6 +946,18 @@ async function openOrderDetail(id){
     </div>`:''}
     ${o.description?`<div class="card" style="margin-bottom:9px;font-size:12px;color:var(--text2)">${o.description}</div>`:''}
     ${imagesHtml}
+    ${(isManager||currentUser.department==='حسابدار')?`
+    <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='ar'?'العقد والفاتورة':'قرارداد و فاکتور'}</div>
+    <div class="img-grid" style="margin-bottom:6px">
+      ${o.contract_image?`<div class="img-thumb" onclick="showDocFull(${o.id},'contract')"><img src="${o.contract_image}"></div>`:''}
+      ${o.invoice_image?`<div class="img-thumb" onclick="showDocFull(${o.id},'invoice')"><img src="${o.invoice_image}"></div>`:''}
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <input type="file" id="contract-file-${o.id}" accept="image/*" style="display:none" onchange="uploadDoc(${o.id},'contract',this)">
+      <input type="file" id="invoice-file-${o.id}" accept="image/*" style="display:none" onchange="uploadDoc(${o.id},'invoice',this)">
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('contract-file-${o.id}').click()">📄 ${lang==='ar'?'عقد':'قرارداد'}</button>
+      <button class="btn btn-outline btn-sm" onclick="document.getElementById('invoice-file-${o.id}').click()">🧾 ${lang==='ar'?'فاتورة':'فاکتور'}</button>
+    </div>`:''}
     <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='en'?'Production Stages':lang==='ar'?'مراحل الإنتاج':'مراحل تولید'}</div>
     <div class="timeline" style="margin-bottom:14px">${stepsHtml}</div>
     ${isManager?`<div style="margin-bottom:10px"><label class="form-label">${lang==='en'?'Progress':'پیشرفت'}: <span id="pv">${o.progress||0}</span>%</label><input type="range" min="0" max="100" value="${o.progress||0}" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById('pv').textContent=this.value" onchange="updateProgress(${o.id},this.value)"></div>`:''}
@@ -957,6 +973,40 @@ async function openOrderDetail(id){
 async function updateProgress(id,val){
   await api('PATCH','orders',{progress:parseInt(val)},`?id=eq.${id}`);
   const o=allOrders.find(x=>x.id===id); if(o) o.progress=parseInt(val);
+}
+
+// Upload contract/invoice document for an order
+function uploadDoc(orderId,docType,input){
+  const file=input.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    const img=new Image();
+    img.onload=async function(){
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height; const maxDim=1100;
+      if(w>h&&w>maxDim){h=h*maxDim/w;w=maxDim;}else if(h>maxDim){w=w*maxDim/h;h=maxDim;}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      const compressed=canvas.toDataURL('image/jpeg',0.65);
+      var field=docType==='contract'?{contract_image:compressed}:{invoice_image:compressed};
+      await api('PATCH','orders',field,'?id=eq.'+orderId);
+      var o=allOrders.find(x=>x.id===orderId);
+      if(o){ if(docType==='contract')o.contract_image=compressed; else o.invoice_image=compressed; }
+      showToast(T('saved'),'success');
+      openOrderDetail(orderId);
+    };
+    img.src=e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function showDocFull(orderId,docType){
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var img=docType==='contract'?o.contract_image:o.invoice_image;
+  if(img){
+    document.getElementById('lightbox-img').src=img;
+    document.getElementById('lightbox').style.display='flex';
+  }
 }
 
 async function markDelivered(id){
@@ -1123,7 +1173,14 @@ function renderFinance(){
   var txList=isPurchasing?allTransactions.filter(t=>t.type!=='income'):allTransactions;
   document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
-    : txList.slice(0,20).map(t=>`
+    : txList.slice(0,20).map(t=>{
+        // Find linked purchase with invoice image
+        var invImg='';
+        if(t.type==='purchase'){
+          var p=allPurchases.find(x=>x.transaction_id===t.id);
+          if(p&&p.invoice_image) invImg='<img src="'+p.invoice_image+'" onclick="showImgFull(\''+t.id+'\')" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
+        }
+        return `
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:9px">
@@ -1132,7 +1189,17 @@ function renderFinance(){
           </div>
           <div style="font-size:14px;font-weight:800;color:${t.type==='income'?'var(--green)':'var(--red)'}">${t.type==='income'?'+':'-'}${(t.amount||0).toLocaleString()}</div>
         </div>
-      </div>`).join('');
+        ${invImg}
+      </div>`;
+      }).join('');
+}
+
+function showImgFull(transId){
+  var p=allPurchases.find(x=>String(x.transaction_id)===String(transId));
+  if(p&&p.invoice_image){
+    document.getElementById('lightbox-img').src=p.invoice_image;
+    document.getElementById('lightbox').style.display='flex';
+  }
 }
 
 async function saveTransaction(type){
@@ -1188,6 +1255,8 @@ async function savePurchase(){
   closeModal('purchaseModal');
   const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
   allTransactions=newTrans||[];
+  const newPurch=await api('GET','purchases','','?select=*&order=created_at.desc&limit=50');
+  allPurchases=newPurch||[];
   renderFinance();
   showToast(T('saved'),'success');
   document.getElementById('p-supplier').value='';
