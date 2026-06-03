@@ -289,6 +289,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('production')" id="tab-production">🏭 <span id="t-prod">تولید</span></button>
     <button class="tab" onclick="showTab('finance')" id="tab-finance">💰 <span id="t-fin">مالی</span></button>
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
+    <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
   </div>
 
@@ -358,9 +359,27 @@ body.en .search-icon{right:auto;left:10px;}
     <div id="staff-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
+  <!-- PURCHASE REQUESTS -->
+  <div class="page" id="page-requests">
+    <button class="btn btn-primary btn-block" onclick="openModal('reqModal')" style="margin-bottom:12px">➕ <span id="req-new-btn">درخواست خرید جدید</span></button>
+    <div class="section-title" id="req-list-title">درخواست‌های خرید</div>
+    <div id="requests-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <!-- NOTIFICATIONS -->
   <div class="page" id="page-notify">
     <div id="notif-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+</div>
+
+<!-- PURCHASE REQUEST MODAL -->
+<div class="modal-overlay" id="reqModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🛒 <span id="rm-title">درخواست خرید جنس</span></div><button class="modal-close" onclick="closeModal('reqModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="rm-item">نام جنس / کالا</label><input class="form-control" type="text" id="req-item" placeholder="مثلا: چوب، رنگ، پیچ..."></div>
+    <div class="form-group"><label class="form-label" id="rm-qty">مقدار / تعداد</label><input class="form-control" type="text" id="req-qty" placeholder="مثلا: 10 متر، 5 کیلو..."></div>
+    <div class="form-group"><label class="form-label" id="rm-notes">توضیحات</label><textarea class="form-control" id="req-notes"></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="savePurchaseRequest()">💾 <span id="rm-save">ثبت درخواست</span></button>
   </div>
 </div>
 
@@ -460,11 +479,11 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="modal-close" onclick="closeModal('purchaseModal')">✕</button>
     </div>
     <div class="form-group">
-      <label class="form-label">📸 <span id="pm-invoice">عکس فاکتور</span> <span class="ai-badge">AI OCR</span></label>
+      <label class="form-label">📸 <span id="pm-invoice">عکس فاکتور</span></label>
       <div class="upload-area" onclick="document.getElementById('invoice-img').click()">
         <input type="file" id="invoice-img" accept="image/*" onchange="handleInvoice(this)">
         <div style="font-size:24px;margin-bottom:4px">📄</div>
-        <div style="font-size:12px;color:var(--text2)" id="pm-tap">عکس فاکتور را آپلود کنید - AI اطلاعات را استخراج می‌کند</div>
+        <div style="font-size:12px;color:var(--text2)" id="pm-tap">عکس فاکتور را آپلود کنید</div>
       </div>
       <div id="invoice-preview"></div>
     </div>
@@ -614,6 +633,14 @@ function setLang(l){
   document.getElementById('t-fin').textContent=T('fin');
   document.getElementById('t-staff').textContent=T('staff');
   document.getElementById('t-notify').textContent=T('notify');
+  safeSet('t-requests',l==='en'?'Requests':l==='ar'?'طلبات الشراء':'درخواست خرید');
+  safeSet('req-new-btn',l==='en'?'New Purchase Request':l==='ar'?'طلب شراء جديد':'درخواست خرید جدید');
+  safeSet('req-list-title',l==='en'?'Purchase Requests':l==='ar'?'طلبات الشراء':'درخواست‌های خرید');
+  safeSet('rm-title',l==='en'?'Request Material':l==='ar'?'طلب شراء مواد':'درخواست خرید جنس');
+  safeSet('rm-item',l==='en'?'Item Name':l==='ar'?'اسم الصنف':'نام جنس / کالا');
+  safeSet('rm-qty',l==='en'?'Quantity':l==='ar'?'الكمية':'مقدار / تعداد');
+  safeSet('rm-notes',l==='en'?'Notes':l==='ar'?'ملاحظات':'توضیحات');
+  safeSet('rm-save',l==='en'?'Submit Request':l==='ar'?'إرسال الطلب':'ثبت درخواست');
   document.getElementById('sl-active').textContent=T('active');
   document.getElementById('sl-week').textContent=T('week');
   document.getElementById('sl-done').textContent=T('done');
@@ -648,7 +675,7 @@ function setLang(l){
   document.getElementById('em-title').textContent=T('save_expense');
   document.getElementById('pm-title').textContent=T('purchase_btn');
   document.getElementById('pm-invoice').textContent=T('invoice');
-  document.getElementById('pm-tap').textContent=T('ai_proc').replace('...','').trim()+' - AI OCR';
+  document.getElementById('pm-tap').textContent=l==='en'?'Upload invoice photo':l==='ar'?'ارفع صورة الفاتورة':'عکس فاکتور را آپلود کنید';
   document.getElementById('pm-ai').textContent=T('ai_proc');
   document.getElementById('pm-supplier').textContent=T('supplier');
   document.getElementById('pm-date').textContent=T('inv_date');
@@ -764,6 +791,7 @@ function showTab(tab){
   if(tab==='production') renderProduction();
   if(tab==='finance') renderFinance();
   if(tab==='staff') renderStaff();
+  if(tab==='requests') renderRequests();
   if(tab==='notify') renderNotifications();
 }
 
@@ -1071,15 +1099,31 @@ function renderProduction(){
 
 // ===== FINANCE =====
 function renderFinance(){
+  const isPurchasing = currentUser&&currentUser.department==='مسئول خرید'&&currentUser.role!=='manager';
   const income=allTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+(t.amount||0),0);
   const expense=allTransactions.filter(t=>t.type!=='income').reduce((s,t)=>s+(t.amount||0),0);
-  document.getElementById('f-income').textContent=income.toLocaleString()+' QAR';
+  // For purchasing: hide income & balance cards, show only expenses
+  var incCard=document.getElementById('f-income')?.closest('.fin-card');
+  var balCard=document.getElementById('f-balance')?.closest('.fin-card');
+  var incBtn=document.getElementById('fb-income');
+  if(isPurchasing){
+    if(incCard) incCard.style.display='none';
+    if(balCard) balCard.style.display='none';
+    if(incBtn) incBtn.style.display='none';
+  } else {
+    if(incCard) incCard.style.display='';
+    if(balCard) balCard.style.display='';
+    if(incBtn) incBtn.style.display='';
+    document.getElementById('f-income').textContent=income.toLocaleString()+' QAR';
+    document.getElementById('f-balance').textContent=(income-expense).toLocaleString()+' QAR';
+  }
   document.getElementById('f-expense').textContent=expense.toLocaleString()+' QAR';
-  document.getElementById('f-balance').textContent=(income-expense).toLocaleString()+' QAR';
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
-  document.getElementById('transactions-list').innerHTML = allTransactions.length===0
+  // Filter transactions for purchasing - only show expense/purchase
+  var txList=isPurchasing?allTransactions.filter(t=>t.type!=='income'):allTransactions;
+  document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
-    : allTransactions.slice(0,20).map(t=>`
+    : txList.slice(0,20).map(t=>`
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:9px">
@@ -1108,40 +1152,23 @@ async function saveTransaction(type){
 }
 
 // ===== INVOICE AI =====
+let invoiceImage=null;
 async function handleInvoice(input){
   const file=input.files[0]; if(!file) return;
   const prev=document.getElementById('invoice-preview');
   const reader=new FileReader();
-  reader.onload=async e=>{
-    prev.innerHTML='<img src="'+e.target.result+'" style="width:100%;border-radius:10px;margin-bottom:10px">';
-    document.getElementById('ai-loading').style.display='flex';
-    document.getElementById('purchase-fields').style.opacity='0.5';
-    try {
-      const base64=e.target.result.split(',')[1];
-      const res=await fetch('https://api.anthropic.com/v1/messages',{
-        method:'POST',
-        headers:{'Content-Type':'application/json','x-api-key':'','anthropic-version':'2023-06-01'},
-        body:JSON.stringify({
-          model:'claude-sonnet-4-20250514',max_tokens:500,
-          messages:[{role:'user',content:[
-            {type:'image',source:{type:'base64',media_type:file.type,data:base64}},
-            {type:'text',text:'Extract from this invoice: supplier name, date, total amount, items. Reply in JSON only: {"supplier":"","date":"","total":0,"items":""}'}
-          ]}]
-        })
-      });
-      if(res.ok){
-        const data=await res.json();
-        const txt=data.content[0].text;
-        const json=JSON.parse(txt.replace(/```json|```/g,'').trim());
-        document.getElementById('p-supplier').value=json.supplier||'';
-        document.getElementById('p-date').value=json.date||'';
-        document.getElementById('p-total').value=json.total||'';
-        document.getElementById('p-items').value=json.items||'';
-        showToast('AI extracted invoice data','success');
-      }
-    } catch(err){ console.log('AI OCR not available, manual entry'); }
-    document.getElementById('ai-loading').style.display='none';
-    document.getElementById('purchase-fields').style.opacity='1';
+  reader.onload=e=>{
+    const img=new Image();
+    img.onload=function(){
+      const canvas=document.createElement('canvas');
+      let w=img.width,h=img.height; const maxDim=1000;
+      if(w>h&&w>maxDim){h=h*maxDim/w;w=maxDim;}else if(h>maxDim){w=w*maxDim/h;h=maxDim;}
+      canvas.width=w;canvas.height=h;
+      canvas.getContext('2d').drawImage(img,0,0,w,h);
+      invoiceImage=canvas.toDataURL('image/jpeg',0.6);
+      prev.innerHTML='<img src="'+invoiceImage+'" style="width:100%;border-radius:10px;margin-bottom:10px">';
+    };
+    img.src=e.target.result;
   };
   reader.readAsDataURL(file);
 }
@@ -1152,10 +1179,12 @@ async function savePurchase(){
   const items=document.getElementById('p-items').value;
   const date=document.getElementById('p-date').value;
   if(!total){ showToast(T('err_fill'),'error'); return; }
-  const trans=await api('POST','transactions',{type:'purchase',amount:total,description:supplier,category:'purchase',user_id:currentUser?.id});
+  const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:supplier||'Purchase',category:'purchase'})});
+  const trans=tRes.ok?await tRes.json():null;
   if(trans&&trans[0]){
-    await api('POST','purchases',{transaction_id:trans[0].id,supplier,total_price:total,item_name:items,invoice_date:date||null});
+    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:items,invoice_date:date||null,invoice_image:invoiceImage||null});
   }
+  invoiceImage=null;
   closeModal('purchaseModal');
   const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
   allTransactions=newTrans||[];
@@ -1219,6 +1248,55 @@ async function removeUser(id){
 }
 
 // ===== NOTIFICATIONS =====
+// ===== PURCHASE REQUESTS =====
+let allRequests=[];
+async function renderRequests(){
+  const reqs=await api('GET','purchase_requests','','?select=*&order=created_at.desc');
+  allRequests=reqs||[];
+  const isManagerOrBuyer = currentUser&&(currentUser.role==='manager'||currentUser.department==='مسئول خرید');
+  // Workers see only their own requests; manager/buyer see all
+  var list=isManagerOrBuyer?allRequests:allRequests.filter(r=>r.worker_name&&r.worker_name.indexOf(currentUser.name)>-1);
+  const stColors={pending:'badge-orange',approved:'badge-green',bought:'badge-blue',rejected:'badge-red'};
+  const stText={pending:lang==='ar'?'قيد الانتظار':'در انتظار',approved:lang==='ar'?'موافق':'تایید شده',bought:lang==='ar'?'تم الشراء':'خریداری شد',rejected:lang==='ar'?'مرفوض':'رد شده'};
+  document.getElementById('requests-list').innerHTML = list.length===0
+    ? `<div class="empty-state"><div class="empty-icon">🛒</div><div>${T('no_data')}</div></div>`
+    : list.map(r=>`
+      <div class="card">
+        <div class="card-header">
+          <div><div class="card-title">${r.item_name}</div><div class="card-sub">${r.quantity||''} · ${r.worker_name||''}</div></div>
+          <span class="badge ${stColors[r.status]||'badge-orange'}">${stText[r.status]||r.status}</span>
+        </div>
+        ${r.notes?`<div style="font-size:12px;color:var(--text2);margin-bottom:7px">${r.notes}</div>`:''}
+        <div style="font-size:10px;color:var(--text3)">${r.created_at?r.created_at.slice(0,10):''}</div>
+        ${isManagerOrBuyer&&r.status==='pending'?`<div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn btn-green btn-sm" onclick="updateRequest(${r.id},'approved')">✅ ${lang==='ar'?'موافقة':'تایید'}</button>
+          <button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':'خریدم'}</button>
+          <button class="btn btn-red btn-sm" onclick="updateRequest(${r.id},'rejected')">✕</button>
+        </div>`:''}
+        ${isManagerOrBuyer&&r.status==='approved'?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':'خریدم'}</button></div>`:''}
+      </div>`).join('');
+}
+
+async function savePurchaseRequest(){
+  const item=document.getElementById('req-item').value.trim();
+  const qty=document.getElementById('req-qty').value.trim();
+  const notes=document.getElementById('req-notes').value.trim();
+  if(!item){ showToast(T('err_fill'),'error'); return; }
+  await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending'})});
+  closeModal('reqModal');
+  document.getElementById('req-item').value='';
+  document.getElementById('req-qty').value='';
+  document.getElementById('req-notes').value='';
+  renderRequests();
+  showToast(T('saved'),'success');
+}
+
+async function updateRequest(id,status){
+  await api('PATCH','purchase_requests',{status:status},'?id=eq.'+id);
+  renderRequests();
+  showToast(T('saved'),'success');
+}
+
 function renderNotifications(){
   const now=new Date();
   let html='';
