@@ -937,7 +937,7 @@ async function markDelivered(id){
   await api('PATCH','orders',{status:'delivered',progress:100},`?id=eq.${id}`);
   // Register remaining payment as income
   if(rem>0){
-    await api('POST','transactions',{type:'income',amount:rem,description:(lang==='ar'?'دفعة نهائية - ':'تسویه نهایی - ')+(o?.customer_name||''),category:(lang==='ar'?'دفعة الطلب':'پرداخت سفارش'),user_id:currentUser?.id});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+(o?.customer_name||''),category:'payment'})});
   }
   closeModal('orderDetailModal'); await loadAll(); showToast(T('saved'),'success');
 }
@@ -1253,7 +1253,8 @@ async function saveOrder(){
   // Auto-register prepayment as income
   var prepayVal=parseFloat(document.getElementById('f-prepay').value)||0;
   if(prepayVal>0){
-    await api('POST','transactions',{type:'income',amount:prepayVal,description:(lang==='ar'?'دفعة مقدمة - ':'پیش‌پرداخت - ')+cname,category:(lang==='ar'?'دفعة مقدمة':'پیش‌پرداخت'),user_id:currentUser?.id});
+    var incRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:prepayVal,description:'Prepay - '+cname,category:'prepay'})});
+    if(!incRes.ok){ console.log('income err:',await incRes.text()); }
   }
   closeModal('newOrderModal');
   ['f-cname','f-phone','f-price','f-prepay','f-desc'].forEach(id=>document.getElementById(id).value='');
