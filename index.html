@@ -1032,7 +1032,9 @@ function openStageTransfer(orderId){
   const o=allOrders.find(x=>x.id===orderId); if(!o) return;
   stageImages=[];
   const currIdx = allStages.findIndex(s=>s.name===o.current_stage);
-  const nextStages = currIdx>=0 ? allStages.slice(currIdx+1) : allStages;
+  // Inspector and manager can send to ANY stage (for rework/corrections); others only forward
+  const canSendAnywhere = currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
+  const stageOptions = canSendAnywhere ? allStages : (currIdx>=0 ? allStages.slice(currIdx+1) : allStages);
   document.getElementById('stage-modal-content').innerHTML=`
     <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${o.current_stage||'-'}</div></div>
     <div class="form-group">
@@ -1044,13 +1046,13 @@ function openStageTransfer(orderId){
       </div>
       <div class="img-grid" id="stage-preview"></div>
     </div>
-    <div class="form-group"><label class="form-label">${lang==='en'?'Transfer to':'انتقال به'}</label>
+    <div class="form-group"><label class="form-label">${canSendAnywhere?(lang==='ar'?'إرسال إلى أي مرحلة':lang==='en'?'Send to any stage':'ارسال به هر مرحله'):(lang==='en'?'Transfer to':'انتقال به')}</label>
       <select class="form-control" id="next-stage">
-        ${nextStages.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
+        ${stageOptions.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
         <option value="آماده تحویل">${lang==='en'?'Ready to Deliver':'آماده تحویل'}</option>
       </select>
     </div>
-    <div class="form-group"><label class="form-label">${lang==='en'?'Notes':'یادداشت'}</label><textarea class="form-control" id="stage-notes" style="min-height:60px"></textarea></div>
+    <div class="form-group"><label class="form-label">${lang==='en'?'Notes':'یادداشت'}</label><textarea class="form-control" id="stage-notes" style="min-height:60px" placeholder="${canSendAnywhere?(lang==='ar'?'سبب الإرجاع إن وجد':'دلیل برگشت در صورت وجود'):''}"></textarea></div>
     <button class="btn btn-primary btn-block" onclick="doStageTransfer(${orderId})">✅ ${T('transfer')}</button>`;
   openModal('stageModal');
 }
@@ -1089,8 +1091,19 @@ async function doStageTransfer(orderId){
   var existingImgs=[];
   try { existingImgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; } catch(e){ existingImgs=[]; }
   var allImgs=existingImgs.concat(stageImages);
-  var newProgress=Math.min((o.progress||0)+20,95);
-  if(status==='ready') newProgress=100;
+  // Calculate progress based on target stage position (forward = progress, backward = rework)
+  var nextIdx=allStages.findIndex(s=>s.name===next);
+  var currIdx2=allStages.findIndex(s=>s.name===o.current_stage);
+  var newProgress;
+  if(status==='ready'){ newProgress=100; }
+  else if(nextIdx>=0){
+    // progress proportional to stage position
+    newProgress=Math.round((nextIdx/(allStages.length-1))*90)+5;
+  } else {
+    newProgress=Math.min((o.progress||0)+20,95);
+  }
+  // If sending backward (rework), keep status building
+  if(nextIdx>-1&&currIdx2>-1&&nextIdx<currIdx2) status='building';
   const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs},'?id=eq.'+orderId);
   await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes:notes,started_at:new Date().toISOString()});
   stageImages=[];
