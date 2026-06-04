@@ -903,8 +903,9 @@ function renderOrders(){
   let filtered=allOrders;
   if(currentFilter!=='all') filtered=filtered.filter(o=>o.status===currentFilter);
   if(q) filtered=filtered.filter(o=>(o.customer_name+o.product+(o.id_code||'')).toLowerCase().includes(q));
-  // Workers see only their orders - match department to stage
-  if(currentUser&&currentUser.role!=='manager'){
+  // Workers see only their orders - but accountant/sales/manager see ALL
+  var seesAll = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
+  if(currentUser&&!seesAll){
     var dm=deptStageMatch(currentUser.department);
     filtered=filtered.filter(o=>dm.indexOf(o.current_stage)>-1||o.worker===currentUser.name);
   }
