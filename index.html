@@ -751,6 +751,8 @@ async function doRegister(){
 }
 
 function enterApp(){
+  // Save session so user stays logged in after refresh
+  try { localStorage.setItem('dar_user', JSON.stringify(currentUser)); } catch(e){}
   document.getElementById('splash').style.opacity='0';
   document.getElementById('pending-screen').style.display='none';
   setTimeout(()=>{
@@ -773,6 +775,7 @@ function enterApp(){
 }
 
 function doLogout(){
+  try { localStorage.removeItem('dar_user'); } catch(e){}
   currentUser=null; allOrders=[]; allUsers=[]; allTransactions=[];
   document.getElementById('splash').style.opacity='1';
   document.getElementById('splash').style.display='flex';
@@ -1486,6 +1489,15 @@ function showToast(msg,type){
 
 // ===== INIT =====
 setLang('ar');
+// Restore session if user was logged in
+try {
+  var savedUser=localStorage.getItem('dar_user');
+  if(savedUser){
+    currentUser=JSON.parse(savedUser);
+    enterApp();
+  }
+} catch(e){ console.log('session restore failed',e); }
+
 </script>
 </body>
 </html>
