@@ -666,18 +666,19 @@ function setLang(l){
   document.getElementById('fb-expense').innerHTML=T('expense_btn');
   document.getElementById('fb-purchase').innerHTML=T('purchase_btn');
   document.getElementById('mo-new-order').textContent=T('new_order');
-  document.getElementById('ml-cname').textContent=T('cname');
-  document.getElementById('ml-phone').textContent=T('phone');
-  document.getElementById('ml-product').textContent=T('product');
-  document.getElementById('ml-delivery').textContent=T('delivery');
-  document.getElementById('ml-first-stage').textContent=T('first_stage');
-  document.getElementById('ml-price').textContent=T('price');
-  document.getElementById('ml-prepay').textContent=T('prepay');
-  document.getElementById('ml-desc').textContent=T('desc');
-  document.getElementById('ml-photos').textContent=T('photos');
-  document.getElementById('ml-tap').textContent=T('tap');
-  document.getElementById('ml-save').textContent=T('save');
-  document.getElementById('fab-text').textContent=T('fab');
+  function setTxt(id,val){ var e=document.getElementById(id); if(e) e.textContent=val; }
+  setTxt('ml-cname',T('cname'));
+  setTxt('ml-phone',T('phone'));
+  setTxt('ml-product',T('product'));
+  setTxt('ml-delivery',T('delivery'));
+  setTxt('ml-first-stage',T('first_stage'));
+  setTxt('ml-price',T('price'));
+  setTxt('ml-prepay',T('prepay'));
+  setTxt('ml-desc',T('desc'));
+  setTxt('ml-photos',T('photos'));
+  setTxt('ml-tap',T('tap'));
+  setTxt('ml-save',T('save'));
+  setTxt('fab-text',T('fab'));
   document.getElementById('od-title').textContent=T('order_detail');
   document.getElementById('sm-title').textContent=T('stage_transfer');
   document.getElementById('im-title').textContent=T('save_income');
@@ -1263,39 +1264,57 @@ function downloadInvoicePDF(orderId){
   pdfRender(styles, bodyContent, r.invNo);
 }
 
-// Shared PDF renderer - shows an overlay, captures, then removes
+// Shared PDF renderer using html2canvas + jsPDF directly (reliable, no cropping)
 function pdfRender(styles, bodyContent, filename){
   var overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
   var sheet=document.createElement('div');
-  sheet.id='pdf-sheet';
-  sheet.style.cssText='background:#fff;width:794px;padding:0;flex-shrink:0;box-sizing:border-box';
-  // Convert "body{...}" rules to ".pdf-body{...}" so they apply to our wrapper div
   var fixedStyles=styles.replace(/(^|\})\s*body\s*\{/g,'$1 .pdf-body{');
-  sheet.innerHTML='<style>'+fixedStyles+' .pdf-body{max-width:100%!important;padding:24px!important;margin:0!important;box-sizing:border-box}</style><div class="pdf-body" dir="ltr" style="width:100%">'+bodyContent+'</div>';
+  sheet.style.cssText='background:#fff;width:780px;flex-shrink:0';
+  sheet.innerHTML='<style>'+fixedStyles+' .pdf-body{max-width:100%!important;padding:26px!important;margin:0!important;box-sizing:border-box;width:780px}</style><div class="pdf-body" dir="ltr">'+bodyContent+'</div>';
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
   showToast(lang==='ar'?'جاري إنشاء PDF...':'در حال ساخت PDF...','success');
+
   var imgs=sheet.querySelectorAll('img');
   var loaded=0, totalImgs=imgs.length, done=false;
   function go(){
     if(done) return; done=true;
-    html2pdf().set({
-      margin:0,
-      filename:filename+'.pdf',
-      image:{type:'jpeg',quality:0.98},
-      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,width:794,windowWidth:794},
-      jsPDF:{unit:'px',format:[794,1123],orientation:'portrait'}
-    }).from(sheet).save().then(function(){
+    var target=sheet.querySelector('.pdf-body')||sheet;
+    html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false}).then(function(canvas){
+      var imgData=canvas.toDataURL('image/jpeg',0.95);
+      var jsPDF=(window.jspdf&&window.jspdf.jsPDF)?window.jspdf.jsPDF:window.jsPDF;
+      var pdf=new jsPDF('p','mm','a4');
+      var pageW=pdf.internal.pageSize.getWidth();
+      var pageH=pdf.internal.pageSize.getHeight();
+      var imgW=pageW;
+      var imgH=canvas.height*pageW/canvas.width;
+      var y=0;
+      // Multi-page if content taller than one page
+      if(imgH<=pageH){
+        pdf.addImage(imgData,'JPEG',0,0,imgW,imgH);
+      } else {
+        var remaining=imgH, position=0;
+        while(remaining>0){
+          pdf.addImage(imgData,'JPEG',0,position,imgW,imgH);
+          remaining-=pageH;
+          if(remaining>0){ pdf.addPage(); position-=pageH; }
+        }
+      }
+      pdf.save(filename+'.pdf');
       document.body.removeChild(overlay);
-    }).catch(function(e){ console.log('pdf err',e); document.body.removeChild(overlay); showToast('PDF error','error'); });
+    }).catch(function(e){
+      console.log('pdf err',e);
+      if(document.body.contains(overlay)) document.body.removeChild(overlay);
+      showToast('PDF error','error');
+    });
   }
   if(totalImgs===0){ setTimeout(go,200); return; }
   imgs.forEach(function(im){
     if(im.complete){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }
     else { im.onload=im.onerror=function(){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }; }
   });
-  setTimeout(function(){ if(!done){ go(); } },2500);
+  setTimeout(function(){ if(!done){ go(); } },3000);
 }
 
 // Format phone for WhatsApp (Qatar default +974)
