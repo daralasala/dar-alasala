@@ -1267,19 +1267,30 @@ function downloadInvoicePDF(orderId){
 // Shared PDF renderer using html2canvas + jsPDF directly (reliable, no cropping)
 function pdfRender(styles, bodyContent, filename){
   var overlay=document.createElement('div');
-  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:99999;display:flex;flex-direction:column;align-items:center;overflow:auto;padding:20px';
+  // Top bar with buttons
+  var bar=document.createElement('div');
+  bar.style.cssText='position:sticky;top:0;display:flex;gap:10px;margin-bottom:14px;z-index:5';
+  var dlBtn=document.createElement('button');
+  dlBtn.textContent='📥 '+(lang==='ar'?'تحميل PDF':'دانلود PDF');
+  dlBtn.style.cssText='padding:12px 26px;background:#d9534f;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer;font-weight:bold';
+  var closeBtn=document.createElement('button');
+  closeBtn.textContent='✕ '+(lang==='ar'?'إغلاق':'بستن');
+  closeBtn.style.cssText='padding:12px 26px;background:#555;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer';
+  closeBtn.onclick=function(){ if(document.body.contains(overlay)) document.body.removeChild(overlay); };
+  bar.appendChild(dlBtn); bar.appendChild(closeBtn);
+  overlay.appendChild(bar);
+
   var sheet=document.createElement('div');
   var fixedStyles=styles.replace(/(^|\})\s*body\s*\{/g,'$1 .pdf-body{');
   sheet.style.cssText='background:#fff;width:780px;flex-shrink:0';
   sheet.innerHTML='<style>'+fixedStyles+' .pdf-body{max-width:100%!important;padding:26px!important;margin:0!important;box-sizing:border-box;width:780px}</style><div class="pdf-body" dir="ltr">'+bodyContent+'</div>';
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
-  showToast(lang==='ar'?'جاري إنشاء PDF...':'در حال ساخت PDF...','success');
 
-  var imgs=sheet.querySelectorAll('img');
-  var loaded=0, totalImgs=imgs.length, done=false;
-  function go(){
-    if(done) return; done=true;
+  dlBtn.onclick=function(){
+    dlBtn.textContent=lang==='ar'?'جاري...':'در حال ساخت...';
+    dlBtn.disabled=true;
     var target=sheet.querySelector('.pdf-body')||sheet;
     html2canvas(target,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false}).then(function(canvas){
       var imgData=canvas.toDataURL('image/jpeg',0.95);
@@ -1289,12 +1300,10 @@ function pdfRender(styles, bodyContent, filename){
       var pageH=pdf.internal.pageSize.getHeight();
       var imgW=pageW;
       var imgH=canvas.height*pageW/canvas.width;
-      var y=0;
-      // Multi-page if content taller than one page
       if(imgH<=pageH){
         pdf.addImage(imgData,'JPEG',0,0,imgW,imgH);
       } else {
-        var remaining=imgH, position=0;
+        var position=0, remaining=imgH;
         while(remaining>0){
           pdf.addImage(imgData,'JPEG',0,position,imgW,imgH);
           remaining-=pageH;
@@ -1302,19 +1311,14 @@ function pdfRender(styles, bodyContent, filename){
         }
       }
       pdf.save(filename+'.pdf');
-      document.body.removeChild(overlay);
+      dlBtn.textContent='✓ '+(lang==='ar'?'تم':'انجام شد');
+      setTimeout(function(){ if(document.body.contains(overlay)) document.body.removeChild(overlay); },800);
     }).catch(function(e){
       console.log('pdf err',e);
-      if(document.body.contains(overlay)) document.body.removeChild(overlay);
-      showToast('PDF error','error');
+      dlBtn.textContent='📥 '+(lang==='ar'?'تحميل PDF':'دانلود PDF'); dlBtn.disabled=false;
+      showToast('PDF error - try again','error');
     });
-  }
-  if(totalImgs===0){ setTimeout(go,200); return; }
-  imgs.forEach(function(im){
-    if(im.complete){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }
-    else { im.onload=im.onerror=function(){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }; }
-  });
-  setTimeout(function(){ if(!done){ go(); } },3000);
+  };
 }
 
 // Format phone for WhatsApp (Qatar default +974)
