@@ -316,6 +316,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="search-box"><span class="search-icon">🔍</span><input type="text" id="order-search" oninput="renderOrders()"></div>
     <div style="display:flex;gap:6px;margin-bottom:11px;overflow-x:auto;padding-bottom:3px">
       <button class="btn btn-primary btn-sm" onclick="setFilter('all')" id="f-all">همه</button>
+      <button class="btn btn-outline btn-sm" onclick="setFilter('pending_payment')" id="f-pending">در انتظار پرداخت</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('building')" id="f-building">در حال ساخت</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('ready')" id="f-ready">آماده</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('delivered')" id="f-delivered">تحویل</button>
@@ -390,25 +391,10 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label" id="ml-cname">نام مشتری</label><input class="form-control" type="text" id="f-cname"></div>
     <div class="form-group"><label class="form-label" id="ml-phone">تلفن</label><input class="form-control" type="tel" id="f-phone"></div>
     <div class="form-group"><label class="form-label" id="ml-product">محصول</label>
-      <select class="form-control" id="f-product">
-        <option>تخت دونفره / Double Bed</option>
-        <option>تخت یکنفره / Single Bed</option>
-        <option>مبل / Sofa</option>
-        <option>کمد / Wardrobe</option>
-        <option>میز / Table</option>
-        <option>صندلی / Chair</option>
-        <option>سایر / Other</option>
-      </select>
+      <input class="form-control" type="text" id="f-product" placeholder="مثال: تخت دونفره، مبل U، کمد دیواری...">
     </div>
     <div class="form-group"><label class="form-label" id="ml-delivery">تاریخ تحویل</label><input class="form-control" type="date" id="f-delivery"></div>
-    <div class="form-group"><label class="form-label" id="ml-first-stage">مرحله اول</label>
-      <select class="form-control" id="f-first-stage">
-        <option value="نجاری">🪵 نجاری</option>
-        <option value="جوشکاری">🔧 جوشکاری</option>
-        <option value="رنگ">🎨 رنگ</option>
-        <option value="روکش‌کاری">🛋️ روکش‌کاری</option>
-      </select>
-    </div>
+    <input type="hidden" id="f-first-stage" value="نجاری">
     <div class="form-group"><label class="form-label" id="ml-price">مبلغ کل (QAR)</label><input class="form-control" type="number" id="f-price"></div>
     <div class="form-group"><label class="form-label" id="ml-prepay">پیش‌پرداخت</label><input class="form-control" type="number" id="f-prepay"></div>
     <div class="form-group"><label class="form-label" id="ml-desc">توضیحات</label><textarea class="form-control" id="f-desc"></textarea></div>
@@ -569,7 +555,7 @@ const TR = {
     approve:'موافقة',reject:'رفض',remove:'حذف',
     pending_approval:'في انتظار موافقة المدير.',
     fab:'طلب جديد',order_detail:'تفاصيل الطلب',stage_transfer:'نقل المرحلة',
-    dept_label:'التخصص',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
+    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
     notify_sent:'تم الارسال',saved:'تم الحفظ',err_fill:'يرجى ملء الحقول',
     err_login:'بيانات غير صحيحة',err_email:'البريد مسجل مسبقا',
     reg_success:'تم التسجيل! انتظر موافقة المدير.',no_data:'لا توجد بيانات',
@@ -590,7 +576,7 @@ const TR = {
     approve:'تایید',reject:'رد',remove:'حذف',
     pending_approval:'حساب شما ثبت شد و منتظر تایید مدیر است.',
     fab:'سفارش جدید',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
-    dept_label:'تخصص',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
+    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
     notify_sent:'پیام ارسال شد',saved:'ذخیره شد',err_fill:'لطفا فیلدها را پر کنید',
     err_login:'اطلاعات اشتباه است',err_email:'ایمیل قبلا ثبت شده',
     reg_success:'ثبت نام انجام شد! منتظر تایید مدیر باشید.',no_data:'داده ای یافت نشد',
@@ -611,7 +597,7 @@ const TR = {
     approve:'Approve',reject:'Reject',remove:'Remove',
     pending_approval:'Your account is awaiting manager approval.',
     fab:'New Order',order_detail:'Order Details',stage_transfer:'Stage Transfer',
-    dept_label:'Department',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
+    dept_label:'Department',status_pending_payment:'Awaiting Payment',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
     notify_sent:'Notification sent',saved:'Saved',err_fill:'Please fill required fields',
     err_login:'Invalid credentials',err_email:'Email already registered',
     reg_success:'Registered! Awaiting manager approval.',no_data:'No data found',
@@ -710,6 +696,7 @@ function setLang(l){
   document.getElementById('pm-save').textContent=T('save_purchase');
   document.getElementById('f-all').textContent='All / كل / همه';
   document.getElementById('f-all').textContent='All / الكل / همه';
+  document.getElementById('f-pending').textContent=T('status_pending_payment');
   document.getElementById('f-building').textContent=T('status_building');
   document.getElementById('f-ready').textContent=T('status_ready');
   document.getElementById('f-delivered').textContent=T('status_delivered');
@@ -844,7 +831,7 @@ async function loadAll(){
 
 // ===== DASHBOARD =====
 function renderDashboard(){
-  const active = allOrders.filter(o=>o.status!=='delivered').length;
+  const active = allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment').length;
   const done = allOrders.filter(o=>o.status==='delivered').length;
   const now=new Date(); const we=new Date(now); we.setDate(we.getDate()+7);
   const week = allOrders.filter(o=>{ if(!o.delivery_date)return false; const d=new Date(o.delivery_date); return d>=now&&d<=we; }).length;
@@ -854,7 +841,7 @@ function renderDashboard(){
   document.getElementById('s-week').textContent=week;
   document.getElementById('s-staff').textContent=activeStaff;
   document.getElementById('dash-greet').textContent=T('greet')+', '+(currentUser?currentUser.name:'');
-  const urgent=allOrders.filter(o=>o.status!=='delivered').sort((a,b)=>new Date(a.delivery_date)-new Date(b.delivery_date)).slice(0,4);
+  const urgent=allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment').sort((a,b)=>new Date(a.delivery_date)-new Date(b.delivery_date)).slice(0,4);
   document.getElementById('dash-orders').innerHTML = urgent.length===0
     ? `<div class="empty-state"><div class="empty-icon">✅</div><div>${T('no_data')}</div></div>`
     : urgent.map(o=>{
@@ -869,7 +856,7 @@ function renderDashboard(){
       }).join('');
   // Stage summary
   const stageCounts={};
-  allOrders.filter(o=>o.status!=='delivered').forEach(o=>{ const s=o.current_stage||'نجاری'; stageCounts[s]=(stageCounts[s]||0)+1; });
+  allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment').forEach(o=>{ const s=o.current_stage||'نجاری'; stageCounts[s]=(stageCounts[s]||0)+1; });
   document.getElementById('dash-stages').innerHTML = Object.keys(stageCounts).length===0
     ? `<div style="color:var(--text2);font-size:12px;text-align:center;padding:10px">${T('no_data')}</div>`
     : Object.entries(stageCounts).map(([s,c])=>`
@@ -912,7 +899,7 @@ function renderOrders(){
     var dm=deptStageMatch(currentUser.department);
     filtered=filtered.filter(o=>dm.indexOf(o.current_stage)>-1||o.worker===currentUser.name);
   }
-  const sm={building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
   document.getElementById('orders-list').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">📋</div><div>${T('no_data')}</div></div>`
@@ -940,7 +927,7 @@ function renderOrders(){
 async function openOrderDetail(id){
   const o=allOrders.find(x=>x.id===id); if(!o) return;
   const rem=(o.total_price||0)-(o.prepay||0);
-  const sm={building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const stepsHtml = allStages.map(s=>{
     const d = (s.order_num < (allStages.find(x=>x.name===o.current_stage)||{order_num:1}).order_num) ? 'done'
       : s.name===o.current_stage ? 'active' : 'pending';
@@ -989,21 +976,38 @@ async function openOrderDetail(id){
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('contract-file-${o.id}').click()">📄 ${lang==='ar'?'رفع عقد':'آپلود قرارداد'}</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('invoice-file-${o.id}').click()">📎 ${lang==='ar'?'رفع فاتورة':'آپلود فاکتور'}</button>
     </div>`:''}
+    ${o.status==='pending_payment'?`
+    <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${lang==='ar'?'هذا الطلب في انتظار العقد والدفع. بعد استلام الدفعة، اضغط لبدء الإنتاج.':'این سفارش در انتظار قرارداد و پرداخت است. بعد از دریافت پیش‌پرداخت، دکمه شروع تولید را بزنید.'}</div>
+      ${(isManager||currentUser.department==='حسابدار')?`<button class="btn btn-primary btn-block" onclick="startProduction(${o.id})">🏭 ${lang==='ar'?'بدء الإنتاج':'شروع تولید'}</button>`:''}
+    </div>`:`
     <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='en'?'Production Stages':lang==='ar'?'مراحل الإنتاج':'مراحل تولید'}</div>
     <div class="timeline" style="margin-bottom:14px">${stepsHtml}</div>
     ${isManager?`<div style="margin-bottom:10px"><label class="form-label">${lang==='en'?'Progress':'پیشرفت'}: <span id="pv">${o.progress||0}</span>%</label><input type="range" min="0" max="100" value="${o.progress||0}" style="width:100%;accent-color:var(--accent)" oninput="document.getElementById('pv').textContent=this.value" onchange="updateProgress(${o.id},this.value)"></div>`:''}
     <div style="display:flex;gap:7px;flex-wrap:wrap">
-      ${canTransfer&&o.status!=='delivered'?`<button class="btn btn-primary btn-sm" onclick="closeModal('orderDetailModal');openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
+      ${canTransfer&&o.status!=='delivered'&&o.status!=='pending_payment'?`<button class="btn btn-primary btn-sm" onclick="closeModal('orderDetailModal');openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
       ${isManager?`<button class="btn btn-green btn-sm" onclick="showToast(T('notify_sent'),'success')">📱</button>
       <button class="btn btn-outline btn-sm" onclick="markDelivered(${o.id})">✅ ${T('status_delivered')}</button>
       <button class="btn btn-red btn-sm" onclick="deleteOrder(${o.id})">🗑️</button>`:''}
-    </div>`;
+    </div>`}`;
   openModal('orderDetailModal');
 }
 
 async function updateProgress(id,val){
   await api('PATCH','orders',{progress:parseInt(val)},`?id=eq.${id}`);
   const o=allOrders.find(x=>x.id===id); if(o) o.progress=parseInt(val);
+}
+
+// Start production: move pending order into the production line (نجاری)
+async function startProduction(id){
+  var firstStage=(allStages&&allStages.length>0)?allStages[0].name:'نجاری';
+  await api('PATCH','orders',{status:'building',current_stage:firstStage,progress:5},'?id=eq.'+id);
+  var o=allOrders.find(x=>x.id===id);
+  if(o){ o.status='building'; o.current_stage=firstStage; o.progress=5; }
+  await api('POST','order_stages',{order_id:id,stage_name:firstStage,worker_name:currentUser.name,status:'active',started_at:new Date().toISOString()});
+  closeModal('orderDetailModal');
+  await loadAll();
+  showToast(lang==='ar'?'بدأ الإنتاج':'تولید شروع شد','success');
 }
 
 // Upload contract/invoice document for an order
@@ -1401,7 +1405,7 @@ function renderStages(){
   pipeline.innerHTML = allStages.map((s,i)=>`
     <div class="stage-pill">
       ${i>0?`<span class="stage-arrow">›</span>`:''}
-      <button class="stage-btn ${currentStageFilter===s.name?'active':''}" onclick="filterByStage('${s.name}')">${s.name} (${allOrders.filter(o=>o.current_stage===s.name&&o.status!=='delivered').length})</button>
+      <button class="stage-btn ${currentStageFilter===s.name?'active':''}" onclick="filterByStage('${s.name}')">${s.name} (${allOrders.filter(o=>o.current_stage===s.name&&o.status!=='delivered'&&o.status!=='pending_payment').length})</button>
     </div>`).join('');
 }
 
@@ -1414,8 +1418,8 @@ function filterByStage(s){
 function renderProduction(){
   renderStages();
   const filtered = currentStageFilter==='all'
-    ? allOrders.filter(o=>o.status!=='delivered')
-    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered');
+    ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment')
+    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment');
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
@@ -1665,7 +1669,7 @@ async function updateRequest(id,status){
 function renderNotifications(){
   const now=new Date();
   let html='';
-  allOrders.filter(o=>o.status!=='delivered').forEach(o=>{
+  allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment').forEach(o=>{
     const days=Math.ceil((new Date(o.delivery_date)-now)/(1000*60*60*24));
     if(days<=3&&days>=0) html+=`<div class="notif-item unread"><div style="font-size:18px">⏰</div><div><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:12px;color:var(--text2)">${o.customer_name} · ${days}d</div></div></div>`;
   });
@@ -1687,8 +1691,8 @@ async function saveOrder(){
     total_price:parseFloat(document.getElementById('f-price').value)||0,
     prepay:parseFloat(document.getElementById('f-prepay').value)||0,
     description:document.getElementById('f-desc').value,
-    status:'building', progress:0, id_code:idCode,
-    current_stage:firstStage, worker:currentUser?.name||'',
+    status:'pending_payment', progress:0, id_code:idCode,
+    current_stage:'في انتظار الدفع', worker:currentUser?.name||'',
     images: pendingImages.length>0 ? pendingImages : null
   };
   const res=await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
