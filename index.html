@@ -1117,51 +1117,59 @@ function printInvoice(orderId){
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
   var advance=o.prepay||0;
   var balance=total-advance;
-  var rows=invoiceItems.map(function(it,i){
-    return '<tr><td style="text-align:center;padding:9px;border:1px solid #333">'+(i+1)+'</td><td style="text-align:right;padding:9px;border:1px solid #333">'+it.desc+'</td><td style="text-align:center;padding:9px;border:1px solid #333">'+it.qty+'</td><td style="text-align:center;padding:9px;border:1px solid #333">'+it.price.toLocaleString()+'</td><td style="text-align:center;padding:9px;border:1px solid #333">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
+  var rows=invoiceItems.map(function(it){
+    return '<tr><td class="desc">'+it.desc+'</td><td class="ctr">'+it.qty+'</td><td class="ctr">'+it.price.toLocaleString()+'</td><td class="ctr">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
   }).join('');
-  var html='<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8"><title>'+invNo+'</title>'+
-    '<style>body{font-family:Arial,sans-serif;padding:28px;color:#1a1a1a;max-width:850px;margin:0 auto}'+
-    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}'+
-    '.h-left{font-size:13px;line-height:1.9;color:#333}'+
-    '.h-left .cname{font-size:24px;font-weight:bold;font-family:Georgia,serif;margin-bottom:8px}'+
-    '.h-right{font-size:13px;line-height:1.9;color:#333;text-align:right}'+
-    '.h-right .cname{font-size:24px;font-weight:bold;margin-bottom:8px}'+
+  var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+invNo+'</title>'+
+    '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:850px;margin:0 auto}'+
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}'+
+    '.h-en{font-size:13px;line-height:1.9;color:#333;text-align:left}'+
+    '.h-en .cname{font-size:23px;font-weight:bold;font-family:Georgia,serif;margin-bottom:8px}'+
+    '.h-ar{font-size:13px;line-height:1.9;color:#333;text-align:right;direction:rtl}'+
+    '.h-ar .cname{font-size:23px;font-weight:bold;margin-bottom:8px}'+
     '.h-logo img{width:150px;background:#f0f0f0;padding:6px;border-radius:4px}'+
-    '.inv-box{border:2px solid #333;width:380px;margin-bottom:18px}'+
-    '.inv-box .ttl{font-weight:bold;font-size:15px;padding:8px 12px;border-bottom:1px solid #333;letter-spacing:1px}'+
-    '.inv-box .rw{padding:8px 12px;font-size:14px}'+
-    '.cust-area{text-align:center;float:left;margin-top:-150px;font-size:15px}'+
-    '.cust-area .nm{font-weight:bold;font-size:18px;margin:8px 0}'+
-    'table{width:100%;border-collapse:collapse;margin:10px 0;clear:both}'+
-    'th{background:#5a5f7a;color:#fff;padding:9px;border:1px solid #444;font-size:13px}'+
+    '.mid{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px}'+
+    '.inv-box{border:2px solid #333;width:360px}'+
+    '.inv-box .ttl{font-weight:bold;font-size:15px;padding:9px 14px;border-bottom:1px solid #333;letter-spacing:1px}'+
+    '.inv-box .rw{padding:9px 14px;font-size:14px;border-bottom:1px solid #333}'+
+    '.inv-box .rw:last-child{border-bottom:none}'+
+    '.cust{text-align:center;font-size:15px;padding-top:10px}'+
+    '.cust .nm{font-weight:bold;font-size:18px;margin:10px 0;direction:rtl}'+
+    'table{width:100%;border-collapse:collapse;margin:6px 0}'+
+    'th{background:#5a5f7a;color:#fff;padding:10px;border:1px solid #444;font-size:13px}'+
+    'td{border:1px solid #333;padding:10px}'+
+    '.desc{text-align:right;direction:rtl}'+
+    '.ctr{text-align:center}'+
     '.amt-label{background:#eceef3;font-weight:bold;text-align:center}'+
-    '.sign-area{display:flex;justify-content:space-between;margin-top:45px;font-size:14px;align-items:flex-end}'+
-    '.stamp img{width:230px}'+
+    '.words{text-align:right;direction:rtl;color:#444;font-size:13px}'+
+    '.sign-area{display:flex;justify-content:space-between;margin-top:50px;font-size:14px;align-items:flex-end}'+
+    '.stamp img{width:240px}'+
     '@media print{button{display:none}}</style></head><body>'+
     '<div class="header">'+
-    '<div class="h-left"><div class="cname">Dar Alasala Furniture</div>'+
+    '<div class="h-en"><div class="cname">Dar Alasala Furniture</div>'+
     'whatsapp : +974 30388585<br>Mobile&nbsp;&nbsp;&nbsp;: +974 66688585<br>P.O.Box&nbsp;&nbsp;: 82497<br>Birkat Al Awamer - Qatar.</div>'+
     '<div class="h-logo"><img src="'+COMPANY_LOGO+'"></div>'+
-    '<div class="h-right"><div class="cname">دار الاصاله للمفروشات</div>'+
+    '<div class="h-ar"><div class="cname">دار الاصاله للمفروشات</div>'+
     'واتساب : +974 30388585<br>جوال : +974 66688585<br>ص.ب : 82497<br>بركة العوامر اللوجستية - قطر</div>'+
     '</div>'+
+    '<div class="mid">'+
     '<div class="inv-box"><div class="ttl">CREDIT &nbsp;-&nbsp; INVOICE</div>'+
-    '<div class="rw" style="border-bottom:1px solid #333">No&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: &nbsp;&nbsp;<b>'+invNo+'</b></div>'+
+    '<div class="rw">No&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;: &nbsp;&nbsp;<b>'+invNo+'</b></div>'+
     '<div class="rw">Date&nbsp;&nbsp;&nbsp;: &nbsp;&nbsp;<b>'+date+'</b></div></div>'+
-    '<div class="cust-area"><div>Customer Name</div><div class="nm">'+cust+'</div><div style="font-weight:bold">CONTACT NO : '+(contact||'-')+'</div></div>'+
-    '<table><thead><tr><th>Description<br>المواصفات</th><th style="width:80px">Qty<br>الكمية</th><th style="width:120px">Unit Price<br>سعر الوحدة</th><th style="width:130px">Amount<br>المبلغ</th></tr></thead>'+
+    '<div class="cust"><div>Customer Name</div><div class="nm">'+cust+'</div><div style="font-weight:bold">CONTACT NO : '+(contact||'-')+'</div></div>'+
+    '</div>'+
+    '<table><thead><tr><th>Description / المواصفات</th><th style="width:80px">Qty<br>الكمية</th><th style="width:120px">Unit Price<br>سعر الوحدة</th><th style="width:130px">Amount<br>المبلغ</th></tr></thead>'+
     '<tbody>'+rows+'</tbody></table>'+
-    '<table class="amt-table"><tbody>'+
-    '<tr><td style="text-align:center;padding:9px;border:1px solid #333;color:#444">'+numToArabicWords(total)+'</td><td class="amt-label" style="padding:9px;border:1px solid #333;width:160px">Total Amount</td><td style="text-align:center;padding:9px;border:1px solid #333;width:120px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
-    '<tr><td style="border:1px solid #333"></td><td class="amt-label" style="padding:9px;border:1px solid #333">Discount</td><td style="text-align:center;padding:9px;border:1px solid #333">-</td></tr>'+
-    '<tr><td style="text-align:center;padding:9px;border:1px solid #333;color:#444">'+numToArabicWords(total)+'</td><td class="amt-label" style="padding:9px;border:1px solid #333">Total Amount</td><td style="text-align:center;padding:9px;border:1px solid #333;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
-    '<tr><td style="text-align:center;padding:9px;border:1px solid #333;color:#444">'+numToArabicWords(advance)+'</td><td class="amt-label" style="padding:9px;border:1px solid #333">Advance amount</td><td style="text-align:center;padding:9px;border:1px solid #333;font-weight:bold">'+advance.toLocaleString()+'</td></tr>'+
-    '<tr><td style="text-align:center;padding:9px;border:1px solid #333;color:#444">'+numToArabicWords(balance)+'</td><td class="amt-label" style="padding:9px;border:1px solid #333">Balance</td><td style="text-align:center;padding:9px;border:1px solid #333;font-weight:bold">'+balance.toLocaleString()+'</td></tr>'+
+    '<table><tbody>'+
+    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:160px">Total Amount</td><td class="ctr" style="width:120px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
+    '<tr><td></td><td class="amt-label">Discount</td><td class="ctr">-</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label">Total Amount</td><td class="ctr" style="font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(advance)+'</td><td class="amt-label">Advance amount</td><td class="ctr" style="font-weight:bold">'+advance.toLocaleString()+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(balance)+'</td><td class="amt-label">Balance</td><td class="ctr" style="font-weight:bold">'+balance.toLocaleString()+'</td></tr>'+
     '</tbody></table>'+
     '<div class="sign-area"><div><div style="margin-bottom:30px">Customer Name : _________________</div><div>Signature : _________________</div></div>'+
-    '<div class="stamp"><img src="'+COMPANY_STAMP+'"><div style="margin-top:6px">Name of salesman : ________</div></div></div>'+
-    '<div style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ طباعة / Print</button></div>'+
+    '<div class="stamp" style="text-align:center"><img src="'+COMPANY_STAMP+'"><div style="margin-top:6px">Name of salesman</div></div></div>'+
+    '<div style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>'+
     '</body></html>';
   var w=window.open('','_blank');
   w.document.write(html);
