@@ -1233,11 +1233,11 @@ function buildInvoiceHTML(orderId, withButton){
     '<table><thead><tr><th>Description / المواصفات</th><th style="width:80px">Qty<br>الكمية</th><th style="width:120px">Unit Price<br>سعر الوحدة</th><th style="width:130px">Amount<br>المبلغ</th></tr></thead>'+
     '<tbody>'+rows+'</tbody></table>'+
     '<table><tbody>'+
-    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:160px">Total Amount</td><td class="ctr" style="width:120px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
-    '<tr><td></td><td class="amt-label">Discount</td><td class="ctr">-</td></tr>'+
-    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label">Total Amount</td><td class="ctr" style="font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
-    '<tr><td class="words">'+numToArabicWords(advance)+'</td><td class="amt-label">Advance amount</td><td class="ctr" style="font-weight:bold">'+advance.toLocaleString()+'</td></tr>'+
-    '<tr><td class="words">'+numToArabicWords(balance)+'</td><td class="amt-label">Balance</td><td class="ctr" style="font-weight:bold">'+balance.toLocaleString()+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:200px">Total Amount</td><td class="ctr" style="width:130px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
+    '<tr><td></td><td class="amt-label" style="width:200px">Discount</td><td class="ctr" style="width:130px">-</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:200px">Total Amount</td><td class="ctr" style="width:130px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(advance)+'</td><td class="amt-label" style="width:200px">Advance amount</td><td class="ctr" style="width:130px;font-weight:bold">'+advance.toLocaleString()+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(balance)+'</td><td class="amt-label" style="width:200px">Balance</td><td class="ctr" style="width:130px;font-weight:bold">'+balance.toLocaleString()+'</td></tr>'+
     '</tbody></table>'+
     '<div class="sign-area"><div><div style="margin-bottom:30px">Customer Name : _________________</div><div>Signature : _________________</div></div>'+
     '<div class="stamp" style="text-align:center"><img src="'+COMPANY_STAMP+'"><div style="margin-top:6px">Name of salesman</div></div></div>'+
@@ -1268,8 +1268,10 @@ function pdfRender(styles, bodyContent, filename){
   if(!w){ showToast(lang==='ar'?'اسمح بالنوافذ المنبثقة':'اجازه باز شدن پنجره را بدهید','error'); return; }
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+filename+'</title>'+
     '<style>'+styles+
-    '@media screen{body{background:#525659}.sheet{background:#fff;max-width:850px;margin:18px auto;box-shadow:0 0 14px rgba(0,0,0,0.4)}.toolbar{position:sticky;top:0;background:#323639;padding:12px;text-align:center;display:flex;gap:10px;justify-content:center;z-index:10}.toolbar button{padding:11px 22px;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-weight:bold;color:#fff}}'+
-    '@media print{.toolbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:100%}body{background:#fff}}'+
+    '@page{size:A4;margin:0}'+
+    '@media screen{body{background:#525659}.sheet{background:#fff;max-width:800px;margin:18px auto;box-shadow:0 0 14px rgba(0,0,0,0.4)}.toolbar{position:sticky;top:0;background:#323639;padding:12px;text-align:center;display:flex;gap:10px;justify-content:center;z-index:10}.toolbar button{padding:11px 22px;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-weight:bold;color:#fff}}'+
+    '@media print{.toolbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:100%}body{background:#fff}'+
+    'th{padding:6px!important}td{padding:6px!important}.amt-label{padding:6px!important}table{margin:4px 0!important}body{padding:16px!important}.header{margin-bottom:16px!important}.mid{margin-bottom:12px!important}.sign-area{margin-top:26px!important}.stamp img{width:200px!important}.sign{margin-top:24px!important}}'+
     '</style></head><body>'+
     '<div class="toolbar">'+
     '<button onclick="window.print()" style="background:#1a73e8">🖨️ '+(lang==='ar'?'طباعة / حفظ PDF':'چاپ / ذخیره PDF')+'</button>'+
