@@ -206,6 +206,7 @@ body.en .search-icon{right:auto;left:10px;}
 /* AI SCAN */
 .ai-badge{background:linear-gradient(135deg,#7b2ff7,#4a90d9);color:#fff;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
 <body>
 <div class="toast" id="toast"></div>
@@ -1140,6 +1141,7 @@ function renderInvoiceEditor(o){
     '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ إضافة صنف / افزودن قلم</button>'+
     '<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label">الإجمالي / Total</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
     '<button class="btn btn-primary btn-block" onclick="printInvoice('+o.id+')">🖨️ طباعة / چاپ - PDF</button>'+
+    '<button class="btn btn-block" style="margin-top:8px;background:#d9534f;color:#fff" onclick="downloadInvoicePDF('+o.id+')">📥 تحميل PDF / دانلود PDF</button>'+
     '<button class="btn btn-green btn-block" style="margin-top:8px" onclick="sendInvoiceWhatsApp('+o.id+')">📱 إرسال واتساب / ارسال واتساپ</button>';
 }
 
@@ -1176,7 +1178,7 @@ function numToArabicWords(num){
   return s+' ريال';
 }
 
-function printInvoice(orderId){
+function buildInvoiceHTML(orderId, withButton){
   var o=allOrders.find(x=>x.id===orderId);
   var invNo=document.getElementById('inv-no').value;
   var cust=document.getElementById('inv-cust').value;
@@ -1189,6 +1191,7 @@ function printInvoice(orderId){
   var rows=invoiceItems.map(function(it){
     return '<tr><td class="desc">'+it.desc+'</td><td class="ctr">'+it.qty+'</td><td class="ctr">'+it.price.toLocaleString()+'</td><td class="ctr">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
   }).join('');
+  var btn=withButton?'<div style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>':'';
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+invNo+'</title>'+
     '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:850px;margin:0 auto}'+
     '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}'+
@@ -1238,11 +1241,30 @@ function printInvoice(orderId){
     '</tbody></table>'+
     '<div class="sign-area"><div><div style="margin-bottom:30px">Customer Name : _________________</div><div>Signature : _________________</div></div>'+
     '<div class="stamp" style="text-align:center"><img src="'+COMPANY_STAMP+'"><div style="margin-top:6px">Name of salesman</div></div></div>'+
-    '<div style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>'+
+    btn+
     '</body></html>';
+  return {html:html, invNo:invNo};
+}
+
+function printInvoice(orderId){
+  var r=buildInvoiceHTML(orderId, true);
   var w=window.open('','_blank');
-  w.document.write(html);
+  w.document.write(r.html);
   w.document.close();
+}
+
+function downloadInvoicePDF(orderId){
+  var r=buildInvoiceHTML(orderId, false);
+  if(typeof html2pdf==='undefined'){ showToast('PDF library loading...','error'); return; }
+  var container=document.createElement('div');
+  container.innerHTML=r.html;
+  var body=container.querySelector('body')||container;
+  document.body.appendChild(container);
+  container.style.position='fixed'; container.style.left='-9999px'; container.style.top='0';
+  showToast(lang==='ar'?'جاري إنشاء PDF...':'در حال ساخت PDF...','success');
+  html2pdf().set({margin:8,filename:r.invNo+'.pdf',image:{type:'jpeg',quality:0.95},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(body).save().then(function(){
+    document.body.removeChild(container);
+  }).catch(function(e){ console.log(e); document.body.removeChild(container); });
 }
 
 // Format phone for WhatsApp (Qatar default +974)
@@ -1324,6 +1346,7 @@ function renderContractEditor(o){
     '<div class="form-group"><label class="form-label">دفعة عند المعاينة / باقیمانده</label><input class="form-control" type="number" id="c-rem" value="'+rem+'" readonly></div>'+
     '<div class="form-group"><label class="form-label">مدة التنفيذ / مدت اجرا</label><input class="form-control" id="c-duration" value="40 : 50 يوم عمل"></div>'+
     '<button class="btn btn-primary btn-block" onclick="printContract('+o.id+')">🖨️ طباعة العقد / چاپ قرارداد - PDF</button>'+
+    '<button class="btn btn-block" style="margin-top:8px;background:#d9534f;color:#fff" onclick="downloadContractPDF('+o.id+')">📥 تحميل PDF / دانلود PDF</button>'+
     '<button class="btn btn-green btn-block" style="margin-top:8px" onclick="sendContractWhatsApp('+o.id+')">📱 إرسال واتساب / ارسال واتساپ</button>';
 }
 
@@ -1333,7 +1356,7 @@ function updateContractPay(){
   document.getElementById('c-rem').value=total-prepay;
 }
 
-function printContract(orderId){
+function buildContractHTML(orderId, withButton){
   var no=document.getElementById('c-no').value;
   var date=document.getElementById('c-date').value;
   var cust=document.getElementById('c-cust').value;
@@ -1397,11 +1420,30 @@ function printContract(orderId){
     '<div class="sign"><div>الطرف الأول :<br><img src="'+COMPANY_STAMP+'" style="width:240px;margin-top:4px"></div><div>الطرف الثاني : ___________</div></div>'+
     '<div class="foot">هذا والله ولي التوفيق</div>'+
     '</div>'+
-    '<div style="text-align:center;margin-top:20px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>'+
+    (withButton?'<div style="text-align:center;margin-top:20px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>':'')+
     '</body></html>';
+  return {html:html, no:no};
+}
+
+function printContract(orderId){
+  var r=buildContractHTML(orderId, true);
   var w=window.open('','_blank');
-  w.document.write(html);
+  w.document.write(r.html);
   w.document.close();
+}
+
+function downloadContractPDF(orderId){
+  var r=buildContractHTML(orderId, false);
+  if(typeof html2pdf==='undefined'){ showToast('PDF library loading...','error'); return; }
+  var container=document.createElement('div');
+  container.innerHTML=r.html;
+  var body=container.querySelector('body')||container;
+  document.body.appendChild(container);
+  container.style.position='fixed'; container.style.left='-9999px'; container.style.top='0';
+  showToast(lang==='ar'?'جاري إنشاء PDF...':'در حال ساخت PDF...','success');
+  html2pdf().set({margin:8,filename:r.no+'.pdf',image:{type:'jpeg',quality:0.95},html2canvas:{scale:2,useCORS:true},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(body).save().then(function(){
+    document.body.removeChild(container);
+  }).catch(function(e){ console.log(e); document.body.removeChild(container); });
 }
 
 function sendContractWhatsApp(orderId){
