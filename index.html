@@ -1140,15 +1140,19 @@ function renderInvoiceEditor(o){
     '<div style="display:flex;gap:5px;margin-bottom:4px;font-size:10px;color:var(--text3)"><span style="flex:3">المواصفات</span><span style="flex:1">الكمية</span><span style="flex:1.3">السعر</span><span style="width:34px"></span></div>'+
     itemsRows+
     '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ إضافة صنف / افزودن قلم</button>'+
-    '<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label">الإجمالي / Total</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
+    '<div class="form-group"><label class="form-label">الخصم / تخفیف (QAR)</label><input class="form-control" type="number" id="inv-discount" value="0" oninput="updateInvTotals()"></div>'+
+    '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">الإجمالي / Total</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">بعد الخصم / بعد تخفیف</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
     '<button class="btn btn-primary btn-block" onclick="downloadInvoicePDF('+o.id+')">🖨️ طباعة وحفظ PDF / چاپ و ذخیره PDF</button>'+
     '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendInvoiceWhatsApp('+o.id+')">💬 رسالة واتساب / پیام واتساپ</button>';
 }
 
 function updateInvTotals(){
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var disc=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var sub=document.getElementById('inv-subtotal');
   var el=document.getElementById('inv-total');
-  if(el) el.textContent=total.toLocaleString()+' QAR';
+  if(sub) sub.textContent=total.toLocaleString()+' QAR';
+  if(el) el.textContent=(total-disc).toLocaleString()+' QAR';
 }
 
 // Convert number to Arabic words (for amounts)
@@ -1185,9 +1189,11 @@ function buildInvoiceHTML(orderId, withButton){
   var contact=document.getElementById('inv-contact').value;
   var date=document.getElementById('inv-date').value;
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var discount=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var grandTotal=total-discount;
   var advance=o.prepay||0;
   if(o.invoice_id){ var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}); if(inv) advance=inv.prepay||0; }
-  var balance=total-advance;
+  var balance=grandTotal-advance;
   var rows=invoiceItems.map(function(it){
     return '<tr><td class="desc">'+it.desc+'</td><td class="ctr">'+it.qty+'</td><td class="ctr">'+it.price.toLocaleString()+'</td><td class="ctr">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
   }).join('');
@@ -1234,8 +1240,8 @@ function buildInvoiceHTML(orderId, withButton){
     '<tbody>'+rows+'</tbody></table>'+
     '<table><tbody>'+
     '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:200px">Total Amount</td><td class="ctr" style="width:130px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
-    '<tr><td></td><td class="amt-label" style="width:200px">Discount</td><td class="ctr" style="width:130px">-</td></tr>'+
-    '<tr><td class="words">'+numToArabicWords(total)+'</td><td class="amt-label" style="width:200px">Total Amount</td><td class="ctr" style="width:130px;font-weight:bold">'+total.toLocaleString()+'</td></tr>'+
+    '<tr><td></td><td class="amt-label" style="width:200px">Discount</td><td class="ctr" style="width:130px">'+(discount>0?discount.toLocaleString():'-')+'</td></tr>'+
+    '<tr><td class="words">'+numToArabicWords(grandTotal)+'</td><td class="amt-label" style="width:200px">Total Amount</td><td class="ctr" style="width:130px;font-weight:bold">'+grandTotal.toLocaleString()+'</td></tr>'+
     '<tr><td class="words">'+numToArabicWords(advance)+'</td><td class="amt-label" style="width:200px">Advance amount</td><td class="ctr" style="width:130px;font-weight:bold">'+advance.toLocaleString()+'</td></tr>'+
     '<tr><td class="words">'+numToArabicWords(balance)+'</td><td class="amt-label" style="width:200px">Balance</td><td class="ctr" style="width:130px;font-weight:bold">'+balance.toLocaleString()+'</td></tr>'+
     '</tbody></table>'+
@@ -1300,14 +1306,17 @@ function sendInvoiceWhatsApp(orderId){
   var contact=document.getElementById('inv-contact').value;
   var invNo=document.getElementById('inv-no').value;
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var discount=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var grandTotal=total-discount;
   var advance=o.prepay||0;
   if(o.invoice_id){ var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}); if(inv) advance=inv.prepay||0; }
-  var balance=total-advance;
+  var balance=grandTotal-advance;
   var lines=invoiceItems.map(function(it){return '• '+it.desc+' × '+it.qty+' = '+(it.qty*it.price).toLocaleString()+' ر.ق';}).join('\n');
   var msg='*دار الأصالة للمفروشات*\n*فاتورة رقم: '+invNo+'*\n\n'+
     'العميل: '+cust+'\n\n'+
     '*الأصناف:*\n'+lines+'\n\n'+
     '*الإجمالي:* '+total.toLocaleString()+' ر.ق\n'+
+    (discount>0?'*الخصم:* '+discount.toLocaleString()+' ر.ق\n*بعد الخصم:* '+grandTotal.toLocaleString()+' ر.ق\n':'')+
     '*الدفعة المقدمة:* '+advance.toLocaleString()+' ر.ق\n'+
     '*المتبقي:* '+balance.toLocaleString()+' ر.ق\n\n'+
     'شكراً لتعاملكم معنا 🙏';
