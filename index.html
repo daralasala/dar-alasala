@@ -1276,12 +1276,15 @@ function pdfRender(styles, bodyContent, filename){
     '<style>'+styles+
     '@page{size:A4;margin:0}'+
     '@media screen{body{background:#525659}.sheet{background:#fff;max-width:800px;margin:18px auto;box-shadow:0 0 14px rgba(0,0,0,0.4)}.toolbar{position:sticky;top:0;background:#323639;padding:12px;text-align:center;display:flex;gap:10px;justify-content:center;z-index:10}.toolbar button{padding:11px 22px;border:none;border-radius:7px;font-size:14px;cursor:pointer;font-weight:bold;color:#fff}}'+
-    '@media print{.toolbar{display:none!important}.sheet{box-shadow:none;margin:0;max-width:100%}body{background:#fff}'+
-    'th{padding:6px!important}td{padding:6px!important}.amt-label{padding:6px!important}table{margin:4px 0!important}body{padding:16px!important}.header{margin-bottom:16px!important}.mid{margin-bottom:12px!important}.sign-area{margin-top:26px!important}.stamp img{width:200px!important}.sign{margin-top:24px!important}}'+
+    '@media print{.toolbar{display:none!important}.tip{display:none!important}.sheet{box-shadow:none;margin:0;max-width:100%}body{background:#fff}'+
+    'th{padding:5px!important;font-size:11px!important}td{padding:5px!important;font-size:12px!important}.amt-label{padding:5px!important}table{margin:3px 0!important}body{padding:14px!important}.header{margin-bottom:10px!important}.h-en .cname,.h-ar .cname{font-size:18px!important;margin-bottom:4px!important}.h-en,.h-ar{font-size:11px!important;line-height:1.5!important}.h-logo img{width:115px!important}.mid{margin-bottom:8px!important}.inv-box .ttl{padding:6px 12px!important}.inv-box .rw{padding:6px 12px!important}.cust .nm{margin:6px 0!important}.sign-area{margin-top:20px!important}.stamp img{width:175px!important}.words{font-size:11px!important}}'+
     '</style></head><body>'+
     '<div class="toolbar">'+
     '<button onclick="window.print()" style="background:#1a73e8">🖨️ '+(lang==='ar'?'طباعة / حفظ PDF':'چاپ / ذخیره PDF')+'</button>'+
     '<button onclick="window.close()" style="background:#777">✕ '+(lang==='ar'?'إغلاق':'بستن')+'</button>'+
+    '</div>'+
+    '<div class="tip" style="background:#fff3cd;color:#664d03;padding:10px 16px;text-align:center;font-size:13px;border-bottom:1px solid #ffe69c">'+
+    (lang==='ar'?'💡 في نافذة الطباعة: اختر "Save as PDF" وأطفئ "Headers and footers" لإزالة التاريخ والرابط':'💡 در پنجره چاپ: مقصد را "Save as PDF" بگذار و "Headers and footers" را خاموش کن تا تاریخ و لینک حذف شود')+
     '</div>'+
     '<div class="sheet">'+bodyContent+'</div>'+
     '</body></html>';
