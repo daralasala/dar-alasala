@@ -1269,26 +1269,33 @@ function pdfRender(styles, bodyContent, filename){
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px';
   var sheet=document.createElement('div');
   sheet.id='pdf-sheet';
-  sheet.style.cssText='background:#fff;width:800px;flex-shrink:0';
-  sheet.innerHTML='<style>'+styles+'</style><div dir="ltr">'+bodyContent+'</div>';
+  sheet.style.cssText='background:#fff;width:794px;padding:0;flex-shrink:0;box-sizing:border-box';
+  // Convert "body{...}" rules to ".pdf-body{...}" so they apply to our wrapper div
+  var fixedStyles=styles.replace(/(^|\})\s*body\s*\{/g,'$1 .pdf-body{');
+  sheet.innerHTML='<style>'+fixedStyles+' .pdf-body{max-width:100%!important;padding:24px!important;margin:0!important;box-sizing:border-box}</style><div class="pdf-body" dir="ltr" style="width:100%">'+bodyContent+'</div>';
   overlay.appendChild(sheet);
   document.body.appendChild(overlay);
   showToast(lang==='ar'?'جاري إنشاء PDF...':'در حال ساخت PDF...','success');
-  // Wait for images (logo + stamp) to load
   var imgs=sheet.querySelectorAll('img');
-  var loaded=0, totalImgs=imgs.length;
+  var loaded=0, totalImgs=imgs.length, done=false;
   function go(){
-    html2pdf().set({margin:5,filename:filename+'.pdf',image:{type:'jpeg',quality:0.98},html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,windowWidth:820},jsPDF:{unit:'mm',format:'a4',orientation:'portrait'}}).from(sheet).save().then(function(){
+    if(done) return; done=true;
+    html2pdf().set({
+      margin:0,
+      filename:filename+'.pdf',
+      image:{type:'jpeg',quality:0.98},
+      html2canvas:{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,width:794,windowWidth:794},
+      jsPDF:{unit:'px',format:[794,1123],orientation:'portrait'}
+    }).from(sheet).save().then(function(){
       document.body.removeChild(overlay);
     }).catch(function(e){ console.log('pdf err',e); document.body.removeChild(overlay); showToast('PDF error','error'); });
   }
   if(totalImgs===0){ setTimeout(go,200); return; }
   imgs.forEach(function(im){
-    if(im.complete){ loaded++; if(loaded===totalImgs) setTimeout(go,200); }
-    else { im.onload=im.onerror=function(){ loaded++; if(loaded===totalImgs) setTimeout(go,200); }; }
+    if(im.complete){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }
+    else { im.onload=im.onerror=function(){ loaded++; if(loaded===totalImgs) setTimeout(go,300); }; }
   });
-  // Fallback in case images never fire
-  setTimeout(function(){ if(document.body.contains(overlay)&&loaded<totalImgs){ go(); } },2500);
+  setTimeout(function(){ if(!done){ go(); } },2500);
 }
 
 // Format phone for WhatsApp (Qatar default +974)
