@@ -1139,7 +1139,8 @@ function renderInvoiceEditor(o){
     itemsRows+
     '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ إضافة صنف / افزودن قلم</button>'+
     '<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label">الإجمالي / Total</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
-    '<button class="btn btn-primary btn-block" onclick="printInvoice('+o.id+')">🖨️ طباعة / چاپ - PDF</button>';
+    '<button class="btn btn-primary btn-block" onclick="printInvoice('+o.id+')">🖨️ طباعة / چاپ - PDF</button>'+
+    '<button class="btn btn-green btn-block" style="margin-top:8px" onclick="sendInvoiceWhatsApp('+o.id+')">📱 إرسال واتساب / ارسال واتساپ</button>';
 }
 
 function updateInvTotals(){
@@ -1244,6 +1245,39 @@ function printInvoice(orderId){
   w.document.close();
 }
 
+// Format phone for WhatsApp (Qatar default +974)
+function waPhone(raw){
+  var p=(raw||'').replace(/[^0-9]/g,'');
+  if(!p) return '';
+  // If 8 digits (local Qatar number), prepend 974
+  if(p.length===8) p='974'+p;
+  // If starts with 00, drop it
+  if(p.indexOf('00')===0) p=p.slice(2);
+  return p;
+}
+
+function sendInvoiceWhatsApp(orderId){
+  var o=allOrders.find(x=>x.id===orderId);
+  var cust=document.getElementById('inv-cust').value;
+  var contact=document.getElementById('inv-contact').value;
+  var invNo=document.getElementById('inv-no').value;
+  var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var advance=o.prepay||0;
+  if(o.invoice_id){ var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}); if(inv) advance=inv.prepay||0; }
+  var balance=total-advance;
+  var lines=invoiceItems.map(function(it){return '• '+it.desc+' × '+it.qty+' = '+(it.qty*it.price).toLocaleString()+' ر.ق';}).join('\n');
+  var msg='*دار الأصالة للمفروشات*\n*فاتورة رقم: '+invNo+'*\n\n'+
+    'العميل: '+cust+'\n\n'+
+    '*الأصناف:*\n'+lines+'\n\n'+
+    '*الإجمالي:* '+total.toLocaleString()+' ر.ق\n'+
+    '*الدفعة المقدمة:* '+advance.toLocaleString()+' ر.ق\n'+
+    '*المتبقي:* '+balance.toLocaleString()+' ر.ق\n\n'+
+    'شكراً لتعاملكم معنا 🙏';
+  var phone=waPhone(contact);
+  var url='https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
+}
+
 // ===== CONTRACT GENERATOR =====
 let contractItems=[];
 function createContract(orderId){
@@ -1289,7 +1323,8 @@ function renderContractEditor(o){
     '<div class="form-group"><label class="form-label">دفعة عند التوقيع / پیش‌پرداخت</label><input class="form-control" type="number" id="c-prepay" value="'+prepay+'" oninput="updateContractPay()"></div>'+
     '<div class="form-group"><label class="form-label">دفعة عند المعاينة / باقیمانده</label><input class="form-control" type="number" id="c-rem" value="'+rem+'" readonly></div>'+
     '<div class="form-group"><label class="form-label">مدة التنفيذ / مدت اجرا</label><input class="form-control" id="c-duration" value="40 : 50 يوم عمل"></div>'+
-    '<button class="btn btn-primary btn-block" onclick="printContract('+o.id+')">🖨️ طباعة العقد / چاپ قرارداد - PDF</button>';
+    '<button class="btn btn-primary btn-block" onclick="printContract('+o.id+')">🖨️ طباعة العقد / چاپ قرارداد - PDF</button>'+
+    '<button class="btn btn-green btn-block" style="margin-top:8px" onclick="sendContractWhatsApp('+o.id+')">📱 إرسال واتساب / ارسال واتساپ</button>';
 }
 
 function updateContractPay(){
@@ -1367,6 +1402,29 @@ function printContract(orderId){
   var w=window.open('','_blank');
   w.document.write(html);
   w.document.close();
+}
+
+function sendContractWhatsApp(orderId){
+  var o=allOrders.find(x=>x.id===orderId);
+  var no=document.getElementById('c-no').value;
+  var cust=document.getElementById('c-cust').value;
+  var phone=document.getElementById('c-phone').value;
+  var total=parseFloat(document.getElementById('c-total').value)||0;
+  var prepay=parseFloat(document.getElementById('c-prepay').value)||0;
+  var rem=total-prepay;
+  var duration=document.getElementById('c-duration').value;
+  var lines=contractItems.filter(function(x){return x&&x.trim();}).map(function(it,i){return (i+1)+'- '+it;}).join('\n');
+  var msg='*دار الأصالة للمفروشات*\n*عقد رقم: '+no+'*\n\n'+
+    'الطرف الثاني: '+cust+'\n\n'+
+    '*الأعمال:*\n'+lines+'\n\n'+
+    '*التكلفة الإجمالية:* '+total.toLocaleString()+' ر.ق\n'+
+    '*عند التوقيع:* '+prepay.toLocaleString()+' ر.ق\n'+
+    '*عند المعاينة:* '+rem.toLocaleString()+' ر.ق\n'+
+    '*مدة التنفيذ:* '+duration+'\n\n'+
+    'الضمان: 5 سنوات\nهذا والله ولي التوفيق 🙏';
+  var p=waPhone(phone);
+  var url='https://wa.me/'+(p||'')+'?text='+encodeURIComponent(msg);
+  window.open(url,'_blank');
 }
 
 async function markDelivered(id){
