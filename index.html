@@ -386,28 +386,23 @@ body.en .search-icon{right:auto;left:10px;}
 
 <!-- NEW ORDER MODAL -->
 <div class="modal-overlay" id="newOrderModal">
-  <div class="modal">
-    <div class="modal-header"><div class="modal-title">➕ <span id="mo-new-order">سفارش جدید</span></div><button class="modal-close" onclick="closeModal('newOrderModal')">✕</button></div>
-    <div class="form-group"><label class="form-label" id="ml-cname">نام مشتری</label><input class="form-control" type="text" id="f-cname"></div>
-    <div class="form-group"><label class="form-label" id="ml-phone">تلفن</label><input class="form-control" type="tel" id="f-phone"></div>
-    <div class="form-group"><label class="form-label" id="ml-product">محصول</label>
-      <input class="form-control" type="text" id="f-product" placeholder="مثال: تخت دونفره، مبل U، کمد دیواری...">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">🧾 <span id="mo-new-order">إنشاء فاتورة / ساخت فاکتور</span></div><button class="modal-close" onclick="closeModal('newOrderModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="ml-cname">نام مشتری / اسم العميل</label><input class="form-control" type="text" id="f-cname"></div>
+    <div class="form-group"><label class="form-label" id="ml-phone">تلفن / هاتف</label><input class="form-control" type="tel" id="f-phone"></div>
+    <div class="form-group"><label class="form-label">الرقم الشخصي / شماره شخصی</label><input class="form-control" type="text" id="f-cid"></div>
+    <div class="form-group"><label class="form-label" id="ml-delivery">تاریخ تحویل / تاريخ التسليم</label><input class="form-control" type="date" id="f-delivery"></div>
+
+    <div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 8px">📦 الأصناف / اجناس</div>
+    <div id="items-container"></div>
+    <button class="btn btn-outline btn-sm btn-block" style="margin-bottom:14px" onclick="addOrderItem()">+ إضافة صنف / افزودن جنس</button>
+
+    <div class="card" style="margin-bottom:12px;padding:12px">
+      <div class="row"><span class="row-label">الإجمالي / مبلغ کل</span><span class="row-value" style="color:var(--accent);font-size:16px" id="items-total">0 QAR</span></div>
     </div>
-    <div class="form-group"><label class="form-label" id="ml-delivery">تاریخ تحویل</label><input class="form-control" type="date" id="f-delivery"></div>
-    <input type="hidden" id="f-first-stage" value="نجاری">
-    <div class="form-group"><label class="form-label" id="ml-price">مبلغ کل (QAR)</label><input class="form-control" type="number" id="f-price"></div>
-    <div class="form-group"><label class="form-label" id="ml-prepay">پیش‌پرداخت</label><input class="form-control" type="number" id="f-prepay"></div>
-    <div class="form-group"><label class="form-label" id="ml-desc">توضیحات</label><textarea class="form-control" id="f-desc"></textarea></div>
-    <div class="form-group">
-      <label class="form-label">📸 <span id="ml-photos">عکس سفارش</span></label>
-      <div class="upload-area" onclick="document.getElementById('order-img').click()">
-        <input type="file" id="order-img" accept="image/*" multiple onchange="handleImages(this,'order-preview')">
-        <div style="font-size:24px;margin-bottom:4px">📷</div>
-        <div style="font-size:12px;color:var(--text2)" id="ml-tap">برای آپلود ضربه بزنید</div>
-      </div>
-      <div class="img-grid" id="order-preview"></div>
-    </div>
-    <button class="btn btn-primary btn-block" onclick="saveOrder()">💾 <span id="ml-save">ثبت سفارش</span></button>
+    <div class="form-group"><label class="form-label" id="ml-prepay">پیش‌پرداخت / الدفعة المقدمة</label><input class="form-control" type="number" id="f-prepay" oninput="updateItemsTotal()"></div>
+    <div class="form-group"><label class="form-label" id="ml-desc">توضیحات / ملاحظات</label><textarea class="form-control" id="f-desc"></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="saveOrder()">💾 <span id="ml-save">حفظ الفاتورة / ثبت فاکتور</span></button>
   </div>
 </div>
 
@@ -484,7 +479,7 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
-<button class="fab" id="fab" onclick="openModal('newOrderModal')">➕ <span id="fab-text">سفارش جدید</span></button>
+<button class="fab" id="fab" onclick="openInvoiceModal()">🧾 <span id="fab-text">إنشاء فاتورة</span></button>
 
 <!-- CONTRACT MODAL -->
 <div class="modal-overlay" id="contractModal">
@@ -532,6 +527,7 @@ let allOrders = [];
 let allUsers = [];
 let allTransactions = [];
 let allPurchases = [];
+let allInvoices = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -566,7 +562,7 @@ const TR = {
     greet:'سلام',active:'سفارش فعال',week:'تحویل این هفته',done:'تحویل شده',staff_lbl:'کارکنان فعال',
     urgent:'تحویل های نزدیک',pipeline:'خط تولید',pending:'در انتظار تایید',active_staff:'کارکنان فعال',
     transactions:'تراکنش های اخیر',income_lbl:'کل درآمد',expense_lbl:'کل هزینه',balance_lbl:'موجودی خالص',
-    new_order:'سفارش جدید',save:'ثبت سفارش',cname:'نام مشتری',phone:'تلفن',product:'محصول',
+    new_order:'إنشاء فاتورة',save:'حفظ الفاتورة',cname:'نام مشتری',phone:'تلفن',product:'محصول',
     delivery:'تاریخ تحویل',first_stage:'مرحله اول',price:'مبلغ کل (QAR)',prepay:'پیش پرداخت',
     desc:'توضیحات',photos:'عکس سفارش',tap:'برای آپلود ضربه بزنید',
     income_btn:'+ درآمد',expense_btn:'+ هزینه',purchase_btn:'خرید',
@@ -575,7 +571,7 @@ const TR = {
     save_income:'ثبت درآمد',save_expense:'ثبت هزینه',transfer:'انتقال به مرحله بعد',
     approve:'تایید',reject:'رد',remove:'حذف',
     pending_approval:'حساب شما ثبت شد و منتظر تایید مدیر است.',
-    fab:'سفارش جدید',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
+    fab:'إنشاء فاتورة',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
     dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
     notify_sent:'پیام ارسال شد',saved:'ذخیره شد',err_fill:'لطفا فیلدها را پر کنید',
     err_login:'اطلاعات اشتباه است',err_email:'ایمیل قبلا ثبت شده',
@@ -804,7 +800,7 @@ function showTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
-  document.getElementById('fab').classList.toggle('visible', tab==='orders' && (currentUser&&currentUser.role==='manager'));
+  document.getElementById('fab').classList.toggle('visible', tab==='orders' && (currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش')));
   if(tab==='production') renderProduction();
   if(tab==='finance') renderFinance();
   if(tab==='staff') renderStaff();
@@ -814,16 +810,18 @@ function showTab(tab){
 
 // ===== LOAD =====
 async function loadAll(){
-  const [orders, users, trans, purch] = await Promise.all([
+  const [orders, users, trans, purch, invs] = await Promise.all([
     api('GET','orders','','?select=*&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
     api('GET','transactions','','?select=*&order=created_at.desc&limit=50'),
-    api('GET','purchases','','?select=*&order=created_at.desc&limit=50')
+    api('GET','purchases','','?select=*&order=created_at.desc&limit=50'),
+    api('GET','invoices','','?select=*&order=created_at.desc')
   ]);
   allOrders = orders||[];
   allUsers = users||[];
   allTransactions = trans||[];
   allPurchases = purch||[];
+  allInvoices = invs||[];
   renderDashboard();
   renderOrders();
   renderStages();
@@ -901,6 +899,66 @@ function renderOrders(){
   }
   const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
+
+  function orderCardThumb(o){
+    var firstImg='';
+    try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+    return firstImg
+      ? '<img src="'+firstImg+'" style="width:60px;height:60px;object-fit:cover;border-radius:8px">'
+      : '<div style="width:60px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px">🛋️</div>';
+  }
+
+  // Managers/accountant/sales: group by invoice. Workers: flat cards.
+  if(seesAll){
+    // Group filtered orders by invoice_id
+    var groups={};
+    var noInv=[];
+    filtered.forEach(function(o){
+      if(o.invoice_id){ (groups[o.invoice_id]=groups[o.invoice_id]||[]).push(o); }
+      else noInv.push(o);
+    });
+    var html='';
+    // Invoice groups
+    Object.keys(groups).forEach(function(invId){
+      var items=groups[invId];
+      var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+      var custName=inv?inv.customer_name:items[0].customer_name;
+      var invCode=inv?inv.inv_code:'';
+      var total=items.reduce(function(s,it){return s+(it.total_price||0);},0);
+      var allDelivered=items.every(function(it){return it.status==='delivered';});
+      var anyPending=items.some(function(it){return it.status==='pending_payment';});
+      var grpBadge=allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
+      html+='<div class="card" style="margin-bottom:12px">'+
+        '<div class="card-header" style="margin-bottom:10px">'+
+        '<div><div class="card-title">🧾 '+custName+'</div><div class="card-sub">'+invCode+' · '+items.length+' '+(lang==='ar'?'صنف':'جنس')+' · '+total.toLocaleString()+' QAR</div></div>'+
+        grpBadge+'</div>'+
+        items.map(function(o){
+          return '<div onclick="openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:6px;cursor:pointer">'+
+            orderCardThumb(o)+
+            '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+o.product+'</div>'+
+            '<div style="font-size:11px;color:var(--text2)">'+(o.current_stage||'-')+'</div>'+
+            (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
+            '</div>'+
+            '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
+          '</div>';
+        }).join('')+
+      '</div>';
+    });
+    // Orders without invoice (legacy)
+    noInv.forEach(function(o){
+      html+='<div class="card" onclick="openOrderDetail('+o.id+')" style="cursor:pointer;margin-bottom:12px">'+
+        '<div class="card-header"><div><div class="card-title">'+o.product+'</div><div class="card-sub">'+(canSeeCust?o.customer_name+' · ':'')+(o.id_code||'')+'</div></div>'+
+        '<span class="badge '+(sm[o.status]||'badge-blue')+'">'+T('status_'+(o.status||'building'))+'</span></div>'+
+        '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+(o.current_stage||'-')+'</span></div>'+
+        (o.progress>0?'<div class="progress-bar"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
+      '</div>';
+    });
+    document.getElementById('orders-list').innerHTML = (Object.keys(groups).length===0&&noInv.length===0)
+      ? '<div class="empty-state"><div class="empty-icon">📋</div><div>'+T('no_data')+'</div></div>' : html;
+    return;
+  }
+
+  // Workers: flat single-item cards
   document.getElementById('orders-list').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">📋</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
@@ -1048,8 +1106,13 @@ function showDocFull(orderId,docType){
 let invoiceItems=[];
 function createInvoice(orderId){
   var o=allOrders.find(x=>x.id===orderId); if(!o) return;
-  // Pre-fill one line item from the order
-  invoiceItems=[{desc:o.product||'',qty:1,price:o.total_price||0}];
+  // If order belongs to an invoice, pull ALL items of that invoice
+  if(o.invoice_id){
+    var items=allOrders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);});
+    invoiceItems=items.map(function(it){return {desc:it.product||'',qty:it.item_qty||1,price:it.item_price||it.total_price||0};});
+  } else {
+    invoiceItems=[{desc:o.product||'',qty:o.item_qty||1,price:o.item_price||o.total_price||0}];
+  }
   renderInvoiceEditor(o);
   openModal('invoiceModal');
 }
@@ -1120,6 +1183,7 @@ function printInvoice(orderId){
   var date=document.getElementById('inv-date').value;
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
   var advance=o.prepay||0;
+  if(o.invoice_id){ var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}); if(inv) advance=inv.prepay||0; }
   var balance=total-advance;
   var rows=invoiceItems.map(function(it){
     return '<tr><td class="desc">'+it.desc+'</td><td class="ctr">'+it.qty+'</td><td class="ctr">'+it.price.toLocaleString()+'</td><td class="ctr">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
@@ -1184,8 +1248,12 @@ function printInvoice(orderId){
 let contractItems=[];
 function createContract(orderId){
   var o=allOrders.find(x=>x.id===orderId); if(!o) return;
-  contractItems=[o.product||''];
-  if(o.description) contractItems.push(o.description);
+  if(o.invoice_id){
+    var items=allOrders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);});
+    contractItems=items.map(function(it){return it.item_qty>1?(it.product+' (عدد '+it.item_qty+')'):it.product;});
+  } else {
+    contractItems=[o.product||''];
+  }
   renderContractEditor(o);
   openModal('contractModal');
 }
@@ -1195,6 +1263,11 @@ function renderContractEditor(o){
   var today=new Date().toISOString().slice(0,10);
   var prepay=o.prepay||0;
   var total=o.total_price||0;
+  if(o.invoice_id){
+    var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);});
+    if(inv){ prepay=inv.prepay||0; total=inv.total_price||0; }
+    else { total=allOrders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);}).reduce(function(s,it){return s+(it.total_price||0);},0); }
+  }
   var rem=total-prepay;
   var itemsRows=contractItems.map(function(it,i){
     return '<div style="display:flex;gap:5px;margin-bottom:6px">'+
@@ -1678,35 +1751,97 @@ function renderNotifications(){
   document.getElementById('notif-list').innerHTML=html||`<div class="empty-state"><div class="empty-icon">✅</div><div>${T('no_data')}</div></div>`;
 }
 
-// ===== SAVE ORDER =====
+// ===== INVOICE ITEMS (multi-item order) =====
+let orderItems=[];
+function addOrderItem(){
+  orderItems.push({product:'',qty:1,price:0,images:[]});
+  renderOrderItems();
+}
+function removeOrderItem(i){
+  orderItems.splice(i,1);
+  renderOrderItems();
+}
+function renderOrderItems(){
+  var box=document.getElementById('items-container');
+  if(orderItems.length===0){ orderItems.push({product:'',qty:1,price:0,images:[]}); }
+  box.innerHTML=orderItems.map(function(it,i){
+    var imgsHtml=(it.images&&it.images.length>0)?'<div class="img-grid" style="margin-top:6px">'+it.images.map(function(u){return '<div class="img-thumb"><img src="'+u+'"></div>';}).join('')+'</div>':'';
+    return '<div class="card" style="padding:11px;margin-bottom:9px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><span style="font-size:12px;font-weight:700;color:var(--text2)">'+(lang==='ar'?'صنف':'جنس')+' '+(i+1)+'</span>'+(orderItems.length>1?'<button class="btn btn-red btn-sm" onclick="removeOrderItem('+i+')">✕</button>':'')+'</div>'+
+      '<input class="form-control" style="margin-bottom:6px" placeholder="'+(lang==='ar'?'نوع المنتج':'نوع جنس')+'" value="'+(it.product||'').replace(/"/g,'&quot;')+'" oninput="orderItems['+i+'].product=this.value">'+
+      '<div style="display:flex;gap:6px;margin-bottom:6px">'+
+      '<input class="form-control" type="number" placeholder="'+(lang==='ar'?'الكمية':'تعداد')+'" value="'+it.qty+'" oninput="orderItems['+i+'].qty=parseFloat(this.value)||1;updateItemsTotal()">'+
+      '<input class="form-control" type="number" placeholder="'+(lang==='ar'?'السعر':'قیمت')+'" value="'+it.price+'" oninput="orderItems['+i+'].price=parseFloat(this.value)||0;updateItemsTotal()">'+
+      '</div>'+
+      '<input type="file" id="item-img-'+i+'" accept="image/*" multiple style="display:none" onchange="handleItemImages('+i+',this)">'+
+      '<button class="btn btn-outline btn-sm" onclick="document.getElementById(\'item-img-'+i+'\').click()">📷 '+(lang==='ar'?'صور':'عکس')+'</button>'+
+      imgsHtml+
+    '</div>';
+  }).join('');
+  updateItemsTotal();
+}
+function updateItemsTotal(){
+  var total=orderItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var el=document.getElementById('items-total');
+  if(el) el.textContent=total.toLocaleString()+' QAR';
+}
+function handleItemImages(i,input){
+  Array.from(input.files).forEach(function(file){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var canvas=document.createElement('canvas');
+        var w=img.width,h=img.height,max=900;
+        if(w>h&&w>max){h=h*max/w;w=max;}else if(h>max){w=w*max/h;h=max;}
+        canvas.width=w;canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        orderItems[i].images.push(canvas.toDataURL('image/jpeg',0.6));
+        renderOrderItems();
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ===== SAVE ORDER (creates invoice + one order per item) =====
 async function saveOrder(){
   const cname=document.getElementById('f-cname').value.trim();
   const delivery=document.getElementById('f-delivery').value;
   if(!cname||!delivery){ showToast(T('err_fill'),'error'); return; }
-  const idCode='ORD-'+String(Date.now()).slice(-5);
-  const firstStage=document.getElementById('f-first-stage').value;
-  const body={
-    customer_name:cname, customer_phone:document.getElementById('f-phone').value.trim(),
-    product:document.getElementById('f-product').value, delivery_date:delivery,
-    total_price:parseFloat(document.getElementById('f-price').value)||0,
-    prepay:parseFloat(document.getElementById('f-prepay').value)||0,
-    description:document.getElementById('f-desc').value,
-    status:'pending_payment', progress:0, id_code:idCode,
-    current_stage:'في انتظار الدفع', worker:currentUser?.name||'',
-    images: pendingImages.length>0 ? pendingImages : null
-  };
-  const res=await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
-  if(!res.ok){ showToast(await res.text(),'error'); return; }
-  // Auto-register prepayment as income
-  var prepayVal=parseFloat(document.getElementById('f-prepay').value)||0;
-  if(prepayVal>0){
-    var incRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:prepayVal,description:'Prepay - '+cname,category:'prepay'})});
-    if(!incRes.ok){ console.log('income err:',await incRes.text()); }
+  var validItems=orderItems.filter(function(it){return it.product&&it.product.trim();});
+  if(validItems.length===0){ showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':'حداقل یک جنس اضافه کنید','error'); return; }
+  const phone=document.getElementById('f-phone').value.trim();
+  const cid=document.getElementById('f-cid').value.trim();
+  const prepay=parseFloat(document.getElementById('f-prepay').value)||0;
+  const desc=document.getElementById('f-desc').value;
+  const total=validItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  const invCode='INV-'+String(Date.now()).slice(-5);
+  // 1) Create invoice header
+  const invRes=await fetch(SB_URL+'/rest/v1/invoices',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({inv_code:invCode,customer_name:cname,customer_phone:phone,customer_id:cid,total_price:total,prepay:prepay,status:'pending_payment',notes:desc})});
+  if(!invRes.ok){ showToast(await invRes.text(),'error'); return; }
+  const inv=(await invRes.json())[0];
+  // 2) Create one order per item
+  for(var k=0;k<validItems.length;k++){
+    var it=validItems[k];
+    var idCode='ORD-'+String(Date.now()).slice(-5)+'-'+(k+1);
+    var body={
+      customer_name:cname, customer_phone:phone, product:it.product, delivery_date:delivery,
+      total_price:it.qty*it.price, item_price:it.price, item_qty:it.qty, prepay:0,
+      description:desc, status:'pending_payment', progress:0, id_code:idCode,
+      current_stage:'في انتظار الدفع', worker:currentUser?.name||'',
+      invoice_id:inv.id, images: it.images.length>0?it.images:null
+    };
+    await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
+  }
+  // 3) Register prepay as income
+  if(prepay>0){
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:prepay,description:'Prepay - '+cname,category:'prepay'})});
   }
   closeModal('newOrderModal');
-  ['f-cname','f-phone','f-price','f-prepay','f-desc'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('order-preview').innerHTML='';
-  pendingImages=[];
+  ['f-cname','f-phone','f-cid','f-prepay','f-desc','f-delivery'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
+  orderItems=[];
   await loadAll();
   showToast(T('saved'),'success');
 }
@@ -1751,6 +1886,11 @@ function removeImg(btn){
 // ===== MODAL =====
 function openModal(id){ document.getElementById(id).classList.add('open'); }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
+function openInvoiceModal(){
+  orderItems=[{product:'',qty:1,price:0,images:[]}];
+  renderOrderItems();
+  openModal('newOrderModal');
+}
 
 // ===== LIGHTBOX =====
 function showLightbox(orderId,idx){
