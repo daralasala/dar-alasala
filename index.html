@@ -342,6 +342,10 @@ body.en .search-icon{right:auto;left:10px;}
       <div class="fin-amount" style="color:var(--accent)" id="f-balance">-</div>
       <div class="fin-label" id="fl-balance">موجودی خالص</div>
     </div>
+    <div class="fin-card" id="f-debt-card" style="border-color:rgba(230,150,30,.4);margin-bottom:14px;display:none">
+      <div class="fin-amount" style="color:#e6961e" id="f-debt">-</div>
+      <div class="fin-label" id="fl-debt">الديون المستحقة / بدهی معوق</div>
+    </div>
     <div style="display:flex;gap:7px;margin-bottom:12px">
       <button class="btn btn-green btn-sm" onclick="openModal('incomeModal')" id="fb-income">+ درآمد</button>
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
@@ -1662,7 +1666,10 @@ function renderProduction(){
 function renderFinance(){
   const isPurchasing = currentUser&&currentUser.department==='مسئول خرید'&&currentUser.role!=='manager';
   const income=allTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+(t.amount||0),0);
-  const expense=allTransactions.filter(t=>t.type!=='income').reduce((s,t)=>s+(t.amount||0),0);
+  // Expense: count everything EXCEPT unpaid credit purchases (money not yet paid)
+  const expense=allTransactions.filter(t=>t.type!=='income'&&!(t.is_credit&&!t.paid)).reduce((s,t)=>s+(t.amount||0),0);
+  // Outstanding debt: unpaid credit purchases
+  const debt=allTransactions.filter(t=>t.is_credit&&!t.paid).reduce((s,t)=>s+(t.amount||0),0);
   // For purchasing: hide income & balance cards, show only expenses
   var incCard=document.getElementById('f-income')?.closest('.fin-card');
   var balCard=document.getElementById('f-balance')?.closest('.fin-card');
@@ -1679,6 +1686,12 @@ function renderFinance(){
     document.getElementById('f-balance').textContent=(income-expense).toLocaleString()+' QAR';
   }
   document.getElementById('f-expense').textContent=expense.toLocaleString()+' QAR';
+  // Show outstanding debt card
+  var debtCard=document.getElementById('f-debt-card');
+  if(debtCard){
+    if(debt>0){ debtCard.style.display=''; document.getElementById('f-debt').textContent=debt.toLocaleString()+' QAR'; }
+    else debtCard.style.display='none';
+  }
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
   // Filter transactions for purchasing - only show expense/purchase
   var txList=isPurchasing?allTransactions.filter(t=>t.type!=='income'):allTransactions;
@@ -1718,9 +1731,10 @@ function renderFinance(){
 }
 
 async function markCreditPaid(transId){
-  if(!confirm(lang==='ar'?'تأكيد دفع هذا المبلغ؟':'پرداخت این مبلغ را تایید می‌کنید؟')) return;
-  await api('PATCH','transactions',{paid:true},'?id=eq.'+transId);
   var t=allTransactions.find(x=>x.id===transId);
+  var amt=t?(t.amount||0).toLocaleString():'';
+  if(!confirm(lang==='ar'?('تأكيد دفع '+amt+' ر.ق؟ سيُخصم من الرصيد.'):('پرداخت '+amt+' ریال تایید شود؟ از موجودی کم می‌شود.'))) return;
+  await api('PATCH','transactions',{paid:true},'?id=eq.'+transId);
   if(t) t.paid=true;
   renderFinance();
   showToast(T('saved'),'success');
