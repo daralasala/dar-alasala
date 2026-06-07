@@ -291,6 +291,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('finance')" id="tab-finance">💰 <span id="t-fin">مالی</span></button>
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
+    <button class="tab" onclick="showTab('inventory')" id="tab-inventory">📦 <span id="t-inventory">انبار</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
   </div>
 
@@ -375,6 +376,46 @@ body.en .search-icon{right:auto;left:10px;}
   <!-- NOTIFICATIONS -->
   <div class="page" id="page-notify">
     <div id="notif-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- INVENTORY -->
+  <div class="page" id="page-inventory">
+    <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span>إضافة مادة / افزودن جنس به انبار</span></button>
+    <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+</div>
+
+<!-- INVENTORY ADD/EDIT MODAL -->
+<div class="modal-overlay" id="inventoryModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📦 <span id="invm-title">افزودن جنس به انبار</span></div><button class="modal-close" onclick="closeModal('inventoryModal')">✕</button></div>
+    <input type="hidden" id="inv-edit-id" value="">
+    <div class="form-group"><label class="form-label">اسم المادة / نام جنس</label><input class="form-control" type="text" id="inv-name" placeholder="مثلا: چوب MDF، رنگ سفید، پیچ..."></div>
+    <div class="form-group"><label class="form-label">الوحدة / واحد</label>
+      <select class="form-control" id="inv-unit">
+        <option value="عدد">عدد / قطعة</option>
+        <option value="متر">متر</option>
+        <option value="کارتون">کارتون / كرتون</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">الكمية الحالية / موجودی فعلی</label><input class="form-control" type="number" id="inv-qty" value="0"></div>
+    <div class="form-group"><label class="form-label">الحد الأدنى للتنبيه / حداقل موجودی (هشدار)</label><input class="form-control" type="number" id="inv-min" value="5"></div>
+    <div class="form-group"><label class="form-label">سعر الوحدة / قیمت واحد (QAR)</label><input class="form-control" type="number" id="inv-price" value="0"></div>
+    <button class="btn btn-primary btn-block" onclick="saveInventory()">💾 حفظ / ثبت</button>
+  </div>
+</div>
+
+<!-- INVENTORY USAGE (worker takes material) MODAL -->
+<div class="modal-overlay" id="usageModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📤 <span>برداشت از انبار / سحب مادة</span></div><button class="modal-close" onclick="closeModal('usageModal')">✕</button></div>
+    <input type="hidden" id="usage-inv-id" value="">
+    <div id="usage-item-info" style="background:var(--surface2);padding:12px;border-radius:10px;margin-bottom:12px;font-size:13px"></div>
+    <div class="form-group"><label class="form-label">الكمية المسحوبة / مقدار برداشت</label><input class="form-control" type="number" id="usage-qty" placeholder="مقدار"></div>
+    <div class="form-group"><label class="form-label">للطلب / برای سفارش</label>
+      <select class="form-control" id="usage-order"><option value="">-- بدون سفارش / عمومی --</option></select>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="saveUsage()">✅ تأكيد السحب / ثبت برداشت</button>
   </div>
 </div>
 
@@ -546,6 +587,8 @@ let allTransactions = [];
 let allPurchases = [];
 let allInvoices = [];
 let allSuppliers = [];
+let allInventory = [];
+let allInventoryUsage = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -824,6 +867,7 @@ function showTab(tab){
   if(tab==='finance') renderFinance();
   if(tab==='staff') renderStaff();
   if(tab==='requests') renderRequests();
+  if(tab==='inventory') loadInventory();
   if(tab==='notify') renderNotifications();
 }
 
@@ -845,6 +889,7 @@ async function loadAll(){
   renderOrders();
   renderStages();
   loadSuppliers();
+  loadInventory();
 }
 
 // ===== DASHBOARD =====
@@ -1838,6 +1883,123 @@ async function addNewSupplier(){
   showToast(T('saved'),'success');
 }
 
+// ===== INVENTORY (انبار) =====
+async function loadInventory(){
+  var inv=await api('GET','inventory','','?select=*&order=name.asc');
+  allInventory=inv||[];
+  renderInventory();
+}
+
+function renderInventory(){
+  var box=document.getElementById('inventory-list');
+  if(!box) return;
+  if(allInventory.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div>'+T('no_data')+'</div></div>';
+    return;
+  }
+  var canManage=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول خرید');
+  box.innerHTML=allInventory.map(function(it){
+    var low=(it.quantity||0)<=(it.min_quantity||0);
+    return '<div class="card" style="margin-bottom:9px">'+
+      '<div class="card-header" style="margin-bottom:8px">'+
+      '<div><div class="card-title">'+it.name+(low?' <span class="badge badge-red" style="font-size:9px">'+(lang==='ar'?'منخفض':'کم')+'</span>':'')+'</div>'+
+      '<div class="card-sub">'+(lang==='ar'?'المخزون':'موجودی')+': <b style="color:'+(low?'var(--red)':'var(--green)')+'">'+(it.quantity||0)+'</b> '+it.unit+'</div></div>'+
+      '<div style="text-align:left;font-size:11px;color:var(--text2)">'+(it.unit_price||0).toLocaleString()+' QAR</div>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':'برداشت')+'</button>'+
+      (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':'افزودن موجودی')+'</button>'+
+      '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function openInventoryModal(){
+  document.getElementById('inv-edit-id').value='';
+  document.getElementById('invm-title').textContent=lang==='ar'?'إضافة مادة':'افزودن جنس به انبار';
+  document.getElementById('inv-name').value='';
+  document.getElementById('inv-qty').value='0';
+  document.getElementById('inv-min').value='5';
+  document.getElementById('inv-price').value='0';
+  document.getElementById('inv-unit').value='عدد';
+  openModal('inventoryModal');
+}
+
+function editInventory(id){
+  var it=allInventory.find(x=>x.id===id); if(!it) return;
+  document.getElementById('inv-edit-id').value=id;
+  document.getElementById('invm-title').textContent=lang==='ar'?'تعديل المادة':'ویرایش جنس';
+  document.getElementById('inv-name').value=it.name||'';
+  document.getElementById('inv-qty').value=it.quantity||0;
+  document.getElementById('inv-min').value=it.min_quantity||5;
+  document.getElementById('inv-price').value=it.unit_price||0;
+  document.getElementById('inv-unit').value=it.unit||'عدد';
+  openModal('inventoryModal');
+}
+
+async function saveInventory(){
+  var id=document.getElementById('inv-edit-id').value;
+  var body={
+    name:document.getElementById('inv-name').value.trim(),
+    unit:document.getElementById('inv-unit').value,
+    quantity:parseFloat(document.getElementById('inv-qty').value)||0,
+    min_quantity:parseFloat(document.getElementById('inv-min').value)||0,
+    unit_price:parseFloat(document.getElementById('inv-price').value)||0
+  };
+  if(!body.name){ showToast(T('err_fill'),'error'); return; }
+  if(id){ await api('PATCH','inventory',body,'?id=eq.'+id); }
+  else { await api('POST','inventory',body); }
+  closeModal('inventoryModal');
+  await loadInventory();
+  showToast(T('saved'),'success');
+}
+
+async function addStock(id){
+  var it=allInventory.find(x=>x.id===id); if(!it) return;
+  var add=prompt((lang==='ar'?'الكمية المضافة لـ ':'مقدار افزوده به ')+it.name+' ('+it.unit+'):');
+  if(!add) return;
+  var n=parseFloat(add); if(isNaN(n)){ showToast('Error','error'); return; }
+  var newQty=(it.quantity||0)+n;
+  await api('PATCH','inventory',{quantity:newQty},'?id=eq.'+id);
+  it.quantity=newQty;
+  renderInventory();
+  showToast(T('saved'),'success');
+}
+
+function openUsageModal(id){
+  var it=allInventory.find(x=>x.id===id); if(!it) return;
+  document.getElementById('usage-inv-id').value=id;
+  document.getElementById('usage-item-info').innerHTML='<b>'+it.name+'</b><br>'+(lang==='ar'?'المتاح':'موجود')+': '+(it.quantity||0)+' '+it.unit;
+  document.getElementById('usage-qty').value='';
+  // Fill orders dropdown (active orders)
+  var sel=document.getElementById('usage-order');
+  var activeOrders=allOrders.filter(o=>o.status==='building'||o.status==='ready');
+  sel.innerHTML='<option value="">-- '+(lang==='ar'?'بدون طلب':'بدون سفارش')+' --</option>'+
+    activeOrders.map(function(o){return '<option value="'+o.id+'">'+(o.id_code||'')+' - '+o.product+'</option>';}).join('');
+  openModal('usageModal');
+}
+
+async function saveUsage(){
+  var invId=parseInt(document.getElementById('usage-inv-id').value);
+  var qty=parseFloat(document.getElementById('usage-qty').value)||0;
+  var orderId=document.getElementById('usage-order').value;
+  var it=allInventory.find(x=>x.id===invId);
+  if(!it||qty<=0){ showToast(T('err_fill'),'error'); return; }
+  if(qty>(it.quantity||0)){ showToast(lang==='ar'?'الكمية أكبر من المتاح':'مقدار بیشتر از موجودی است','error'); return; }
+  var orderObj=orderId?allOrders.find(o=>String(o.id)===String(orderId)):null;
+  // Record usage
+  await api('POST','inventory_usage',{inventory_id:invId,item_name:it.name,quantity:qty,unit:it.unit,worker_name:currentUser.name,order_id:orderId?parseInt(orderId):null,order_code:orderObj?orderObj.id_code:null});
+  // Reduce stock
+  var newQty=(it.quantity||0)-qty;
+  await api('PATCH','inventory',{quantity:newQty},'?id=eq.'+invId);
+  it.quantity=newQty;
+  closeModal('usageModal');
+  renderInventory();
+  // Check low stock -> notification handled in renderNotifications
+  showToast(T('saved'),'success');
+}
+
 // ===== STAFF =====
 async function renderStaff(){
   const pending=allUsers.filter(u=>u.status==='pending');
@@ -1948,6 +2110,10 @@ function renderNotifications(){
   });
   allOrders.filter(o=>o.status==='ready').forEach(o=>{ html+=`<div class="notif-item unread"><div style="font-size:18px">✅</div><div><div style="font-size:13px;font-weight:700">${T('status_ready')}</div><div style="font-size:12px;color:var(--text2)">${o.product} - ${o.customer_name}</div></div></div>`; });
   allUsers.filter(u=>u.status==='pending').forEach(u=>{ if(currentUser?.role==='manager') html+=`<div class="notif-item unread"><div style="font-size:18px">👤</div><div><div style="font-size:13px;font-weight:700">${T('pending')}</div><div style="font-size:12px;color:var(--text2)">${u.name} - ${u.department}</div></div></div>`; });
+  // Low stock alerts
+  allInventory.filter(it=>(it.quantity||0)<=(it.min_quantity||0)).forEach(it=>{
+    html+=`<div class="notif-item unread"><div style="font-size:18px">📦</div><div><div style="font-size:13px;font-weight:700">${lang==='ar'?'مخزون منخفض':'موجودی کم'}: ${it.name}</div><div style="font-size:12px;color:var(--red)">${lang==='ar'?'المتبقي':'باقیمانده'}: ${it.quantity||0} ${it.unit}</div></div></div>`;
+  });
   document.getElementById('notif-list').innerHTML=html||`<div class="empty-state"><div class="empty-icon">✅</div><div>${T('no_data')}</div></div>`;
 }
 
