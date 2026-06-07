@@ -471,7 +471,19 @@ body.en .search-icon{right:auto;left:10px;}
     </div>
     <div id="ai-loading" style="display:none" class="loading"><div class="spinner"></div><span id="pm-ai">در حال پردازش AI...</span></div>
     <div id="purchase-fields">
-      <div class="form-group"><label class="form-label" id="pm-supplier">فروشنده</label><input class="form-control" type="text" id="p-supplier"></div>
+      <div class="form-group"><label class="form-label" id="pm-supplier">الشركة / فروشنده</label>
+        <div style="display:flex;gap:6px">
+          <select class="form-control" id="p-supplier"><option value="">-- اختر / انتخاب --</option></select>
+          <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
+        </div>
+      </div>
+      <div class="form-group"><label class="form-label">نوع الدفع / نوع پرداخت</label>
+        <select class="form-control" id="p-paytype">
+          <option value="cash">نقدي / نقدی</option>
+          <option value="credit">آجل (دين) / قرضی</option>
+        </select>
+      </div>
+      <div class="form-group" id="due-date-wrap" style="display:none"><label class="form-label">تاريخ الاستحقاق / تاریخ سررسید</label><input class="form-control" type="date" id="p-due"></div>
       <div class="form-group"><label class="form-label" id="pm-date">تاریخ فاکتور</label><input class="form-control" type="date" id="p-date"></div>
       <div class="form-group"><label class="form-label" id="pm-total">مبلغ کل (QAR)</label><input class="form-control" type="number" id="p-total"></div>
       <div class="form-group"><label class="form-label" id="pm-items">اقلام خرید</label><textarea class="form-control" id="p-items" placeholder="نام کالا - تعداد - قیمت&#10;نام کالا - تعداد - قیمت"></textarea></div>
@@ -529,6 +541,7 @@ let allUsers = [];
 let allTransactions = [];
 let allPurchases = [];
 let allInvoices = [];
+let allSuppliers = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -827,6 +840,7 @@ async function loadAll(){
   renderDashboard();
   renderOrders();
   renderStages();
+  loadSuppliers();
 }
 
 // ===== DASHBOARD =====
@@ -1677,18 +1691,39 @@ function renderFinance(){
           var p=allPurchases.find(x=>x.transaction_id===t.id);
           if(p&&p.invoice_image) invImg='<img src="'+p.invoice_image+'" onclick="showImgFull(\''+t.id+'\')" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
         }
+        // Credit (unpaid) badge + pay button
+        var creditTag='';
+        if(t.is_credit){
+          if(t.paid){
+            creditTag='<span class="badge badge-green" style="font-size:9px;margin-right:6px">'+(lang==='ar'?'مدفوع':'پرداخت شد')+'</span>';
+          } else {
+            var dueTxt=t.due_date?' · '+(lang==='ar'?'استحقاق':'سررسید')+' '+t.due_date:'';
+            creditTag='<span class="badge badge-orange" style="font-size:9px;margin-right:6px">'+(lang==='ar'?'آجل / دين':'قرضی')+dueTxt+'</span>';
+          }
+        }
+        var payBtn=(t.is_credit&&!t.paid)?'<button class="btn btn-green btn-sm" style="margin-top:8px" onclick="markCreditPaid('+t.id+')">✅ '+(lang==='ar'?'تم الدفع':'پرداخت شد')+'</button>':'';
         return `
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div style="display:flex;align-items:center;gap:9px">
             <span style="font-size:20px">${icons[t.type]||'💰'}</span>
-            <div><div style="font-size:13px;font-weight:600">${t.description||t.category||'-'}</div><div style="font-size:11px;color:var(--text2)">${t.created_at?t.created_at.slice(0,10):''}</div></div>
+            <div><div style="font-size:13px;font-weight:600">${t.description||t.category||'-'}${creditTag}</div><div style="font-size:11px;color:var(--text2)">${t.created_at?t.created_at.slice(0,10):''}</div></div>
           </div>
           <div style="font-size:14px;font-weight:800;color:${t.type==='income'?'var(--green)':'var(--red)'}">${t.type==='income'?'+':'-'}${(t.amount||0).toLocaleString()}</div>
         </div>
         ${invImg}
+        ${payBtn}
       </div>`;
       }).join('');
+}
+
+async function markCreditPaid(transId){
+  if(!confirm(lang==='ar'?'تأكيد دفع هذا المبلغ؟':'پرداخت این مبلغ را تایید می‌کنید؟')) return;
+  await api('PATCH','transactions',{paid:true},'?id=eq.'+transId);
+  var t=allTransactions.find(x=>x.id===transId);
+  if(t) t.paid=true;
+  renderFinance();
+  showToast(T('saved'),'success');
 }
 
 function showImgFull(transId){
@@ -1742,8 +1777,13 @@ async function savePurchase(){
   const total=parseFloat(document.getElementById('p-total').value)||0;
   const items=document.getElementById('p-items').value;
   const date=document.getElementById('p-date').value;
+  const payType=document.getElementById('p-paytype').value;
+  const due=document.getElementById('p-due').value;
+  const isCredit=payType==='credit';
   if(!total){ showToast(T('err_fill'),'error'); return; }
-  const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:supplier||'Purchase',category:'purchase'})});
+  if(!supplier){ showToast(lang==='ar'?'اختر الشركة':'شرکت را انتخاب کنید','error'); return; }
+  var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':' (قرضی)'):'');
+  const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
   const trans=tRes.ok?await tRes.json():null;
   if(trans&&trans[0]){
     await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:items,invoice_date:date||null,invoice_image:invoiceImage||null});
@@ -1756,10 +1796,32 @@ async function savePurchase(){
   allPurchases=newPurch||[];
   renderFinance();
   showToast(T('saved'),'success');
-  document.getElementById('p-supplier').value='';
   document.getElementById('p-total').value='';
   document.getElementById('p-items').value='';
+  document.getElementById('p-due').value='';
   document.getElementById('invoice-preview').innerHTML='';
+}
+
+// ===== SUPPLIERS =====
+async function loadSuppliers(){
+  var sup=await api('GET','suppliers','','?select=*&order=name.asc');
+  allSuppliers=sup||[];
+  var sel=document.getElementById('p-supplier');
+  if(sel){
+    sel.innerHTML='<option value="">-- '+(lang==='ar'?'اختر الشركة':'انتخاب شرکت')+' --</option>'+
+      allSuppliers.map(function(s){return '<option value="'+(s.name||'').replace(/"/g,'&quot;')+'">'+s.name+'</option>';}).join('');
+  }
+}
+
+async function addNewSupplier(){
+  var name=prompt(lang==='ar'?'اسم الشركة الجديدة:':'نام شرکت جدید:');
+  if(!name||!name.trim()) return;
+  name=name.trim();
+  await api('POST','suppliers',{name:name});
+  await loadSuppliers();
+  var sel=document.getElementById('p-supplier');
+  if(sel) sel.value=name;
+  showToast(T('saved'),'success');
 }
 
 // ===== STAFF =====
@@ -2037,6 +2099,14 @@ function showToast(msg,type){
 
 // ===== INIT =====
 setLang('ar');
+// Show due-date field when credit purchase selected
+(function(){
+  var pt=document.getElementById('p-paytype');
+  if(pt) pt.addEventListener('change',function(){
+    var w=document.getElementById('due-date-wrap');
+    if(w) w.style.display=this.value==='credit'?'block':'none';
+  });
+})();
 // Restore session if user was logged in
 try {
   var savedUser=localStorage.getItem('dar_user');
