@@ -288,10 +288,10 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab active" onclick="showTab('dashboard')" id="tab-dashboard">📊 <span id="t-dash">داشبورد</span></button>
     <button class="tab" onclick="showTab('orders')" id="tab-orders">📋 <span id="t-orders">سفارشات</span></button>
     <button class="tab" onclick="showTab('production')" id="tab-production">🏭 <span id="t-prod">تولید</span></button>
+    <button class="tab" onclick="showTab('inventory')" id="tab-inventory">📦 <span id="t-inventory">انبار</span></button>
     <button class="tab" onclick="showTab('finance')" id="tab-finance">💰 <span id="t-fin">مالی</span></button>
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
-    <button class="tab" onclick="showTab('inventory')" id="tab-inventory">📦 <span id="t-inventory">انبار</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
   </div>
 
@@ -703,6 +703,7 @@ function setLang(l){
   document.getElementById('t-staff').textContent=T('staff');
   document.getElementById('t-notify').textContent=T('notify');
   safeSet('t-requests',l==='en'?'Requests':l==='ar'?'طلبات الشراء':'درخواست خرید');
+  safeSet('t-inventory',l==='en'?'Inventory':l==='ar'?'المخزن':'انبار');
   safeSet('req-new-btn',l==='en'?'New Purchase Request':l==='ar'?'طلب شراء جديد':'درخواست خرید جدید');
   safeSet('req-list-title',l==='en'?'Purchase Requests':l==='ar'?'طلبات الشراء':'درخواست‌های خرید');
   safeSet('rm-title',l==='en'?'Request Material':l==='ar'?'طلب شراء مواد':'درخواست خرید جنس');
