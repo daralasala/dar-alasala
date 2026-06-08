@@ -594,6 +594,7 @@ body.en .search-icon{right:auto;left:10px;}
         <div style="display:flex;gap:6px">
           <select class="form-control" id="p-supplier"><option value="">-- اختر / انتخاب --</option></select>
           <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
+          <button class="btn btn-outline btn-sm" onclick="editSupplierPhone()" style="white-space:nowrap" title="ویرایش شماره">✏️</button>
         </div>
       </div>
       <div class="form-group"><label class="form-label">نوع الدفع / نوع پرداخت</label>
@@ -1360,7 +1361,8 @@ function buildReceiptHTML(r, withButtons){
     '.words{direction:rtl;text-align:right;color:#444;font-size:14px;background:#fafafa}'+
     '.sign-area{display:flex;justify-content:space-between;margin-top:46px;font-size:14px;align-items:flex-end}'+
     '.stamp img{width:230px}'+
-    '@media print{.no-print{display:none}}</style></head><body>'+
+    '@media print{.no-print,.no-print *{display:none !important}}'+
+    '@page{margin:8mm}</style></head><body>'+
     '<div class="header">'+
     '<div class="h-en"><div class="cname">DarALasala Furniture</div>'+
     'Office&nbsp;&nbsp;&nbsp;: (+974) 66688585<br>Mobile&nbsp;&nbsp;: (+974) 55388585<br>C.R.no&nbsp;&nbsp;189266<br>P.O.Box : 82497<br>Doha - Qatar<br>Email : asalafurniture@gmail.com</div>'+
@@ -1414,6 +1416,83 @@ function sendReceiptWhatsApp(){
     'شكراً لتعاملكم معنا 🙏';
   var phone=waPhone(r.phone);
   window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// ===== PAYMENT VOUCHER (سند صرف) — for paying suppliers / settling credit =====
+var lastPayment=null;
+function buildPaymentVoucherHTML(p, withButtons){
+  var waMsg='*دار الأصالة للمفروشات*\n*سند صرف رقم: '+p.no+'*\n'+
+    'التاريخ: '+p.date+'\n\n'+
+    'صرفنا إلى: *'+p.payee+'*\n'+
+    'المبلغ المدفوع: *'+p.amount.toLocaleString()+' ر.ق*\n'+
+    '('+numToArabicWords(p.amount)+' فقط)\n'+
+    'طريقة الدفع: '+p.method+'\n'+
+    'البيان: '+p.reason+'\n\n'+
+    'تم تسوية الحساب بالكامل ✅\nشكراً لتعاملكم معنا 🙏';
+  // Use supplier phone if saved (inline, no dependency on main window)
+  var pvPhone=(p.phone||'').replace(/[^0-9]/g,'');
+  if(pvPhone.length===8) pvPhone='974'+pvPhone;
+  if(pvPhone.indexOf('00')===0) pvPhone=pvPhone.slice(2);
+  var waUrl='https://wa.me/'+pvPhone+'?text='+encodeURIComponent(waMsg);
+  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center">'+
+    '<button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button>'+
+    '<a href="'+waUrl+'" target="_blank" rel="noopener" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;text-decoration:none;display:inline-block">💬 WhatsApp</a>'+
+    '</div>':'';
+  var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+p.no+'</title>'+
+    '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto}'+
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px}'+
+    '.h-en{font-size:13px;line-height:1.9;color:#333;text-align:left}'+
+    '.h-en .cname{font-size:22px;font-weight:bold;font-family:Georgia,serif;margin-bottom:8px}'+
+    '.h-ar{font-size:13px;line-height:1.9;color:#333;text-align:right;direction:rtl}'+
+    '.h-ar .cname{font-size:22px;font-weight:bold;margin-bottom:8px}'+
+    '.h-logo img{width:140px;background:#f0f0f0;padding:6px;border-radius:4px}'+
+    '.doc-title{text-align:center;font-size:24px;font-weight:bold;letter-spacing:1px;border:3px double #c0392b;color:#c0392b;padding:10px;margin-bottom:22px;border-radius:6px}'+
+    '.meta{display:flex;justify-content:space-between;margin-bottom:18px;font-size:14px}'+
+    '.meta .box{border:1.5px solid #333;padding:8px 14px;border-radius:5px}'+
+    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px}'+
+    '.body-tbl td{border:1px solid #333;padding:12px 14px;font-size:14px}'+
+    '.body-tbl .lbl{background:#fbeeec;font-weight:bold;width:200px;direction:rtl;text-align:right}'+
+    '.body-tbl .val{direction:rtl;text-align:right}'+
+    '.amt-big{font-size:22px;font-weight:bold;color:#c0392b;text-align:center}'+
+    '.words{direction:rtl;text-align:right;color:#444;font-size:14px;background:#fafafa}'+
+    '.sign-area{display:flex;justify-content:space-between;margin-top:46px;font-size:14px;align-items:flex-end}'+
+    '.stamp img{width:230px}'+
+    '@media print{.no-print,.no-print *{display:none !important}}'+
+    '@page{margin:8mm}</style></head><body>'+
+    '<div class="header">'+
+    '<div class="h-en"><div class="cname">DarALasala Furniture</div>'+
+    'Office&nbsp;&nbsp;&nbsp;: (+974) 66688585<br>Mobile&nbsp;&nbsp;: (+974) 55388585<br>C.R.no&nbsp;&nbsp;189266<br>P.O.Box : 82497<br>Doha - Qatar<br>Email : asalafurniture@gmail.com</div>'+
+    '<div class="h-logo"><img src="'+COMPANY_LOGO+'"></div>'+
+    '<div class="h-ar"><div class="cname">دار الاصالة للمفروشات</div>'+
+    'هاتف : (+974) 66688585<br>موبايل : (+974) 55388585<br>س.ت : 189266<br>ص.ب : 82497<br>الدوحة - قطر<br>بريد إلكتروني : asalafurniture@gmail.com</div>'+
+    '</div>'+
+    '<div class="doc-title">سند صرف &nbsp;/&nbsp; PAYMENT VOUCHER</div>'+
+    '<div class="meta">'+
+    '<div class="box">No / رقم : <b>'+p.no+'</b></div>'+
+    '<div class="box">Date / التاريخ : <b>'+p.date+'</b></div>'+
+    '</div>'+
+    '<table class="body-tbl"><tbody>'+
+    '<tr><td class="lbl">صرفنا إلى السيد / المحترم</td><td class="val"><b>'+p.payee+'</b></td></tr>'+
+    '<tr><td class="lbl">مبلغ وقدره</td><td class="amt-big">'+p.amount.toLocaleString()+' &nbsp;ر.ق / QAR</td></tr>'+
+    '<tr><td class="lbl">المبلغ كتابة</td><td class="words">'+numToArabicWords(p.amount)+' فقط لا غير</td></tr>'+
+    '<tr><td class="lbl">طريقة الدفع</td><td class="val">'+p.method+'</td></tr>'+
+    '<tr><td class="lbl">وذلك عن / البيان</td><td class="val">'+p.reason+'</td></tr>'+
+    '</tbody></table>'+
+    '<div class="sign-area">'+
+    '<div><div style="margin-bottom:34px">المستلم / Received by : ____________</div><div>التوقيع / Signature : ____________</div></div>'+
+    '<div class="stamp" style="text-align:center"><img src="'+COMPANY_STAMP+'"><div style="margin-top:4px">ختم الشركة / Company Stamp</div></div>'+
+    '</div>'+
+    btns+
+    '</body></html>';
+  return html;
+}
+
+function showPaymentVoucher(){
+  if(!lastPayment){ showToast(lang==='ar'?'لا يوجد سند':'سندی موجود نیست','error'); return; }
+  var w=window.open('','_blank');
+  if(!w){ showToast(lang==='ar'?'فعّل النوافذ المنبثقة':'پاپ‌آپ را فعال کنید','error'); return; }
+  w.document.write(buildPaymentVoucherHTML(lastPayment,true));
+  w.document.close();
 }
 
 // Build a receipt voucher manually for an order (uses its invoice if grouped)
@@ -2060,6 +2139,8 @@ function renderFinance(){
           }
         }
         var payBtn=(t.is_credit&&!t.paid)?'<button class="btn btn-green btn-sm" style="margin-top:8px" onclick="markCreditPaid('+t.id+')">✅ '+(lang==='ar'?'تم الدفع':'پرداخت شد')+'</button>':'';
+        // Payment voucher button: for any settled purchase/expense
+        var pvBtn=(t.type!=='income'&&t.paid)?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="paymentVoucherForTx('+t.id+')">📤 '+(lang==='ar'?'سند صرف':'سند صرف')+'</button>':'';
         return `
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2071,6 +2152,7 @@ function renderFinance(){
         </div>
         ${invImg}
         ${payBtn}
+        ${pvBtn}
       </div>`;
       }).join('');
 }
@@ -2082,7 +2164,33 @@ async function markCreditPaid(transId){
   await api('PATCH','transactions',{paid:true},'?id=eq.'+transId);
   if(t) t.paid=true;
   renderFinance();
-  showToast(T('saved'),'success');
+  showToast(lang==='ar'?'تم الدفع · سند الصرف جاهز':'پرداخت شد · سند صرف آماده است','success');
+  // Auto-open the payment voucher for this settled purchase
+  paymentVoucherForTx(transId);
+}
+
+// Build payment voucher data from a transaction and show it
+function paymentVoucherForTx(transId){
+  var t=allTransactions.find(x=>x.id===transId);
+  if(!t){ return; }
+  var supplier=t.supplier_name||(t.description||'').replace(/\s*\((آجل|قرضی)\)\s*/g,'').trim()||'-';
+  // Find supplier's saved WhatsApp phone (match by name)
+  var supPhone='';
+  try {
+    var sObj=(allSuppliers||[]).find(function(s){return (s.name||'').trim()===supplier.trim();});
+    if(sObj) supPhone=sObj.phone||'';
+  } catch(e){}
+  var pvNo='PV-'+String(transId)+'-'+String(new Date().getTime()).slice(-4);
+  lastPayment={
+    no:pvNo,
+    date:new Date().toISOString().slice(0,10),
+    payee:supplier,
+    phone:supPhone,
+    amount:t.amount||0,
+    reason:(t.description||'')+(t.due_date?(lang==='ar'?' · استحقاق '+t.due_date:' · سررسید '+t.due_date):''),
+    method:t.is_credit?(lang==='ar'?'تسوية آجل':'تسویه قرضی'):(lang==='ar'?'نقدي':'نقدی')
+  };
+  showPaymentVoucher();
 }
 
 function showImgFull(transId){
@@ -2176,9 +2284,25 @@ async function addNewSupplier(){
   var name=prompt(lang==='ar'?'اسم الشركة الجديدة:':'نام شرکت جدید:');
   if(!name||!name.trim()) return;
   name=name.trim();
-  await api('POST','suppliers',{name:name});
+  var phone=prompt(lang==='ar'?'رقم واتساب المورد (اختياري):':'شماره واتساپ فروشنده (اختیاری):')||'';
+  await api('POST','suppliers',{name:name,phone:phone.trim()});
   await loadSuppliers();
   var sel=document.getElementById('p-supplier');
+  if(sel) sel.value=name;
+  showToast(T('saved'),'success');
+}
+
+// Edit WhatsApp phone of the currently selected supplier
+async function editSupplierPhone(){
+  var sel=document.getElementById('p-supplier');
+  var name=sel?sel.value:'';
+  if(!name){ showToast(lang==='ar'?'اختر المورد أولاً':'اول فروشنده را انتخاب کنید','error'); return; }
+  var sObj=(allSuppliers||[]).find(function(s){return (s.name||'').trim()===name.trim();});
+  if(!sObj){ showToast(T('no_data'),'error'); return; }
+  var phone=prompt((lang==='ar'?'رقم واتساب لـ ':'شماره واتساپ برای ')+name+' :', sObj.phone||'');
+  if(phone===null) return;
+  await api('PATCH','suppliers',{phone:phone.trim()},'?id=eq.'+sObj.id);
+  await loadSuppliers();
   if(sel) sel.value=name;
   showToast(T('saved'),'success');
 }
