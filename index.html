@@ -419,9 +419,15 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="modal">
     <div class="modal-header"><div class="modal-title">📢 <span>إرسال إعلان / ارسال تبلیغ</span></div><button class="modal-close" onclick="closeModal('broadcastModal')">✕</button></div>
     <div style="background:var(--surface2);padding:10px;border-radius:8px;font-size:12px;color:var(--text2);margin-bottom:12px" id="broadcast-info"></div>
-    <div class="form-group"><label class="form-label">نص الرسالة / متن پیام</label><textarea class="form-control" id="broadcast-msg" style="min-height:120px" placeholder="مثلا: عروض خاصة لشهر رمضان! خصم 20% على جميع المنتجات 🎉"></textarea></div>
+    <div class="form-group"><label class="form-label">نص الرسالة / متن پیام</label><textarea class="form-control" id="broadcast-msg" style="min-height:100px" placeholder="مثلا: عروض خاصة لشهر رمضان! خصم 20% على جميع المنتجات 🎉"></textarea></div>
+    <div class="form-group" id="broadcast-img-group">
+      <label class="form-label">صورة الإعلان / عکس تبلیغ (اختیاری)</label>
+      <input type="file" id="broadcast-img" accept="image/*" onchange="handleBroadcastImg(this)">
+      <div id="broadcast-img-preview" style="margin-top:8px"></div>
+      <button class="btn btn-outline btn-sm btn-block" id="share-img-btn" style="display:none;margin-top:8px" onclick="shareBroadcastImage()">📲 <span>مشاركة الصورة عبر واتساب / اشتراک عکس در واتساپ</span></button>
+    </div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px" id="broadcast-note"></div>
-    <button class="btn btn-green btn-block" style="background:#25D366" onclick="startBroadcast()">📤 <span>بدء الإرسال / شروع ارسال</span></button>
+    <button class="btn btn-green btn-block" style="background:#25D366" onclick="startBroadcast()">📤 <span>إرسال النص للكل / ارسال متن به همه</span></button>
   </div>
 </div>
 
@@ -652,6 +658,9 @@ let allInventory = [];
 let allInventoryUsage = [];
 let allAssets = [];
 let allCustomers = [];
+let broadcastMsg='';
+let broadcastList=[];
+let broadcastSent={};
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -2259,11 +2268,21 @@ async function syncCustomersFromOrders(){
 
 // ===== BROADCAST =====
 function openBroadcastModal(){
+  // Reset to input view
+  broadcastSent={};
+  var existing=document.getElementById('broadcast-dynamic-list');
+  if(existing) existing.remove();
+  var msgWrap=document.getElementById('broadcast-msg').closest('.form-group');
+  var sendBtn=document.querySelector('#broadcastModal button.btn-green');
+  if(msgWrap) msgWrap.style.display='';
+  if(sendBtn) sendBtn.style.display='';
   var withPhone=allCustomers.filter(function(c){return waPhone(c.phone);});
   document.getElementById('broadcast-info').textContent=(lang==='ar'?'سيتم الإرسال إلى ':'ارسال به ')+withPhone.length+(lang==='ar'?' عميل لديهم رقم':' مشتری دارای شماره');
-  document.getElementById('broadcast-note').textContent=lang==='ar'
-    ?'⚠️ واتساب لا يسمح بالإرسال الجماعي التلقائي. سيفتح المحادثات واحدة تلو الأخرى مع نص جاهز — اضغط إرسال في كل مرة.'
-    :'⚠️ واتساپ ارسال انبوه خودکار را اجازه نمی‌دهد. چت‌ها یکی‌یکی با متن آماده باز می‌شوند — هر بار Send را بزن.';
+  var noteEl=document.getElementById('broadcast-note');
+  noteEl.style.display='';
+  noteEl.textContent=lang==='ar'
+    ?'⚠️ واتساب لا يسمح بالإرسال الجماعي التلقائي. بعد كتابة النص، اضغط على كل عميل لفتح محادثته مع النص الجاهز.'
+    :'⚠️ واتساپ ارسال انبوه خودکار را اجازه نمی‌دهد. بعد از نوشتن متن، روی هر مشتری بزن تا چتش با متن آماده باز شود.';
   document.getElementById('broadcast-msg').value='';
   openModal('broadcastModal');
 }
@@ -2273,24 +2292,116 @@ async function startBroadcast(){
   if(!msg){ showToast(T('err_fill'),'error'); return; }
   var withPhone=allCustomers.filter(function(c){return waPhone(c.phone);});
   if(withPhone.length===0){ showToast(lang==='ar'?'لا يوجد أرقام':'شماره‌ای نیست','error'); return; }
+  broadcastMsg=msg;
+  broadcastList=withPhone;
+  renderBroadcastList();
+}
+
+function renderBroadcastList(){
+  var info=document.getElementById('broadcast-info');
+  var noteEl=document.getElementById('broadcast-note');
+  var msgWrap=document.getElementById('broadcast-msg').closest('.form-group');
+  var sendBtn=document.querySelector('#broadcastModal button.btn-green');
+  // Hide input fields, show the clickable list
+  if(msgWrap) msgWrap.style.display='none';
+  if(sendBtn) sendBtn.style.display='none';
+  if(noteEl) noteEl.style.display='none';
+  var sentCount=Object.keys(broadcastSent).length;
+  info.innerHTML='<div style="font-weight:700;margin-bottom:6px">'+(lang==='ar'?'اضغط على كل عميل لإرسال الإعلان':'روی هر مشتری بزن تا تبلیغ ارسال شود')+'</div>'+
+    '<div style="color:var(--accent)">'+(lang==='ar'?'تم الإرسال':'ارسال‌شده')+': '+sentCount+' / '+broadcastList.length+'</div>';
+  var html='<div style="max-height:50vh;overflow-y:auto;margin-top:10px">'+
+    broadcastList.map(function(c,i){
+      var wa=waPhone(c.phone);
+      var done=broadcastSent[wa];
+      return '<button class="btn btn-block btn-sm" style="margin-bottom:6px;text-align:right;background:'+(done?'rgba(76,175,130,.2)':'#25D366')+';color:'+(done?'var(--green)':'#fff')+'" onclick="sendBroadcastTo(\''+wa+'\','+i+')">'+
+        (done?'✅ ':'📤 ')+c.name+' · '+c.phone+'</button>';
+    }).join('')+'</div>'+
+    '<button class="btn btn-outline btn-block btn-sm" style="margin-top:8px" onclick="resetBroadcast()">'+(lang==='ar'?'إغلاق':'بستن')+'</button>';
+  // Place list right after info
+  var existing=document.getElementById('broadcast-dynamic-list');
+  if(existing) existing.remove();
+  var div=document.createElement('div');
+  div.id='broadcast-dynamic-list';
+  div.innerHTML=html;
+  info.parentNode.insertBefore(div, info.nextSibling);
+}
+
+function sendBroadcastTo(wa,i){
+  window.open('https://wa.me/'+wa+'?text='+encodeURIComponent(broadcastMsg),'_blank');
+  broadcastSent[wa]=true;
+  renderBroadcastList();
+}
+
+function resetBroadcast(){
+  broadcastSent={};
+  broadcastMsg='';
+  broadcastList=[];
+  var existing=document.getElementById('broadcast-dynamic-list');
+  if(existing) existing.remove();
+  // Restore input fields
+  var msgWrap=document.getElementById('broadcast-msg').closest('.form-group');
+  var sendBtn=document.querySelector('#broadcastModal button.btn-green');
+  var noteEl=document.getElementById('broadcast-note');
+  var imgGroup=document.getElementById('broadcast-img-group');
+  if(msgWrap) msgWrap.style.display='';
+  if(sendBtn) sendBtn.style.display='';
+  if(noteEl) noteEl.style.display='';
+  if(imgGroup) imgGroup.style.display='';
   closeModal('broadcastModal');
-  // Open chats one by one with confirm between each (browsers block multiple popups)
-  var idx=0;
-  function next(){
-    if(idx>=withPhone.length){ showToast(lang==='ar'?'انتهى الإرسال':'ارسال تمام شد','success'); return; }
-    var c=withPhone[idx];
-    var wa=waPhone(c.phone);
-    window.open('https://wa.me/'+wa+'?text='+encodeURIComponent(msg),'_blank');
-    idx++;
-    if(idx<withPhone.length){
-      setTimeout(function(){
-        if(confirm((lang==='ar'?'تابع للعميل التالي ('+idx+'/'+withPhone.length+')؟':'ادامه به مشتری بعدی ('+idx+'/'+withPhone.length+')؟'))) next();
-      },800);
+}
+
+let broadcastImageData=null;
+// Reusable image compressor returning a Promise<dataURL>
+function compressImage(file, quality, maxDim){
+  quality=quality||0.65; maxDim=maxDim||1000;
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      var img=new Image();
+      img.onload=function(){
+        var w=img.width, h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; }
+          else { w=Math.round(w*maxDim/h); h=maxDim; }
+        }
+        var canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      };
+      img.onerror=reject;
+      img.src=e.target.result;
+    };
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleBroadcastImg(input){
+  var file=input.files[0];
+  if(!file) return;
+  broadcastImageData=await compressImage(file);
+  document.getElementById('broadcast-img-preview').innerHTML='<img src="'+broadcastImageData+'" style="width:100%;max-height:200px;object-fit:contain;border-radius:8px;background:#fff">';
+  document.getElementById('share-img-btn').style.display='block';
+}
+
+async function shareBroadcastImage(){
+  if(!broadcastImageData){ showToast(lang==='ar'?'اختر صورة أولاً':'اول عکس انتخاب کن','error'); return; }
+  var msg=document.getElementById('broadcast-msg').value.trim();
+  try {
+    // Convert dataURL to blob
+    var res=await fetch(broadcastImageData);
+    var blob=await res.blob();
+    var file=new File([blob],'ad.jpg',{type:'image/jpeg'});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],text:msg||''});
     } else {
-      showToast(lang==='ar'?'انتهى الإرسال':'ارسال تمام شد','success');
+      // Fallback: download the image
+      var a=document.createElement('a');
+      a.href=broadcastImageData; a.download='ad.jpg'; a.click();
+      showToast(lang==='ar'?'تم حفظ الصورة - أرفقها في واتساب':'عکس ذخیره شد - در واتساپ ضمیمه کن','success');
     }
-  }
-  next();
+  } catch(e){ console.log('share err',e); }
 }
 
 // ===== STAFF =====
