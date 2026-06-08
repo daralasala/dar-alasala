@@ -592,10 +592,11 @@ body.en .search-icon{right:auto;left:10px;}
     <div id="purchase-fields">
       <div class="form-group"><label class="form-label" id="pm-supplier">الشركة / فروشنده</label>
         <div style="display:flex;gap:6px">
-          <select class="form-control" id="p-supplier"><option value="">-- اختر / انتخاب --</option></select>
+          <select class="form-control" id="p-supplier" onchange="onSupplierChange()"><option value="">-- اختر / انتخاب --</option></select>
           <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
           <button class="btn btn-outline btn-sm" onclick="editSupplierPhone()" style="white-space:nowrap" title="ویرایش شماره">✏️</button>
         </div>
+        <div id="supplier-phone-line" style="font-size:12px;color:var(--text2);margin-top:5px;display:none">📱 <span id="supplier-phone-val"></span></div>
       </div>
       <div class="form-group"><label class="form-label">نوع الدفع / نوع پرداخت</label>
         <select class="form-control" id="p-paytype">
@@ -669,7 +670,25 @@ let allCustomers = [];
 let broadcastMsg='';
 let broadcastList=[];
 let broadcastSent={};
-let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
+let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'برق‌کشی',order_num:5},{name:'کنترل کیفیت',order_num:6},{name:'آماده تحویل',order_num:7}];
+
+// Translate a Persian-stored stage name into the active language (data stays Persian in DB)
+function stageLabel(name){
+  if(!name) return '-';
+  var map={
+    'نجاری':{ar:'نجارة',en:'Carpentry'},
+    'جوشکاری':{ar:'لحام',en:'Welding'},
+    'رنگ':{ar:'دهان',en:'Painting'},
+    'رنگ‌کاری':{ar:'دهان',en:'Painting'},
+    'روکش‌کاری':{ar:'تنجيد',en:'Upholstery'},
+    'برق‌کشی':{ar:'تمديد كهرباء',en:'Electrical Wiring'},
+    'کنترل کیفیت':{ar:'مراقبة الجودة',en:'Quality Control'},
+    'آماده تحویل':{ar:'جاهز للتسليم',en:'Ready for Delivery'}
+  };
+  var m=map[name.trim()];
+  if(!m) return name; // unknown custom stage -> show as-is
+  return lang==='ar'?m.ar:lang==='en'?m.en:name;
+}
 let currentFilter = 'all';
 let currentStageFilter = 'all';
 let pendingImages = [];
@@ -841,12 +860,25 @@ function setLang(l){
   document.getElementById('f-ready').textContent=T('status_ready');
   document.getElementById('f-delivered').textContent=T('status_delivered');
   document.getElementById('order-search').placeholder=l==='en'?'Search...':'البحث... / جستجو...';
+  // Fixed assets button + section titles (were stuck in Persian/Arabic)
+  safeSet('fb-assets','🏛️ '+(l==='en'?'Fixed Assets':l==='ar'?'الأصول الثابتة':'دارایی‌های ثابت'));
+  var slStages=document.getElementById('sl-stages-title'); if(slStages) slStages.textContent=l==='en'?'Production Stages':l==='ar'?'حالة مراحل الإنتاج':'وضعیت مراحل تولید';
   ['ar','fa','en'].forEach(x=>document.getElementById('lt-'+x).classList.toggle('active',x===l));
   document.querySelectorAll('.lang-pill').forEach(b=>b.classList.toggle('active',b.getAttribute('onclick').includes("'"+l+"'")));
   if(currentUser) document.getElementById('dash-greet').textContent=T('greet')+', '+currentUser.name;
   var dashRole=document.getElementById('dash-role');
   if(dashRole&&currentUser) dashRole.textContent=currentUser.role==='manager'?(l==='en'?'Manager':l==='ar'?'مدير':'مدیر'):currentUser.department;
+  // Persist chosen language so it survives refresh
+  try { localStorage.setItem('app_lang', l); } catch(e){}
+  // Re-render dynamic content so it follows the new language
+  try { if(currentUser){ refreshAllViews(); } } catch(e){ console.log('refresh views err',e); }
   } catch(e){ console.log('setLang error:',e); }
+}
+
+// Re-run all render functions that exist, so dynamic UI follows language
+function refreshAllViews(){
+  var fns=['renderDashboard','renderOrders','renderProduction','renderFinance','renderStaff','renderNotifications','renderCustomers','renderInventory','renderRequests','renderSuppliers'];
+  fns.forEach(function(fn){ try { if(typeof window[fn]==='function') window[fn](); } catch(e){} });
 }
 
 // ===== AUTH =====
@@ -999,7 +1031,7 @@ function renderDashboard(){
         return `<div class="card" style="border-right:3px solid ${c};cursor:pointer" onclick="openOrderDetail(${o.id})">
           <div class="card-header"><div><div class="card-title">${o.product}</div><div class="card-sub">${o.customer_name}</div></div><span class="badge ${bc}">${days>0?days+'d':'Today!'}</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${o.progress||0}%"></div></div>
-          <div class="progress-label">${o.progress||0}% · ${o.current_stage||'-'}</div>
+          <div class="progress-label">${o.progress||0}% · ${stageLabel(o.current_stage)}</div>
         </div>`;
       }).join('');
   // Stage summary
@@ -1093,7 +1125,7 @@ function renderOrders(){
           return '<div onclick="openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:6px;cursor:pointer">'+
             orderCardThumb(o)+
             '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+o.product+'</div>'+
-            '<div style="font-size:11px;color:var(--text2)">'+(o.current_stage||'-')+'</div>'+
+            '<div style="font-size:11px;color:var(--text2)">'+stageLabel(o.current_stage)+'</div>'+
             (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
             '</div>'+
             '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
@@ -1107,7 +1139,7 @@ function renderOrders(){
       html+='<div class="card" onclick="openOrderDetail('+o.id+')" style="cursor:pointer;margin-bottom:12px">'+
         '<div class="card-header"><div><div class="card-title">'+o.product+'</div><div class="card-sub">'+(canSeeCust?o.customer_name+' · ':'')+(o.id_code||'')+'</div></div>'+
         '<span class="badge '+(sm[o.status]||'badge-blue')+'">'+T('status_'+(o.status||'building'))+'</span></div>'+
-        '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+(o.current_stage||'-')+'</span></div>'+
+        '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+stageLabel(o.current_stage)+'</span></div>'+
         (o.progress>0?'<div class="progress-bar"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
       '</div>';
     });
@@ -1133,7 +1165,7 @@ function renderOrders(){
           <span class="badge ${sm[o.status]||'badge-blue'}">${T('status_'+(o.status||'building'))}</span>
         </div>
         <div class="row"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
-        <div class="row" style="margin-bottom:0"><span class="row-label">🏭 ${lang==='en'?'Stage':lang==='ar'?'المرحلة':'مرحله'}</span><span class="row-value">${o.current_stage||'-'}</span></div>
+        <div class="row" style="margin-bottom:0"><span class="row-label">🏭 ${lang==='en'?'Stage':lang==='ar'?'المرحلة':'مرحله'}</span><span class="row-value">${stageLabel(o.current_stage)}</span></div>
         ${o.progress>0?`<div class="progress-bar"><div class="progress-fill" style="width:${o.progress}%"></div></div><div class="progress-label">${o.progress}%</div>`:''}
       </div>`;
     }).join('');
@@ -1147,7 +1179,7 @@ async function openOrderDetail(id){
   const stepsHtml = allStages.map(s=>{
     const d = (s.order_num < (allStages.find(x=>x.name===o.current_stage)||{order_num:1}).order_num) ? 'done'
       : s.name===o.current_stage ? 'active' : 'pending';
-    return `<div class="tl-item"><div class="tl-dot ${d}"></div><div style="font-size:12px;font-weight:600">${s.name}</div></div>`;
+    return `<div class="tl-item"><div class="tl-dot ${d}"></div><div style="font-size:12px;font-weight:600">${stageLabel(s.name)}</div></div>`;
   }).join('');
   const canTransfer = currentUser&&currentUser.role!=='manager'?(deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.worker===currentUser.name):true;
   const isManager = currentUser&&currentUser.role==='manager';
@@ -1168,7 +1200,7 @@ async function openOrderDetail(id){
     <div class="card" style="margin-bottom:9px">
       ${canSeeMoney?`<div class="row"><span class="row-label">👤</span><span class="row-value">${o.customer_name}</span></div>
       <div class="row"><span class="row-label">📱</span><span class="row-value">${o.customer_phone||'-'}</span></div>`:''}
-      <div class="row"><span class="row-label">🏭</span><span class="row-value">${o.current_stage||'-'}</span></div>
+      <div class="row"><span class="row-label">🏭</span><span class="row-value">${stageLabel(o.current_stage)}</span></div>
       <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
     </div>
     ${canSeeMoney?`<div class="card" style="margin-bottom:9px">
@@ -1237,7 +1269,7 @@ function openInvoiceFolder(invId){
     return '<div onclick="closeModal(\'invoiceFolderModal\');openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:9px;border-radius:10px;background:var(--surface2);margin-bottom:7px;cursor:pointer">'+
       thumb+
       '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+o.product+'</div>'+
-      '<div style="font-size:11px;color:var(--text2)">'+(o.current_stage||'-')+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+stageLabel(o.current_stage)+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
       (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
       '</div>'+
       '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
@@ -1353,7 +1385,7 @@ function buildReceiptHTML(r, withButtons){
     '.doc-title{text-align:center;font-size:24px;font-weight:bold;letter-spacing:1px;border:3px double #2b7a4b;color:#2b7a4b;padding:10px;margin-bottom:22px;border-radius:6px}'+
     '.meta{display:flex;justify-content:space-between;margin-bottom:18px;font-size:14px}'+
     '.meta .box{border:1.5px solid #333;padding:8px 14px;border-radius:5px}'+
-    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px}'+
+    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px;direction:rtl}'+
     '.body-tbl td{border:1px solid #333;padding:12px 14px;font-size:14px}'+
     '.body-tbl .lbl{background:#eef4ef;font-weight:bold;width:200px;direction:rtl;text-align:right}'+
     '.body-tbl .val{direction:rtl;text-align:right}'+
@@ -1449,7 +1481,7 @@ function buildPaymentVoucherHTML(p, withButtons){
     '.doc-title{text-align:center;font-size:24px;font-weight:bold;letter-spacing:1px;border:3px double #c0392b;color:#c0392b;padding:10px;margin-bottom:22px;border-radius:6px}'+
     '.meta{display:flex;justify-content:space-between;margin-bottom:18px;font-size:14px}'+
     '.meta .box{border:1.5px solid #333;padding:8px 14px;border-radius:5px}'+
-    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px}'+
+    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px;direction:rtl}'+
     '.body-tbl td{border:1px solid #333;padding:12px 14px;font-size:14px}'+
     '.body-tbl .lbl{background:#fbeeec;font-weight:bold;width:200px;direction:rtl;text-align:right}'+
     '.body-tbl .val{direction:rtl;text-align:right}'+
@@ -1962,7 +1994,7 @@ function openStageTransfer(orderId){
   const canSendAnywhere = currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
   const stageOptions = canSendAnywhere ? allStages : (currIdx>=0 ? allStages.slice(currIdx+1) : allStages);
   document.getElementById('stage-modal-content').innerHTML=`
-    <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${o.current_stage||'-'}</div></div>
+    <div style="margin-bottom:12px"><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${lang==='en'?'Current stage':lang==='ar'?'المرحلة الحالية':'مرحله فعلی'}: ${stageLabel(o.current_stage)}</div></div>
     <div class="form-group">
       <label class="form-label">📸 ${lang==='en'?'Photo of finished work':lang==='ar'?'صورة العمل المنجز':'عکس کار تمام‌شده'}</label>
       <div class="upload-area" onclick="document.getElementById('stage-img').click()">
@@ -1974,7 +2006,7 @@ function openStageTransfer(orderId){
     </div>
     <div class="form-group"><label class="form-label">${canSendAnywhere?(lang==='ar'?'إرسال إلى أي مرحلة':lang==='en'?'Send to any stage':'ارسال به هر مرحله'):(lang==='en'?'Transfer to':'انتقال به')}</label>
       <select class="form-control" id="next-stage">
-        ${stageOptions.map(s=>`<option value="${s.name}">${s.name}</option>`).join('')}
+        ${stageOptions.map(s=>`<option value="${s.name}">${stageLabel(s.name)}</option>`).join('')}
         <option value="آماده تحویل">${lang==='en'?'Ready to Deliver':'آماده تحویل'}</option>
       </select>
     </div>
@@ -2034,7 +2066,11 @@ async function doStageTransfer(orderId){
   await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes:notes,started_at:new Date().toISOString()});
   stageImages=[];
   closeModal('stageModal'); await loadAll();
-  showToast('✅ '+next,'success');
+  if(status==='ready'){
+    showToast('🚚 '+(lang==='ar'?'جاهز للتسليم! تم إبلاغ السائق ومسؤول الشراء':lang==='en'?'Ready for delivery! Driver & purchasing notified':'آماده تحویل! راننده و مسئول خرید مطلع شدند'),'success');
+  } else {
+    showToast('✅ '+stageLabel(next),'success');
+  }
 }
 
 // ===== PRODUCTION =====
@@ -2073,7 +2109,7 @@ function renderProduction(){
           ${thumb}
           <div class="card-header">
             <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${o.id_code||''}</div></div>
-            <span class="badge badge-blue">${o.current_stage||'-'}</span>
+            <span class="badge badge-blue">${stageLabel(o.current_stage)}</span>
           </div>
           ${o.description?'<div style="font-size:12px;color:var(--text2);margin-bottom:7px">'+o.description+'</div>':''}
           <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
@@ -2292,6 +2328,25 @@ async function addNewSupplier(){
   showToast(T('saved'),'success');
 }
 
+// Show selected supplier's phone automatically
+function onSupplierChange(){
+  var sel=document.getElementById('p-supplier');
+  var line=document.getElementById('supplier-phone-line');
+  var val=document.getElementById('supplier-phone-val');
+  if(!sel||!line||!val) return;
+  var name=sel.value;
+  var sObj=(allSuppliers||[]).find(function(s){return (s.name||'').trim()===name.trim();});
+  if(name&&sObj&&sObj.phone){
+    val.textContent=sObj.phone;
+    line.style.display='block';
+  } else if(name){
+    val.textContent=lang==='ar'?'لا يوجد رقم محفوظ (اضغط ✏️ لإضافته)':'شماره‌ای ذخیره نشده (✏️ را بزنید)';
+    line.style.display='block';
+  } else {
+    line.style.display='none';
+  }
+}
+
 // Edit WhatsApp phone of the currently selected supplier
 async function editSupplierPhone(){
   var sel=document.getElementById('p-supplier');
@@ -2304,6 +2359,7 @@ async function editSupplierPhone(){
   await api('PATCH','suppliers',{phone:phone.trim()},'?id=eq.'+sObj.id);
   await loadSuppliers();
   if(sel) sel.value=name;
+  onSupplierChange();
   showToast(T('saved'),'success');
 }
 
@@ -2878,7 +2934,18 @@ function renderNotifications(){
     const days=Math.ceil((new Date(o.delivery_date)-now)/(1000*60*60*24));
     if(days<=3&&days>=0) html+=`<div class="notif-item unread"><div style="font-size:18px">⏰</div><div><div style="font-size:13px;font-weight:700">${o.product}</div><div style="font-size:12px;color:var(--text2)">${o.customer_name} · ${days}d</div></div></div>`;
   });
-  allOrders.filter(o=>o.status==='ready').forEach(o=>{ html+=`<div class="notif-item unread"><div style="font-size:18px">✅</div><div><div style="font-size:13px;font-weight:700">${T('status_ready')}</div><div style="font-size:12px;color:var(--text2)">${o.product} - ${o.customer_name}</div></div></div>`; });
+  allOrders.filter(o=>o.status==='ready').forEach(o=>{
+    var isDeliveryStaff=currentUser&&(currentUser.department==='راننده'||currentUser.department==='مسئول خرید'||currentUser.role==='manager');
+    var alertTxt=lang==='ar'?'جاهز للتسليم — على السائق ومسؤول الشراء تنفيذ التسليم':lang==='en'?'Ready for delivery — driver & purchasing should arrange delivery':'آماده تحویل — راننده و مسئول خرید تحویل را انجام دهند';
+    // WhatsApp button to notify the delivery team quickly
+    var notifMsg=(lang==='ar'?'🚚 طلب جاهز للتسليم\n':'🚚 سفارش آماده تحویل\n')+
+      (lang==='ar'?'الصنف: ':'جنس: ')+o.product+'\n'+
+      (lang==='ar'?'العميل: ':'مشتری: ')+(o.customer_name||'-')+'\n'+
+      (o.customer_phone?((lang==='ar'?'هاتف العميل: ':'تلفن مشتری: ')+o.customer_phone+'\n'):'')+
+      (lang==='ar'?'يرجى تنفيذ التسليم':'لطفاً تحویل را انجام دهید');
+    var waBtn=isDeliveryStaff?'<a href="https://wa.me/?text='+encodeURIComponent(notifMsg)+'" target="_blank" rel="noopener" class="btn btn-green btn-sm" style="margin-top:6px;text-decoration:none;display:inline-block">💬 '+(lang==='ar'?'إبلاغ فريق التسليم':lang==='en'?'Notify delivery team':'اطلاع به تیم تحویل')+'</a>':'';
+    html+='<div class="notif-item unread" style="border-right:3px solid var(--green)"><div style="font-size:18px">🚚</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--green)">'+alertTxt+'</div><div style="font-size:12px;color:var(--text2)">'+o.product+' — '+(o.customer_name||'-')+'</div>'+waBtn+'</div></div>';
+  });
   allUsers.filter(u=>u.status==='pending').forEach(u=>{ if(currentUser?.role==='manager') html+=`<div class="notif-item unread"><div style="font-size:18px">👤</div><div><div style="font-size:13px;font-weight:700">${T('pending')}</div><div style="font-size:12px;color:var(--text2)">${u.name} - ${u.department}</div></div></div>`; });
   // Low stock alerts
   allInventory.filter(it=>(it.quantity||0)<=(it.min_quantity||0)).forEach(it=>{
@@ -3048,7 +3115,9 @@ function showToast(msg,type){
 }
 
 // ===== INIT =====
-setLang('ar');
+var savedLang='ar';
+try { savedLang=localStorage.getItem('app_lang')||'ar'; } catch(e){}
+setLang(savedLang);
 // Show due-date field when credit purchase selected
 (function(){
   var pt=document.getElementById('p-paytype');
