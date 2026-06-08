@@ -289,6 +289,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('orders')" id="tab-orders">📋 <span id="t-orders">سفارشات</span></button>
     <button class="tab" onclick="showTab('production')" id="tab-production">🏭 <span id="t-prod">تولید</span></button>
     <button class="tab" onclick="showTab('inventory')" id="tab-inventory">📦 <span id="t-inventory">انبار</span></button>
+    <button class="tab" onclick="showTab('customers')" id="tab-customers">👤 <span id="t-customers">مشتری‌ها</span></button>
     <button class="tab" onclick="showTab('finance')" id="tab-finance">💰 <span id="t-fin">مالی</span></button>
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
@@ -387,6 +388,40 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span>إضافة مادة / افزودن جنس به انبار</span></button>
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- CUSTOMERS -->
+  <div class="page" id="page-customers">
+    <div style="display:flex;gap:7px;margin-bottom:12px">
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="openCustomerModal()">➕ <span>إضافة عميل / افزودن مشتری</span></button>
+      <button class="btn btn-outline btn-sm" onclick="syncCustomersFromOrders()">🔄 <span>استيراد / همگام‌سازی</span></button>
+    </div>
+    <button class="btn btn-green btn-block" style="margin-bottom:12px;background:#25D366" onclick="openBroadcastModal()">📢 <span>إرسال إعلان للجميع / ارسال تبلیغ به همه</span></button>
+    <input class="form-control" type="text" id="cust-search" placeholder="🔍 بحث / جستجو..." oninput="renderCustomers()" style="margin-bottom:12px">
+    <div id="customers-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+</div>
+
+<!-- CUSTOMER ADD/EDIT MODAL -->
+<div class="modal-overlay" id="customerModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">👤 <span id="cm-title">افزودن مشتری</span></div><button class="modal-close" onclick="closeModal('customerModal')">✕</button></div>
+    <input type="hidden" id="customer-edit-id" value="">
+    <div class="form-group"><label class="form-label">الاسم / نام</label><input class="form-control" type="text" id="customer-name"></div>
+    <div class="form-group"><label class="form-label">الهاتف / تلفن</label><input class="form-control" type="tel" id="customer-phone" placeholder="مثلا: 55388585"></div>
+    <div class="form-group"><label class="form-label">ملاحظات / توضیحات</label><textarea class="form-control" id="customer-notes"></textarea></div>
+    <button class="btn btn-primary btn-block" onclick="saveCustomer()">💾 حفظ / ثبت</button>
+  </div>
+</div>
+
+<!-- BROADCAST MODAL -->
+<div class="modal-overlay" id="broadcastModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📢 <span>إرسال إعلان / ارسال تبلیغ</span></div><button class="modal-close" onclick="closeModal('broadcastModal')">✕</button></div>
+    <div style="background:var(--surface2);padding:10px;border-radius:8px;font-size:12px;color:var(--text2);margin-bottom:12px" id="broadcast-info"></div>
+    <div class="form-group"><label class="form-label">نص الرسالة / متن پیام</label><textarea class="form-control" id="broadcast-msg" style="min-height:120px" placeholder="مثلا: عروض خاصة لشهر رمضان! خصم 20% على جميع المنتجات 🎉"></textarea></div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px" id="broadcast-note"></div>
+    <button class="btn btn-green btn-block" style="background:#25D366" onclick="startBroadcast()">📤 <span>بدء الإرسال / شروع ارسال</span></button>
   </div>
 </div>
 
@@ -616,6 +651,7 @@ let allSuppliers = [];
 let allInventory = [];
 let allInventoryUsage = [];
 let allAssets = [];
+let allCustomers = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -731,6 +767,7 @@ function setLang(l){
   document.getElementById('t-notify').textContent=T('notify');
   safeSet('t-requests',l==='en'?'Requests':l==='ar'?'طلبات الشراء':'درخواست خرید');
   safeSet('t-inventory',l==='en'?'Inventory':l==='ar'?'المخزن':'انبار');
+  safeSet('t-customers',l==='en'?'Customers':l==='ar'?'العملاء':'مشتری‌ها');
   safeSet('req-new-btn',l==='en'?'New Purchase Request':l==='ar'?'طلب شراء جديد':'درخواست خرید جدید');
   safeSet('req-list-title',l==='en'?'Purchase Requests':l==='ar'?'طلبات الشراء':'درخواست‌های خرید');
   safeSet('rm-title',l==='en'?'Request Material':l==='ar'?'طلب شراء مواد':'درخواست خرید جنس');
@@ -896,6 +933,7 @@ function showTab(tab){
   if(tab==='staff') renderStaff();
   if(tab==='requests') renderRequests();
   if(tab==='inventory') loadInventory();
+  if(tab==='customers') loadCustomers();
   if(tab==='notify') renderNotifications();
 }
 
@@ -919,6 +957,7 @@ async function loadAll(){
   loadSuppliers();
   loadInventory();
   loadAssets();
+  loadCustomers();
 }
 
 // ===== DASHBOARD =====
@@ -2112,6 +2151,146 @@ async function deleteAsset(id){
   allAssets=allAssets.filter(a=>a.id!==id);
   renderAssets();
   showToast(T('saved'),'success');
+}
+
+// ===== CUSTOMERS (مشتری‌ها) =====
+async function loadCustomers(){
+  var c=await api('GET','customers','','?select=*&order=name.asc');
+  allCustomers=c||[];
+  renderCustomers();
+}
+
+function renderCustomers(){
+  var box=document.getElementById('customers-list');
+  if(!box) return;
+  var q=(document.getElementById('cust-search')?.value||'').toLowerCase();
+  var list=allCustomers.filter(function(c){
+    return !q || (c.name||'').toLowerCase().indexOf(q)>=0 || (c.phone||'').indexOf(q)>=0;
+  });
+  if(list.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">👤</div><div>'+T('no_data')+'</div></div>';
+    return;
+  }
+  box.innerHTML='<div style="font-size:12px;color:var(--text2);margin-bottom:8px">'+(lang==='ar'?'العدد':'تعداد')+': '+allCustomers.length+'</div>'+
+    list.map(function(c){
+    var wa=waPhone(c.phone);
+    return '<div class="card" style="margin-bottom:8px;padding:11px">'+
+      '<div class="card-header" style="margin-bottom:6px">'+
+      '<div><div class="card-title">'+c.name+'</div>'+
+      '<div class="card-sub">'+(c.phone||'-')+'</div></div>'+
+      '</div>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      (wa?'<button class="btn btn-green btn-sm" style="background:#25D366" onclick="msgCustomer(\''+wa+'\')">💬 '+(lang==='ar'?'واتساب':'واتساپ')+'</button>':'')+
+      '<button class="btn btn-outline btn-sm" onclick="editCustomer('+c.id+')">✏️</button>'+
+      '<button class="btn btn-red btn-sm" onclick="deleteCustomer('+c.id+')">🗑️</button>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
+function msgCustomer(wa){
+  window.open('https://wa.me/'+wa,'_blank');
+}
+
+function openCustomerModal(){
+  document.getElementById('customer-edit-id').value='';
+  document.getElementById('cm-title').textContent=lang==='ar'?'إضافة عميل':'افزودن مشتری';
+  document.getElementById('customer-name').value='';
+  document.getElementById('customer-phone').value='';
+  document.getElementById('customer-notes').value='';
+  openModal('customerModal');
+}
+
+function editCustomer(id){
+  var c=allCustomers.find(x=>x.id===id); if(!c) return;
+  document.getElementById('customer-edit-id').value=id;
+  document.getElementById('cm-title').textContent=lang==='ar'?'تعديل العميل':'ویرایش مشتری';
+  document.getElementById('customer-name').value=c.name||'';
+  document.getElementById('customer-phone').value=c.phone||'';
+  document.getElementById('customer-notes').value=c.notes||'';
+  openModal('customerModal');
+}
+
+async function saveCustomer(){
+  var id=document.getElementById('customer-edit-id').value;
+  var body={
+    name:document.getElementById('customer-name').value.trim(),
+    phone:document.getElementById('customer-phone').value.trim(),
+    notes:document.getElementById('customer-notes').value.trim()
+  };
+  if(!body.name){ showToast(T('err_fill'),'error'); return; }
+  if(id){ await api('PATCH','customers',body,'?id=eq.'+id); }
+  else { await api('POST','customers',body); }
+  closeModal('customerModal');
+  await loadCustomers();
+  showToast(T('saved'),'success');
+}
+
+async function deleteCustomer(id){
+  if(!confirm(lang==='ar'?'حذف هذا العميل؟':'این مشتری حذف شود؟')) return;
+  await api('DELETE','customers',null,'?id=eq.'+id);
+  allCustomers=allCustomers.filter(c=>c.id!==id);
+  renderCustomers();
+  showToast(T('saved'),'success');
+}
+
+// Import customers from existing orders/invoices (dedupe by phone+name)
+async function syncCustomersFromOrders(){
+  showToast(lang==='ar'?'جاري الاستيراد...':'در حال همگام‌سازی...','success');
+  // Build a set of existing (name+phone)
+  var existing={};
+  allCustomers.forEach(function(c){ existing[((c.name||'')+'|'+(c.phone||'')).trim()]=true; });
+  // Collect unique customers from orders
+  var seen={}; var toAdd=[];
+  allOrders.forEach(function(o){
+    var nm=(o.customer_name||'').trim();
+    var ph=(o.customer_phone||'').trim();
+    if(!nm) return;
+    var key=nm+'|'+ph;
+    if(seen[key]||existing[key]) return;
+    seen[key]=true;
+    toAdd.push({name:nm,phone:ph});
+  });
+  if(toAdd.length===0){ showToast(lang==='ar'?'لا يوجد عملاء جدد':'مشتری جدیدی نبود','success'); return; }
+  for(var i=0;i<toAdd.length;i++){ await api('POST','customers',toAdd[i]); }
+  await loadCustomers();
+  showToast((lang==='ar'?'تمت إضافة ':'افزوده شد: ')+toAdd.length,'success');
+}
+
+// ===== BROADCAST =====
+function openBroadcastModal(){
+  var withPhone=allCustomers.filter(function(c){return waPhone(c.phone);});
+  document.getElementById('broadcast-info').textContent=(lang==='ar'?'سيتم الإرسال إلى ':'ارسال به ')+withPhone.length+(lang==='ar'?' عميل لديهم رقم':' مشتری دارای شماره');
+  document.getElementById('broadcast-note').textContent=lang==='ar'
+    ?'⚠️ واتساب لا يسمح بالإرسال الجماعي التلقائي. سيفتح المحادثات واحدة تلو الأخرى مع نص جاهز — اضغط إرسال في كل مرة.'
+    :'⚠️ واتساپ ارسال انبوه خودکار را اجازه نمی‌دهد. چت‌ها یکی‌یکی با متن آماده باز می‌شوند — هر بار Send را بزن.';
+  document.getElementById('broadcast-msg').value='';
+  openModal('broadcastModal');
+}
+
+async function startBroadcast(){
+  var msg=document.getElementById('broadcast-msg').value.trim();
+  if(!msg){ showToast(T('err_fill'),'error'); return; }
+  var withPhone=allCustomers.filter(function(c){return waPhone(c.phone);});
+  if(withPhone.length===0){ showToast(lang==='ar'?'لا يوجد أرقام':'شماره‌ای نیست','error'); return; }
+  closeModal('broadcastModal');
+  // Open chats one by one with confirm between each (browsers block multiple popups)
+  var idx=0;
+  function next(){
+    if(idx>=withPhone.length){ showToast(lang==='ar'?'انتهى الإرسال':'ارسال تمام شد','success'); return; }
+    var c=withPhone[idx];
+    var wa=waPhone(c.phone);
+    window.open('https://wa.me/'+wa+'?text='+encodeURIComponent(msg),'_blank');
+    idx++;
+    if(idx<withPhone.length){
+      setTimeout(function(){
+        if(confirm((lang==='ar'?'تابع للعميل التالي ('+idx+'/'+withPhone.length+')؟':'ادامه به مشتری بعدی ('+idx+'/'+withPhone.length+')؟'))) next();
+      },800);
+    } else {
+      showToast(lang==='ar'?'انتهى الإرسال':'ارسال تمام شد','success');
+    }
+  }
+  next();
 }
 
 // ===== STAFF =====
