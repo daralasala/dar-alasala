@@ -1069,7 +1069,13 @@ function renderOrders(){
       var total=items.reduce(function(s,it){return s+(it.total_price||0);},0);
       var allDelivered=items.every(function(it){return it.status==='delivered';});
       var anyPending=items.some(function(it){return it.status==='pending_payment';});
+      var pendingCount=items.filter(function(it){return it.status==='pending_payment';}).length;
       var grpBadge=allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
+      var canStart = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
+      // Single button to start production for the WHOLE invoice + auto receipt voucher
+      var startAllBtn=(anyPending&&canStart)
+        ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+' '+(lang==='ar'?'صنف':'جنس')+')</button>'
+        : '';
       html+='<div class="card" style="margin-bottom:12px">'+
         '<div class="card-header" style="margin-bottom:10px">'+
         '<div><div class="card-title">🧾 '+custName+'</div><div class="card-sub">'+invCode+' · '+items.length+' '+(lang==='ar'?'صنف':'جنس')+' · '+total.toLocaleString()+' QAR</div></div>'+
@@ -1084,6 +1090,7 @@ function renderOrders(){
             '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
           '</div>';
         }).join('')+
+        startAllBtn+
       '</div>';
     });
     // Orders without invoice (legacy)
@@ -1173,6 +1180,7 @@ async function openOrderDetail(id){
       <input type="file" id="invoice-file-${o.id}" accept="image/*" style="display:none" onchange="uploadDoc(${o.id},'invoice',this)">
       <button class="btn btn-primary btn-sm" onclick="createInvoice(${o.id})">🧾 ${lang==='ar'?'إنشاء فاتورة':'ساخت فاکتور'}</button>
       <button class="btn btn-primary btn-sm" onclick="createContract(${o.id})">📜 ${lang==='ar'?'إنشاء عقد':'ساخت قرارداد'}</button>
+      <button class="btn btn-green btn-sm" onclick="receiptForOrder(${o.id})">📥 ${lang==='ar'?'سند قبض':'سند قبض'}</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('contract-file-${o.id}').click()">📄 ${lang==='ar'?'رفع عقد':'آپلود قرارداد'}</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('invoice-file-${o.id}').click()">📎 ${lang==='ar'?'رفع فاتورة':'آپلود فاکتور'}</button>
     </div>`:''}
@@ -1208,6 +1216,135 @@ async function startProduction(id){
   closeModal('orderDetailModal');
   await loadAll();
   showToast(lang==='ar'?'بدأ الإنتاج':'تولید شروع شد','success');
+}
+
+// ===== START PRODUCTION FOR WHOLE INVOICE (one click) + auto Receipt Voucher =====
+var lastReceipt=null; // holds data for whatsapp send
+async function startInvoiceProduction(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId)&&o.status==='pending_payment';});
+  if(items.length===0){ showToast(lang==='ar'?'لا توجد أصناف للبدء':'جنسی برای شروع نیست','error'); return; }
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var firstStage=(allStages&&allStages.length>0)?allStages[0].name:'نجاری';
+  // Move every pending item of this invoice into production
+  for(var i=0;i<items.length;i++){
+    var o=items[i];
+    await api('PATCH','orders',{status:'building',current_stage:firstStage,progress:5},'?id=eq.'+o.id);
+    o.status='building'; o.current_stage=firstStage; o.progress=5;
+    await api('POST','order_stages',{order_id:o.id,stage_name:firstStage,worker_name:currentUser.name,status:'active',started_at:new Date().toISOString()});
+  }
+  // Build receipt voucher data
+  var custName=inv?inv.customer_name:items[0].customer_name;
+  var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
+  var invCode=inv?inv.inv_code:'';
+  var grandTotal=items.reduce(function(s,it){return s+(it.total_price||0);},0);
+  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
+  var balance=grandTotal-advance;
+  var rcptNo='RV-'+invCode.replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
+  var today=new Date().toISOString().slice(0,10);
+  lastReceipt={no:rcptNo,date:today,cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة مقدمة عن الفاتورة ':'پیش‌پرداخت بابت فاکتور ')+invCode};
+  closeModal('orderDetailModal');
+  await loadAll();
+  showToast(lang==='ar'?'بدأ الإنتاج · سند القبض جاهز':'تولید شروع شد · سند قبض آماده است','success');
+  // Open receipt voucher
+  showReceiptVoucher();
+}
+
+// Build the Receipt Voucher (سند قبض) HTML — full letterhead + stamp + amount in words
+function buildReceiptHTML(r, withButtons){
+  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center">'+
+    '<button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button>'+
+    '<button onclick="sendReceiptWhatsApp()" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">💬 WhatsApp</button>'+
+    '</div>':'';
+  var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+r.no+'</title>'+
+    '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto}'+
+    '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:26px}'+
+    '.h-en{font-size:13px;line-height:1.9;color:#333;text-align:left}'+
+    '.h-en .cname{font-size:22px;font-weight:bold;font-family:Georgia,serif;margin-bottom:8px}'+
+    '.h-ar{font-size:13px;line-height:1.9;color:#333;text-align:right;direction:rtl}'+
+    '.h-ar .cname{font-size:22px;font-weight:bold;margin-bottom:8px}'+
+    '.h-logo img{width:140px;background:#f0f0f0;padding:6px;border-radius:4px}'+
+    '.doc-title{text-align:center;font-size:24px;font-weight:bold;letter-spacing:1px;border:3px double #2b7a4b;color:#2b7a4b;padding:10px;margin-bottom:22px;border-radius:6px}'+
+    '.meta{display:flex;justify-content:space-between;margin-bottom:18px;font-size:14px}'+
+    '.meta .box{border:1.5px solid #333;padding:8px 14px;border-radius:5px}'+
+    '.body-tbl{width:100%;border-collapse:collapse;margin-bottom:8px}'+
+    '.body-tbl td{border:1px solid #333;padding:12px 14px;font-size:14px}'+
+    '.body-tbl .lbl{background:#eef4ef;font-weight:bold;width:200px;direction:rtl;text-align:right}'+
+    '.body-tbl .val{direction:rtl;text-align:right}'+
+    '.amt-big{font-size:22px;font-weight:bold;color:#2b7a4b;text-align:center}'+
+    '.words{direction:rtl;text-align:right;color:#444;font-size:14px;background:#fafafa}'+
+    '.sign-area{display:flex;justify-content:space-between;margin-top:46px;font-size:14px;align-items:flex-end}'+
+    '.stamp img{width:230px}'+
+    '@media print{.no-print{display:none}}</style></head><body>'+
+    '<div class="header">'+
+    '<div class="h-en"><div class="cname">DarALasala Furniture</div>'+
+    'Office&nbsp;&nbsp;&nbsp;: (+974) 66688585<br>Mobile&nbsp;&nbsp;: (+974) 55388585<br>C.R.no&nbsp;&nbsp;189266<br>P.O.Box : 82497<br>Doha - Qatar<br>Email : asalafurniture@gmail.com</div>'+
+    '<div class="h-logo"><img src="'+COMPANY_LOGO+'"></div>'+
+    '<div class="h-ar"><div class="cname">دار الاصالة للمفروشات</div>'+
+    'هاتف : (+974) 66688585<br>موبايل : (+974) 55388585<br>س.ت : 189266<br>ص.ب : 82497<br>الدوحة - قطر<br>بريد إلكتروني : asalafurniture@gmail.com</div>'+
+    '</div>'+
+    '<div class="doc-title">سند قبض &nbsp;/&nbsp; RECEIPT VOUCHER</div>'+
+    '<div class="meta">'+
+    '<div class="box">No / رقم : <b>'+r.no+'</b></div>'+
+    '<div class="box">Date / التاريخ : <b>'+r.date+'</b></div>'+
+    '</div>'+
+    '<table class="body-tbl"><tbody>'+
+    '<tr><td class="lbl">استلمنا من السيد / المحترم</td><td class="val"><b>'+r.cust+'</b></td></tr>'+
+    '<tr><td class="lbl">مبلغ وقدره</td><td class="amt-big">'+r.amount.toLocaleString()+' &nbsp;ر.ق / QAR</td></tr>'+
+    '<tr><td class="lbl">المبلغ كتابة</td><td class="words">'+numToArabicWords(r.amount)+' فقط لا غير</td></tr>'+
+    '<tr><td class="lbl">وذلك عن / البيان</td><td class="val">'+r.reason+'</td></tr>'+
+    '<tr><td class="lbl">إجمالي الفاتورة</td><td class="val">'+r.total.toLocaleString()+' ر.ق</td></tr>'+
+    '<tr><td class="lbl">المبلغ المتبقي</td><td class="val" style="color:#c0392b;font-weight:bold">'+r.balance.toLocaleString()+' ر.ق</td></tr>'+
+    '</tbody></table>'+
+    '<div class="sign-area">'+
+    '<div><div style="margin-bottom:34px">المستلم / Received by : ____________</div><div>التوقيع / Signature : ____________</div></div>'+
+    '<div class="stamp" style="text-align:center"><img src="'+COMPANY_STAMP+'"><div style="margin-top:4px">ختم الشركة / Company Stamp</div></div>'+
+    '</div>'+
+    btns+
+    '</body></html>';
+  return html;
+}
+
+// Show the receipt voucher in a print window
+function showReceiptVoucher(){
+  if(!lastReceipt){ showToast(lang==='ar'?'لا يوجد سند':'سندی موجود نیست','error'); return; }
+  var w=window.open('','_blank');
+  if(!w){ showToast(lang==='ar'?'فعّل النوافذ المنبثقة':'پاپ‌آپ را فعال کنید','error'); return; }
+  w.document.write(buildReceiptHTML(lastReceipt,true));
+  w.document.close();
+}
+
+// Send the receipt voucher summary to the customer on WhatsApp
+function sendReceiptWhatsApp(){
+  if(!lastReceipt){ return; }
+  var r=lastReceipt;
+  var msg='*دار الأصالة للمفروشات*\n*سند قبض رقم: '+r.no+'*\n'+
+    'التاريخ: '+r.date+'\n\n'+
+    'استلمنا من: *'+r.cust+'*\n'+
+    'المبلغ المستلم: *'+r.amount.toLocaleString()+' ر.ق*\n'+
+    '('+numToArabicWords(r.amount)+' فقط)\n'+
+    'البيان: '+r.reason+'\n\n'+
+    'إجمالي الفاتورة: '+r.total.toLocaleString()+' ر.ق\n'+
+    'المبلغ المتبقي: *'+r.balance.toLocaleString()+' ر.ق*\n\n'+
+    'شكراً لتعاملكم معنا 🙏';
+  var phone=waPhone(r.phone);
+  window.open('https://wa.me/'+(phone||'')+'?text='+encodeURIComponent(msg),'_blank');
+}
+
+// Build a receipt voucher manually for an order (uses its invoice if grouped)
+function receiptForOrder(orderId){
+  var o=allOrders.find(function(x){return x.id===orderId;});
+  if(!o){ return; }
+  var inv=o.invoice_id?allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}):null;
+  var items=o.invoice_id?allOrders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);}):[o];
+  var custName=inv?inv.customer_name:o.customer_name;
+  var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(o.customer_phone||'');
+  var invCode=inv?inv.inv_code:(o.id_code||'');
+  var grandTotal=items.reduce(function(s,it){return s+(it.total_price||0);},0);
+  var advance=inv?(inv.prepay||0):(o.prepay||0);
+  var balance=grandTotal-advance;
+  var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
+  lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة عن الفاتورة ':'پرداخت بابت فاکتور ')+invCode};
+  showReceiptVoucher();
 }
 
 // Upload contract/invoice document for an order
