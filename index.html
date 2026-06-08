@@ -527,6 +527,13 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<div class="modal-overlay" id="invoiceFolderModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📂 ملف العميل / فایل مشتری</div><button class="modal-close" onclick="closeModal('invoiceFolderModal')">✕</button></div>
+    <div id="invoice-folder-content"></div>
+  </div>
+</div>
+
 <!-- STAGE TRANSFER MODAL -->
 <div class="modal-overlay" id="stageModal">
   <div class="modal">
@@ -1077,9 +1084,10 @@ function renderOrders(){
         ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+' '+(lang==='ar'?'صنف':'جنس')+')</button>'
         : '';
       html+='<div class="card" style="margin-bottom:12px">'+
-        '<div class="card-header" style="margin-bottom:10px">'+
-        '<div><div class="card-title">🧾 '+custName+'</div><div class="card-sub">'+invCode+' · '+items.length+' '+(lang==='ar'?'صنف':'جنس')+' · '+total.toLocaleString()+' QAR</div></div>'+
+        '<div class="card-header" style="margin-bottom:10px;cursor:pointer" onclick="openInvoiceFolder(\''+invId+'\')">'+
+        '<div><div class="card-title">📂 '+custName+'</div><div class="card-sub">'+invCode+' · '+items.length+' '+(lang==='ar'?'صنف':'جنس')+' · '+total.toLocaleString()+' QAR</div></div>'+
         grpBadge+'</div>'+
+        '<button class="btn btn-outline btn-block btn-sm" style="margin-bottom:8px" onclick="openInvoiceFolder(\''+invId+'\')">📂 '+(lang==='ar'?'فتح ملف العميل كاملاً':'باز کردن کل فایل مشتری')+'</button>'+
         items.map(function(o){
           return '<div onclick="openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:6px;cursor:pointer">'+
             orderCardThumb(o)+
@@ -1201,6 +1209,70 @@ async function openOrderDetail(id){
   openModal('orderDetailModal');
 }
 
+// ===== OPEN FULL CUSTOMER/INVOICE FILE (all items in one view) =====
+function openInvoiceFolder(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  if(items.length===0){ showToast(T('no_data'),'error'); return; }
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var custName=inv?inv.customer_name:items[0].customer_name;
+  var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
+  var invCode=inv?inv.inv_code:'';
+  var total=inv?(inv.total_price||0):items.reduce(function(s,it){return s+(it.total_price||0);},0);
+  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
+  var balance=total-advance;
+  var isManager=currentUser&&currentUser.role==='manager';
+  var canStart=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
+  var anyPending=items.some(function(it){return it.status==='pending_payment';});
+  var pendingCount=items.filter(function(it){return it.status==='pending_payment';}).length;
+  var sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+
+  // Item rows — each still opens its own detail
+  var itemsHtml=items.map(function(o){
+    var firstImg='';
+    try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+    var thumb=firstImg
+      ? '<img src="'+firstImg+'" style="width:54px;height:54px;object-fit:cover;border-radius:8px">'
+      : '<div style="width:54px;height:54px;background:var(--surface);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:22px">🛋️</div>';
+    return '<div onclick="closeModal(\'invoiceFolderModal\');openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:9px;border-radius:10px;background:var(--surface2);margin-bottom:7px;cursor:pointer">'+
+      thumb+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+o.product+'</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+(o.current_stage||'-')+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
+      (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
+      '</div>'+
+      '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
+    '</div>';
+  }).join('');
+
+  var firstId=items[0].id;
+  var startAllBtn=(anyPending&&canStart)
+    ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+')</button>'
+    : '';
+  var docBtns=(isManager||currentUser.department==='حسابدار')
+    ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+
+        '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createInvoice('+firstId+')">🧾 '+(lang==='ar'?'فاتورة':'فاکتور')+'</button>'+
+        '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createContract('+firstId+')">📜 '+(lang==='ar'?'عقد':'قرارداد')+'</button>'+
+        '<button class="btn btn-green btn-sm" onclick="receiptForOrder('+firstId+')">📥 '+(lang==='ar'?'سند قبض':'سند قبض')+'</button>'+
+      '</div>'
+    : '';
+
+  document.getElementById('invoice-folder-content').innerHTML=
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">'+
+      '<div><div style="font-size:17px;font-weight:800">'+custName+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+invCode+'</div></div>'+
+      '<span style="font-size:12px;color:var(--text2)">'+items.length+' '+(lang==='ar'?'صنف':'جنس')+'</span>'+
+    '</div>'+
+    '<div class="card" style="margin-bottom:10px">'+
+      '<div class="row"><span class="row-label">📱</span><span class="row-value">'+(custPhone||'-')+'</span></div>'+
+      '<div class="row"><span class="row-label">💰 '+(lang==='ar'?'الإجمالي':'کل')+'</span><span class="row-value" style="color:var(--accent)">'+total.toLocaleString()+' QAR</span></div>'+
+      '<div class="row"><span class="row-label">✅ '+(lang==='ar'?'المدفوع':'پرداخت‌شده')+'</span><span class="row-value" style="color:var(--green)">'+advance.toLocaleString()+' QAR</span></div>'+
+      '<div class="row" style="margin-bottom:0"><span class="row-label">⏳ '+(lang==='ar'?'المتبقي':'باقی‌مانده')+'</span><span class="row-value" style="color:var(--red)">'+balance.toLocaleString()+' QAR</span></div>'+
+    '</div>'+
+    docBtns+
+    startAllBtn+
+    '<div style="font-size:12px;font-weight:700;color:var(--text2);margin:10px 0 8px">'+(lang==='ar'?'الأصناف':'اجناس')+'</div>'+
+    itemsHtml;
+  openModal('invoiceFolderModal');
+}
+
 async function updateProgress(id,val){
   await api('PATCH','orders',{progress:parseInt(val)},`?id=eq.${id}`);
   const o=allOrders.find(x=>x.id===id); if(o) o.progress=parseInt(val);
@@ -1251,9 +1323,23 @@ async function startInvoiceProduction(invId){
 
 // Build the Receipt Voucher (سند قبض) HTML — full letterhead + stamp + amount in words
 function buildReceiptHTML(r, withButtons){
+  // Build WhatsApp link inline so it works inside the separate print window (no dependency on main app functions)
+  var rcptPhone=(r.phone||'').replace(/[^0-9]/g,'');
+  if(rcptPhone.length===8) rcptPhone='974'+rcptPhone;
+  if(rcptPhone.indexOf('00')===0) rcptPhone=rcptPhone.slice(2);
+  var waMsg='*دار الأصالة للمفروشات*\n*سند قبض رقم: '+r.no+'*\n'+
+    'التاريخ: '+r.date+'\n\n'+
+    'استلمنا من: *'+r.cust+'*\n'+
+    'المبلغ المستلم: *'+r.amount.toLocaleString()+' ر.ق*\n'+
+    '('+numToArabicWords(r.amount)+' فقط)\n'+
+    'البيان: '+r.reason+'\n\n'+
+    'إجمالي الفاتورة: '+r.total.toLocaleString()+' ر.ق\n'+
+    'المبلغ المتبقي: *'+r.balance.toLocaleString()+' ر.ق*\n\n'+
+    'شكراً لتعاملكم معنا 🙏';
+  var waUrl='https://wa.me/'+rcptPhone+'?text='+encodeURIComponent(waMsg);
   var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center">'+
     '<button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button>'+
-    '<button onclick="sendReceiptWhatsApp()" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">💬 WhatsApp</button>'+
+    '<a href="'+waUrl+'" target="_blank" rel="noopener" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;text-decoration:none;display:inline-block">💬 WhatsApp</a>'+
     '</div>':'';
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+r.no+'</title>'+
     '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto}'+
@@ -2365,10 +2451,29 @@ async function saveCustomer(){
     notes:document.getElementById('customer-notes').value.trim()
   };
   if(!body.name){ showToast(T('err_fill'),'error'); return; }
-  if(id){ await api('PATCH','customers',body,'?id=eq.'+id); }
-  else { await api('POST','customers',body); }
+  if(id){
+    // Capture OLD values before update so we can find linked invoices/orders
+    var old=allCustomers.find(function(x){return String(x.id)===String(id);})||{};
+    var oldName=(old.name||'').trim();
+    var oldPhone=(old.phone||'').trim();
+    await api('PATCH','customers',body,'?id=eq.'+id);
+    // ---- Propagate the change to invoices, orders and contracts ----
+    showToast(lang==='ar'?'جاري تحديث الفواتير والعقود...':'در حال بروزرسانی فاکتورها و قراردادها...','success');
+    var patch={customer_name:body.name, customer_phone:body.phone};
+    // 1) Invoices linked by customer_id (most reliable)
+    try { await api('PATCH','invoices',patch,'?customer_id=eq.'+id); } catch(e){}
+    // 2) Invoices linked by OLD name (covers records created before customer_id existed)
+    if(oldName){
+      try { await api('PATCH','invoices',patch,'?customer_name=eq.'+encodeURIComponent(oldName)); } catch(e){}
+      try { await api('PATCH','orders',patch,'?customer_name=eq.'+encodeURIComponent(oldName)); } catch(e){}
+    }
+    await loadCustomers();
+    await loadAll();
+  } else {
+    await api('POST','customers',body);
+    await loadCustomers();
+  }
   closeModal('customerModal');
-  await loadCustomers();
   showToast(T('saved'),'success');
 }
 
