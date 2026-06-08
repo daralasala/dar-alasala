@@ -352,6 +352,11 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openModal('purchaseModal')" id="fb-purchase">🛒 خرید</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span>الأصول الثابتة / دارایی‌های ثابت</span></button>
+    <div id="assets-section" style="display:none;margin-bottom:14px">
+      <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openAssetModal()">➕ <span>إضافة أصل / افزودن دارایی</span></button>
+      <div id="assets-list"></div>
+    </div>
     <div class="section-title" id="sl-transactions">تراکنش‌های اخیر</div>
     <div id="transactions-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -382,6 +387,27 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span>إضافة مادة / افزودن جنس به انبار</span></button>
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+</div>
+
+<!-- ASSET ADD/EDIT MODAL -->
+<div class="modal-overlay" id="assetModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🏛️ <span id="asm-title">افزودن دارایی</span></div><button class="modal-close" onclick="closeModal('assetModal')">✕</button></div>
+    <input type="hidden" id="asset-edit-id" value="">
+    <div class="form-group"><label class="form-label">اسم الأصل / نام دارایی</label><input class="form-control" type="text" id="asset-name" placeholder="مثلا: سيارة نقل، آلة CNC، منشار..."></div>
+    <div class="form-group"><label class="form-label">النوع / نوع</label>
+      <select class="form-control" id="asset-cat">
+        <option value="سيارة">سيارة / خودرو</option>
+        <option value="آلة">آلة / دستگاه</option>
+        <option value="أداة">أداة / ابزار</option>
+        <option value="أخرى">أخرى / سایر</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label">سعر الشراء / قیمت خرید (QAR)</label><input class="form-control" type="number" id="asset-price" value="0"></div>
+    <div class="form-group"><label class="form-label">تاريخ الشراء / تاریخ خرید</label><input class="form-control" type="date" id="asset-date"></div>
+    <div class="form-group"><label class="form-label">نسبة الإهلاك السنوي / نرخ استهلاک سالانه (%)</label><input class="form-control" type="number" id="asset-rate" value="10"></div>
+    <button class="btn btn-primary btn-block" onclick="saveAsset()">💾 حفظ / ثبت</button>
   </div>
 </div>
 
@@ -589,6 +615,7 @@ let allInvoices = [];
 let allSuppliers = [];
 let allInventory = [];
 let allInventoryUsage = [];
+let allAssets = [];
 let allStages = [{name:'نجاری',order_num:1},{name:'جوشکاری',order_num:2},{name:'رنگ',order_num:3},{name:'روکش‌کاری',order_num:4},{name:'کنترل کیفیت',order_num:5},{name:'آماده تحویل',order_num:6}];
 let currentFilter = 'all';
 let currentStageFilter = 'all';
@@ -891,6 +918,7 @@ async function loadAll(){
   renderStages();
   loadSuppliers();
   loadInventory();
+  loadAssets();
 }
 
 // ===== DASHBOARD =====
@@ -1998,6 +2026,91 @@ async function saveUsage(){
   closeModal('usageModal');
   renderInventory();
   // Check low stock -> notification handled in renderNotifications
+  showToast(T('saved'),'success');
+}
+
+// ===== ASSETS (دارایی‌های ثابت با استهلاک) =====
+async function loadAssets(){
+  var a=await api('GET','assets','','?select=*&order=created_at.desc');
+  allAssets=a||[];
+  applyDepreciation();
+}
+
+// Apply yearly 10% depreciation automatically based on time passed
+async function applyDepreciation(){
+  var today=new Date();
+  for(var i=0;i<allAssets.length;i++){
+    var a=allAssets[i];
+    var lastDep=a.last_depreciation?new Date(a.last_depreciation):(a.purchase_date?new Date(a.purchase_date):null);
+    if(!lastDep) continue;
+    // How many full years passed since last depreciation
+    var years=Math.floor((today-lastDep)/(1000*60*60*24*365));
+    if(years>=1){
+      var rate=(a.depreciation_rate||10)/100;
+      var val=a.current_value||a.purchase_price||0;
+      for(var y=0;y<years;y++){ val=val*(1-rate); }
+      val=Math.round(val);
+      var newLast=new Date(lastDep); newLast.setFullYear(newLast.getFullYear()+years);
+      await api('PATCH','assets',{current_value:val,last_depreciation:newLast.toISOString().slice(0,10)},'?id=eq.'+a.id);
+      a.current_value=val; a.last_depreciation=newLast.toISOString().slice(0,10);
+    }
+  }
+  renderAssets();
+}
+
+function toggleAssets(){
+  var sec=document.getElementById('assets-section');
+  if(sec){ sec.style.display=sec.style.display==='none'?'block':'none'; if(sec.style.display==='block') renderAssets(); }
+}
+
+function renderAssets(){
+  var box=document.getElementById('assets-list');
+  if(!box) return;
+  if(allAssets.length===0){ box.innerHTML='<div style="text-align:center;color:var(--text2);font-size:13px;padding:14px">'+T('no_data')+'</div>'; return; }
+  var totalVal=allAssets.reduce(function(s,a){return s+(a.current_value||0);},0);
+  var catIcon={'سيارة':'🚗','آلة':'⚙️','أداة':'🔧','أخرى':'📦'};
+  box.innerHTML='<div class="card" style="margin-bottom:10px;padding:11px"><div class="row" style="margin-bottom:0"><span class="row-label">'+(lang==='ar'?'إجمالي قيمة الأصول':'مجموع ارزش دارایی‌ها')+'</span><span class="row-value" style="color:var(--accent);font-size:15px">'+totalVal.toLocaleString()+' QAR</span></div></div>'+
+    allAssets.map(function(a){
+      var dep=(a.purchase_price||0)-(a.current_value||0);
+      return '<div class="card" style="margin-bottom:8px;padding:11px">'+
+        '<div class="card-header" style="margin-bottom:6px">'+
+        '<div><div class="card-title">'+(catIcon[a.category]||'📦')+' '+a.name+'</div>'+
+        '<div class="card-sub">'+(lang==='ar'?'القيمة الحالية':'ارزش فعلی')+': <b style="color:var(--green)">'+(a.current_value||0).toLocaleString()+'</b> QAR</div></div>'+
+        '<button class="btn btn-red btn-sm" onclick="deleteAsset('+a.id+')">🗑️</button>'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--text2)">'+(lang==='ar'?'سعر الشراء':'قیمت خرید')+': '+(a.purchase_price||0).toLocaleString()+' · '+(lang==='ar'?'الإهلاك':'استهلاک')+' '+(a.depreciation_rate||10)+'%/'+(lang==='ar'?'سنة':'سال')+(dep>0?' · '+(lang==='ar'?'مُهلَك':'مستهلک‌شده')+': '+dep.toLocaleString():'')+'</div>'+
+      '</div>';
+    }).join('');
+}
+
+function openAssetModal(){
+  document.getElementById('asset-edit-id').value='';
+  document.getElementById('asset-name').value='';
+  document.getElementById('asset-price').value='0';
+  document.getElementById('asset-rate').value='10';
+  document.getElementById('asset-date').value=new Date().toISOString().slice(0,10);
+  document.getElementById('asset-cat').value='سيارة';
+  openModal('assetModal');
+}
+
+async function saveAsset(){
+  var name=document.getElementById('asset-name').value.trim();
+  var price=parseFloat(document.getElementById('asset-price').value)||0;
+  var date=document.getElementById('asset-date').value;
+  var rate=parseFloat(document.getElementById('asset-rate').value)||10;
+  var cat=document.getElementById('asset-cat').value;
+  if(!name){ showToast(T('err_fill'),'error'); return; }
+  await api('POST','assets',{name:name,category:cat,purchase_price:price,current_value:price,purchase_date:date||null,depreciation_rate:rate,last_depreciation:date||null});
+  closeModal('assetModal');
+  await loadAssets();
+  showToast(T('saved'),'success');
+}
+
+async function deleteAsset(id){
+  if(!confirm(lang==='ar'?'حذف هذا الأصل؟':'این دارایی حذف شود؟')) return;
+  await api('DELETE','assets',null,'?id=eq.'+id);
+  allAssets=allAssets.filter(a=>a.id!==id);
+  renderAssets();
   showToast(T('saved'),'success');
 }
 
