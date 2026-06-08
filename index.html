@@ -1905,7 +1905,7 @@ function renderInventory(){
       '<div class="card-header" style="margin-bottom:8px">'+
       '<div><div class="card-title">'+it.name+(low?' <span class="badge badge-red" style="font-size:9px">'+(lang==='ar'?'منخفض':'کم')+'</span>':'')+'</div>'+
       '<div class="card-sub">'+(lang==='ar'?'المخزون':'موجودی')+': <b style="color:'+(low?'var(--red)':'var(--green)')+'">'+(it.quantity||0)+'</b> '+it.unit+'</div></div>'+
-      '<div style="text-align:left;font-size:11px;color:var(--text2)">'+(it.unit_price||0).toLocaleString()+' QAR</div>'+
+      (canManage?'<div style="text-align:left;font-size:11px;color:var(--text2)">'+(it.unit_price||0).toLocaleString()+' QAR</div>':'')+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':'برداشت')+'</button>'+
