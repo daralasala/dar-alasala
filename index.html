@@ -683,6 +683,7 @@ body.en .search-icon{right:auto;left:10px;}
           <select class="form-control" id="p-supplier" onchange="onSupplierChange()"><option value="">-- اختر / انتخاب --</option></select>
           <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
           <button class="btn btn-outline btn-sm" onclick="editSupplierPhone()" style="white-space:nowrap" title="ویرایش شماره">✏️</button>
+          <button class="btn btn-red btn-sm" onclick="deleteSupplier()" style="white-space:nowrap" title="حذف فروشنده">🗑️</button>
         </div>
         <div id="supplier-phone-line" style="font-size:12px;color:var(--text2);margin-top:5px;display:none">📱 <span id="supplier-phone-val"></span></div>
       </div>
@@ -1476,6 +1477,10 @@ function openInvoiceFolder(invId){
       '</div>'
     : '';
 
+  var delInvoiceBtn=(isManager)
+    ? '<button class="btn btn-red btn-block" style="margin-top:12px" onclick="deleteInvoiceAll(\''+invId+'\')">🗑️ '+(lang==='ar'?'حذف الفاتورة بالكامل':lang==='en'?'Delete whole invoice':'حذف کل فاکتور')+'</button>'
+    : '';
+
   document.getElementById('invoice-folder-content').innerHTML=
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">'+
       '<div><div style="font-size:17px;font-weight:800">'+custName+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+invCode+'</div></div>'+
@@ -1492,8 +1497,26 @@ function openInvoiceFolder(invId){
     paidHint+
     deliverBtn+
     '<div style="font-size:12px;font-weight:700;color:var(--text2);margin:10px 0 8px">'+(lang==='ar'?'الأصناف':lang==='en'?'Items':'اجناس')+'</div>'+
-    itemsHtml;
+    itemsHtml+
+    delInvoiceBtn;
   openModal('invoiceFolderModal');
+}
+
+// Delete an entire invoice: all its orders + the invoice record
+async function deleteInvoiceAll(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var name=inv?inv.customer_name:(items[0]?items[0].customer_name:'');
+  if(!confirm((lang==='ar'?'حذف الفاتورة بالكامل مع كل أصنافها؟ ':lang==='en'?'Delete the whole invoice and all its items? ':'کل فاکتور و همه اجناسش حذف شود؟ ')+name+' ('+items.length+')')) return;
+  // Delete all orders of this invoice
+  for(var i=0;i<items.length;i++){
+    await api('DELETE','orders',null,'?id=eq.'+items[i].id);
+  }
+  // Delete the invoice record itself
+  if(inv){ await api('DELETE','invoices',null,'?id=eq.'+inv.id); }
+  closeModal('invoiceFolderModal');
+  await loadAll();
+  showToast(lang==='ar'?'تم حذف الفاتورة':lang==='en'?'Invoice deleted':'فاکتور حذف شد','success');
 }
 
 async function updateProgress(id,val){
@@ -2565,6 +2588,7 @@ function renderFinance(){
         var payBtn=(t.is_credit&&!t.paid)?'<button class="btn btn-green btn-sm" style="margin-top:8px" onclick="markCreditPaid('+t.id+')">✅ '+(lang==='ar'?'تم الدفع':lang==='en'?'Paid':'پرداخت شد')+'</button>':'';
         // Payment voucher button: for any settled purchase/expense
         var pvBtn=(t.type!=='income'&&t.paid)?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="paymentVoucherForTx('+t.id+')">📤 '+(lang==='ar'?'سند صرف':lang==='en'?'Payment Voucher':'سند صرف')+'</button>':'';
+        var delBtn=(currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" style="margin-top:8px;margin-right:6px" onclick="deleteTransaction('+t.id+')">🗑️</button>':'';
         return `
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -2577,8 +2601,19 @@ function renderFinance(){
         ${invImg}
         ${payBtn}
         ${pvBtn}
+        ${delBtn}
       </div>`;
       }).join('');
+}
+
+async function deleteTransaction(id){
+  var t=allTransactions.find(x=>x.id===id);
+  var amt=t?(t.amount||0).toLocaleString():'';
+  var desc=t?(t.description||t.category||''):'';
+  if(!confirm((lang==='ar'?'حذف هذه المعاملة؟ ':lang==='en'?'Delete this transaction? ':'این تراکنش حذف شود؟ ')+desc+' · '+amt+' QAR\n'+(lang==='ar'?'سيتأثر الرصيد.':lang==='en'?'Balance will be affected.':'موجودی تغییر می‌کند.'))) return;
+  await api('DELETE','transactions',null,'?id=eq.'+id);
+  await loadAll();
+  showToast(T('saved'),'success');
 }
 
 async function markCreditPaid(transId){
@@ -2732,6 +2767,20 @@ async function addNewSupplier(){
   showToast(T('saved'),'success');
 }
 
+// Delete the currently selected supplier
+async function deleteSupplier(){
+  var sel=document.getElementById('p-supplier');
+  var name=sel?sel.value:'';
+  if(!name){ showToast(lang==='ar'?'اختر شركة أولاً':lang==='en'?'Select a company first':'اول یک فروشنده انتخاب کن','error'); return; }
+  var sObj=(allSuppliers||[]).find(function(s){return (s.name||'').trim()===name.trim();});
+  if(!sObj){ showToast(T('no_data'),'error'); return; }
+  if(!confirm((lang==='ar'?'حذف المورد؟ ':lang==='en'?'Delete supplier? ':'حذف فروشنده؟ ')+name)) return;
+  await api('DELETE','suppliers',null,'?id=eq.'+sObj.id);
+  await loadSuppliers();
+  var line=document.getElementById('supplier-phone-line'); if(line) line.style.display='none';
+  showToast(T('saved'),'success');
+}
+
 // Show selected supplier's phone automatically
 function onSupplierChange(){
   var sel=document.getElementById('p-supplier');
@@ -2822,9 +2871,18 @@ function renderInventory(){
       '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':lang==='en'?'Withdraw':'برداشت')+'</button>'+
       (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
+      ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" onclick="deleteInventory('+it.id+')">🗑️</button>':'')+
       '</div>'+
     '</div>';
   }).join('');
+}
+
+async function deleteInventory(id){
+  var it=allInventory.find(x=>x.id===id);
+  if(!confirm((lang==='ar'?'حذف هذه المادة من المخزون؟ ':lang==='en'?'Delete this item from inventory? ':'حذف این جنس از انبار؟ ')+(it?it.name:''))) return;
+  await api('DELETE','inventory',null,'?id=eq.'+id);
+  await loadInventory();
+  showToast(T('saved'),'success');
 }
 
 function openInventoryModal(){
@@ -3603,7 +3661,16 @@ async function renderRequests(){
           <button class="btn btn-red btn-sm" onclick="updateRequest(${r.id},'rejected')">✕</button>
         </div>`:''}
         ${isManagerOrBuyer&&r.status==='approved'?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button></div>`:''}
+        ${currentUser&&currentUser.role==='manager'?`<div style="margin-top:8px"><button class="btn btn-red btn-sm" onclick="deleteRequest(${r.id})">🗑️ ${lang==='ar'?'حذف':lang==='en'?'Delete':'حذف'}</button></div>`:''}
       </div>`).join('');
+}
+
+async function deleteRequest(id){
+  var r=allRequests.find(x=>x.id===id);
+  if(!confirm((lang==='ar'?'حذف الطلب؟ ':lang==='en'?'Delete request? ':'حذف درخواست؟ ')+(r?r.item_name:''))) return;
+  await api('DELETE','purchase_requests',null,'?id=eq.'+id);
+  renderRequests();
+  showToast(T('saved'),'success');
 }
 
 async function savePurchaseRequest(){
