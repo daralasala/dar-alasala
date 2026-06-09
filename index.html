@@ -746,6 +746,15 @@ function stageLabel(name){
   if(!m) return name; // unknown custom stage -> show as-is
   return lang==='ar'?m.ar:lang==='en'?m.en:name;
 }
+
+// Shows the stage name once in production, otherwise shows the order status (3-lang)
+function stageOrStatusLabel(o){
+  if(!o) return '-';
+  if(o.status==='pending_payment'||o.status==='paid'||!o.current_stage){
+    return T('status_'+(o.status||'pending_payment'));
+  }
+  return stageLabel(o.current_stage);
+}
 let currentFilter = 'all';
 let currentStageFilter = 'all';
 let pendingImages = [];
@@ -1163,8 +1172,13 @@ function renderOrders(){
       else noInv.push(o);
     });
     var html='';
+    // Sort invoice groups by their newest order (newest invoice on top)
+    var groupKeys=Object.keys(groups).sort(function(a,b){
+      function newest(items){ return items.reduce(function(mx,o){ var t=new Date(o.created_at||0).getTime(); return t>mx?t:mx; },0); }
+      return newest(groups[b])-newest(groups[a]);
+    });
     // Invoice groups
-    Object.keys(groups).forEach(function(invId){
+    groupKeys.forEach(function(invId){
       var items=groups[invId];
       var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
       var custName=inv?inv.customer_name:items[0].customer_name;
@@ -1173,11 +1187,12 @@ function renderOrders(){
       var allDelivered=items.every(function(it){return it.status==='delivered';});
       var anyPending=items.some(function(it){return it.status==='pending_payment';});
       var pendingCount=items.filter(function(it){return it.status==='pending_payment';}).length;
-      var grpBadge=allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
+      var allPaidOrPending=items.every(function(it){return it.status==='paid'||it.status==='pending_payment';});
+      var grpBadge=allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':allPaidOrPending?'<span class="badge badge-blue">'+T('status_paid')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
       var canStart = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
       // Single button to start production for the WHOLE invoice + auto receipt voucher
       var startAllBtn=(anyPending&&canStart)
-        ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':lang==='en'?'Confirm payment & start production for whole invoice':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+' '+(lang==='ar'?'صنف':lang==='en'?'item':'جنس')+')</button>'
+        ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد دفع الفاتورة كاملة':lang==='en'?'Confirm payment for whole invoice':'تأیید پرداخت کل فاکتور')+' ('+pendingCount+' '+(lang==='ar'?'صنف':lang==='en'?'item':'جنس')+')</button>'
         : '';
       html+='<div class="card" style="margin-bottom:12px">'+
         '<div class="card-header" style="margin-bottom:10px;cursor:pointer" onclick="openInvoiceFolder(\''+invId+'\')">'+
@@ -1188,7 +1203,7 @@ function renderOrders(){
           return '<div onclick="openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:6px;cursor:pointer">'+
             orderCardThumb(o)+
             '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+o.product+'</div>'+
-            '<div style="font-size:11px;color:var(--text2)">'+stageLabel(o.current_stage)+'</div>'+
+            '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+'</div>'+
             (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
             '</div>'+
             '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
@@ -1202,7 +1217,7 @@ function renderOrders(){
       html+='<div class="card" onclick="openOrderDetail('+o.id+')" style="cursor:pointer;margin-bottom:12px">'+
         '<div class="card-header"><div><div class="card-title">'+o.product+'</div><div class="card-sub">'+(canSeeCust?o.customer_name+' · ':'')+(o.id_code||'')+'</div></div>'+
         '<span class="badge '+(sm[o.status]||'badge-blue')+'">'+T('status_'+(o.status||'building'))+'</span></div>'+
-        '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+stageLabel(o.current_stage)+'</span></div>'+
+        '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+stageOrStatusLabel(o)+'</span></div>'+
         (o.progress>0?'<div class="progress-bar"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
       '</div>';
     });
@@ -1271,7 +1286,7 @@ async function openOrderDetail(id){
     <div class="card" style="margin-bottom:9px">
       ${canSeeMoney?`<div class="row"><span class="row-label">👤</span><span class="row-value">${o.customer_name}</span></div>
       <div class="row"><span class="row-label">📱</span><span class="row-value">${o.customer_phone||'-'}</span></div>`:''}
-      <div class="row"><span class="row-label">🏭</span><span class="row-value">${stageLabel(o.current_stage)}</span></div>
+      <div class="row"><span class="row-label">🏭</span><span class="row-value">${stageOrStatusLabel(o)}</span></div>
       <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
     </div>
     ${canSeeMoney?`<div class="card" style="margin-bottom:9px">
@@ -1348,7 +1363,7 @@ function openInvoiceFolder(invId){
     return '<div onclick="closeModal(\'invoiceFolderModal\');openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:9px;border-radius:10px;background:var(--surface2);margin-bottom:7px;cursor:pointer">'+
       thumb+
       '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+o.product+'</div>'+
-      '<div style="font-size:11px;color:var(--text2)">'+stageLabel(o.current_stage)+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
       (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
       '</div>'+
       '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
@@ -3338,7 +3353,7 @@ async function saveOrder(){
       customer_name:cname, customer_phone:phone, product:it.product, delivery_date:delivery,
       total_price:it.qty*it.price, item_price:it.price, item_qty:it.qty, prepay:0,
       description:desc, status:'pending_payment', progress:0, id_code:idCode,
-      current_stage:'في انتظار الدفع', worker:currentUser?.name||'',
+      current_stage:null, worker:currentUser?.name||'',
       invoice_id:inv.id, images: it.images.length>0?it.images:null
     };
     await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
