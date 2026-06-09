@@ -949,6 +949,43 @@ var LABEL_DICT=[
   ['إضافة مادة','Add material','افزودن جنس به انبار'],
   ['الأصناف','Items','اجناس'],
   ['إضافة صنف','Add item','افزودن جنس'],
+  // dropdown options
+  ['عدد','Piece','عدد'],
+  ['عدد / قطعة','Piece','عدد / قطعه'],
+  ['قطعة','Piece','قطعه'],
+  ['متر','Meter','متر'],
+  ['کارتون','Carton','کارتون'],
+  ['كرتون','Carton','کارتون'],
+  ['کیلو','Kg','کیلو'],
+  ['لیتر','Liter','لیتر'],
+  ['بسته','Pack','بسته'],
+  ['متر مربع','m²','متر مربع'],
+  ['نجار','Carpenter','نجار'],
+  ['جوشکار','Welder','جوشکار'],
+  ['رنگ‌کار','Painter','رنگ‌کار'],
+  ['روکش‌کار','Upholsterer','روکش‌کار'],
+  ['بازرس','Inspector','بازرس'],
+  ['فورمن','Foreman','فورمن'],
+  ['راننده','Driver','راننده'],
+  ['حسابدار','Accountant','حسابدار'],
+  ['مسئول فروش','Sales','مسئول فروش'],
+  ['مسئول خرید','Purchasing','مسئول خرید'],
+  ['برق‌کار','Electrician','برق‌کار'],
+  ['کمک‌کارگر','Helper','کمک‌کارگر'],
+  ['سيارة','Vehicle','خودرو'],
+  ['آلة','Machine','دستگاه'],
+  ['أداة','Tool','ابزار'],
+  ['أخرى','Other','سایر'],
+  ['نقدي','Cash','نقدی'],
+  ['آجل (دين)','Credit (debt)','قرضی'],
+  ['پرداخت سفارش','Order payment','پرداخت سفارش'],
+  ['پیش‌پرداخت','Down payment','پیش‌پرداخت'],
+  ['سایر','Other','سایر'],
+  ['مواد اولیه','Raw materials','مواد اولیه'],
+  ['حقوق','Salary','حقوق'],
+  ['اجاره','Rent','اجاره'],
+  ['برق و آب','Utilities','برق و آب'],
+  ['تجهیزات','Equipment','تجهیزات'],
   ['افزودن مشتری','Add customer','افزودن مشتری'],
   ['إضافة عميل','Add customer','افزودن مشتری'],
   ['درخواست خرید جنس','Request Material','درخواست خرید جنس'],
@@ -960,10 +997,12 @@ var LABEL_LOOKUP=null;
 function buildLabelLookup(){
   LABEL_LOOKUP={};
   LABEL_DICT.forEach(function(t){
-    // store each language variant + combined forms
-    [t[0],t[1],t[2]].forEach(function(v){ if(v) LABEL_LOOKUP[v.trim()]=t; });
-    LABEL_LOOKUP[(t[0]+' / '+t[2]).trim()]=t;
-    LABEL_LOOKUP[(t[2]+' / '+t[0]).trim()]=t;
+    var ar=t[0],en=t[1],fa=t[2];
+    // store each language variant
+    [ar,en,fa].forEach(function(v){ if(v) LABEL_LOOKUP[v.trim()]=t; });
+    // store all common combined "A / B" forms used in the HTML
+    var combos=[ar+' / '+fa, fa+' / '+ar, ar+' / '+en, fa+' / '+en, en+' / '+fa, en+' / '+ar];
+    combos.forEach(function(c){ LABEL_LOOKUP[c.trim()]=t; });
   });
 }
 
@@ -988,6 +1027,18 @@ function autoTranslateLabels(l){
       if(unitMatch && /QAR|%|۱-۳۱|1-31/.test(unitMatch[1])) suffix=' ('+unitMatch[1]+')';
       el.textContent=hit[idx]+suffix;
     }
+  });
+  // Translate <option> texts (keep value & leading emoji, change visible text only)
+  document.querySelectorAll('select option').forEach(function(op){
+    var raw=(op.textContent||'').trim();
+    if(!raw) return;
+    // capture leading emoji if present
+    var em='';
+    var emMatch=raw.match(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/);
+    if(emMatch){ em=emMatch[1]+' '; }
+    var core=raw.replace(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/,'').replace(/\([^)]*\)/g,'').trim();
+    var hit=LABEL_LOOKUP[raw]||LABEL_LOOKUP[core]||LABEL_LOOKUP[raw.replace(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/,'').trim()];
+    if(hit){ op.textContent=em+hit[idx]; }
   });
 }
 
