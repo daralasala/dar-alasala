@@ -416,7 +416,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">الاسم / نام</label><input class="form-control" type="text" id="customer-name"></div>
     <div class="form-group"><label class="form-label">الهاتف / تلفن</label><input class="form-control" type="tel" id="customer-phone" placeholder="مثلا: 55388585"></div>
     <div class="form-group"><label class="form-label">ملاحظات / توضیحات</label><textarea class="form-control" id="customer-notes"></textarea></div>
-    <button class="btn btn-primary btn-block" onclick="saveCustomer()">💾 حفظ / ثبت</button>
+    <button class="btn btn-primary btn-block" onclick="saveCustomer()">💾 <span>حفظ / ثبت</span></button>
   </div>
 </div>
 
@@ -454,7 +454,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">سعر الشراء / قیمت خرید (QAR)</label><input class="form-control" type="number" id="asset-price" value="0"></div>
     <div class="form-group"><label class="form-label">تاريخ الشراء / تاریخ خرید</label><input class="form-control" type="date" id="asset-date"></div>
     <div class="form-group"><label class="form-label">نسبة الإهلاك السنوي / نرخ استهلاک سالانه (%)</label><input class="form-control" type="number" id="asset-rate" value="10"></div>
-    <button class="btn btn-primary btn-block" onclick="saveAsset()">💾 حفظ / ثبت</button>
+    <button class="btn btn-primary btn-block" onclick="saveAsset()">💾 <span>حفظ / ثبت</span></button>
   </div>
 </div>
 
@@ -479,7 +479,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button type="button" class="btn btn-outline btn-block" onclick="document.getElementById('inv-image-file').click()">📷 <span id="inv-img-lbl">اختر صورة / انتخاب عکس</span></button>
       <div id="inv-image-preview" style="margin-top:8px"></div>
     </div>
-    <button class="btn btn-primary btn-block" onclick="saveInventory()">💾 حفظ / ثبت</button>
+    <button class="btn btn-primary btn-block" onclick="saveInventory()">💾 <span>حفظ / ثبت</span></button>
   </div>
 </div>
 
@@ -893,9 +893,106 @@ async function api(method, table, data=null, filters=''){
 // ===== LANG =====
 function safeSet(id,val){var el=document.getElementById(id);if(el)el.textContent=val;}
 
+// ===== AUTO-TRANSLATE STATIC LABELS (dictionary-based, no id needed) =====
+// Each entry: [arabic, english, persian]. Function finds elements whose text
+// matches ANY of the three (or the "ar / fa" combined form) and sets the right one.
+var LABEL_DICT=[
+  ['اسم المادة','Material name','نام جنس'],
+  ['الوحدة','Unit','واحد'],
+  ['الكمية الحالية','Current quantity','موجودی فعلی'],
+  ['الحد الأدنى للتنبيه','Min stock alert','حداقل موجودی (هشدار)'],
+  ['سعر الوحدة','Unit price','قیمت واحد'],
+  ['صورة المادة','Material photo','عکس جنس'],
+  ['اختر صورة','Choose photo','انتخاب عکس'],
+  ['حفظ','Save','ثبت'],
+  ['حفظ / ثبت','Save','حفظ / ثبت'],
+  ['الاسم','Name','نام'],
+  ['الهاتف','Phone','تلفن'],
+  ['هاتف','Phone','تلفن'],
+  ['ملاحظات','Notes','توضیحات'],
+  ['نام جنس','Item name','کالا'],
+  ['اسم الصنف','Item name','نام جنس'],
+  ['الكمية','Quantity','مقدار'],
+  ['مقدار','Quantity','تعداد'],
+  ['صورة','Photo','عکس'],
+  ['اسم العميل','Customer name','نام مشتری'],
+  ['تاريخ التسليم','Delivery date','تاریخ تحویل'],
+  ['تلفن','Phone','هاتف'],
+  ['الدفعة المقدمة','Down payment','پیش‌پرداخت'],
+  ['الشركة','Company','فروشنده'],
+  ['نوع الدفع','Payment type','نوع پرداخت'],
+  ['تاريخ الاستحقاق','Due date','تاریخ سررسید'],
+  ['تاريخ الشراء','Purchase date','تاریخ خرید'],
+  ['سعر الشراء','Purchase price','قیمت خرید'],
+  ['اسم الأصل','Asset name','نام دارایی'],
+  ['نسبة الإهلاك السنوي','Annual depreciation','نرخ استهلاک سالانه'],
+  ['الخصم','Discount','تخفیف'],
+  ['الموقع','Location','موقعیت'],
+  ['النوع','Type','نوع'],
+  ['الرقم الشخصي','Personal ID','شماره شخصی'],
+  ['الكمية المسحوبة','Withdrawn quantity','مقدار برداشت'],
+  ['للطلب','For order','برای سفارش'],
+  ['مدة التنفيذ','Lead time','مدت اجرا'],
+  ['نص الرسالة','Message text','متن پیام'],
+  ['صورة الإعلان','Announcement image','عکس تبلیغ'],
+  ['التاريخ','Date','تاریخ'],
+  ['رقم العقد','Contract number','شماره قرارداد'],
+  ['رقم الفاتورة','Invoice no','شماره فاکتور'],
+  ['رقم التواصل','Contact number','شماره تماس'],
+  ['دفعة عند التوقيع','Payment on signing','پیش‌پرداخت'],
+  ['دفعة عند المعاينة','Payment on viewing','باقیمانده'],
+  ['اسم العميل (الطرف الثاني)','Customer (2nd party)','نام مشتری'],
+  ['التكلفة الإجمالية','Total cost','مبلغ کل'],
+  ['الإجمالي','Total','مبلغ کل'],
+  // titles & buttons
+  ['افزودن جنس به انبار','Add material','افزودن جنس به انبار'],
+  ['إضافة مادة','Add material','افزودن جنس به انبار'],
+  ['افزودن مشتری','Add customer','افزودن مشتری'],
+  ['إضافة عميل','Add customer','افزودن مشتری'],
+  ['درخواست خرید جنس','Request Material','درخواست خرید جنس'],
+  ['طلب شراء مواد','Request Material','درخواست خرید جنس']
+];
+
+// Build quick lookup: any variant -> [ar,en,fa]
+var LABEL_LOOKUP=null;
+function buildLabelLookup(){
+  LABEL_LOOKUP={};
+  LABEL_DICT.forEach(function(t){
+    // store each language variant + combined forms
+    [t[0],t[1],t[2]].forEach(function(v){ if(v) LABEL_LOOKUP[v.trim()]=t; });
+    LABEL_LOOKUP[(t[0]+' / '+t[2]).trim()]=t;
+    LABEL_LOOKUP[(t[2]+' / '+t[0]).trim()]=t;
+  });
+}
+
+function autoTranslateLabels(l){
+  l=l||lang;
+  if(!LABEL_LOOKUP) buildLabelLookup();
+  var idx=l==='ar'?0:l==='en'?1:2;
+  // Translate labels, option-less spans inside buttons, and standalone labels
+  var els=document.querySelectorAll('.form-label, .modal-title span, .btn span');
+  els.forEach(function(el){
+    // skip if it contains dynamic template markers
+    var raw=el.textContent.trim();
+    if(!raw) return;
+    // strip leading emoji/symbols and parenthetical units for matching
+    var core=raw.replace(/\([^)]*\)/g,'').replace(/[📦📷💾👤🛒🧾📜📤📥➕🔁🏛️🔍📢📲✏️🗑️\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]/g,'').trim();
+    // try direct, then core
+    var hit=LABEL_LOOKUP[raw]||LABEL_LOOKUP[core];
+    if(hit){
+      // preserve any "(QAR)" or unit suffix that was in the original
+      var suffix='';
+      var unitMatch=raw.match(/\(([^)]*)\)\s*$/);
+      if(unitMatch && /QAR|%|۱-۳۱|1-31/.test(unitMatch[1])) suffix=' ('+unitMatch[1]+')';
+      el.textContent=hit[idx]+suffix;
+    }
+  });
+}
+
 // Re-apply modal/static labels (called on language change AND on modal open)
 function refreshStaticLabels(l){
   l=l||lang;
+  try { autoTranslateLabels(l); } catch(e){ console.log('autoTranslate err',e); }
   var P=function(ar,en,fa){return l==='en'?en:l==='ar'?ar:fa;};
   safeSet('rm-title',P('طلب شراء مواد','Request Material','درخواست خرید جنس'));
   safeSet('rm-item',P('اسم الصنف','Item Name','نام جنس / کالا'));
