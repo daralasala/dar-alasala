@@ -320,6 +320,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div style="display:flex;gap:6px;margin-bottom:11px;overflow-x:auto;padding-bottom:3px">
       <button class="btn btn-primary btn-sm" onclick="setFilter('all')" id="f-all">همه</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('pending_payment')" id="f-pending">در انتظار پرداخت</button>
+      <button class="btn btn-outline btn-sm" onclick="setFilter('paid')" id="f-paid">آماده تولید</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('building')" id="f-building">در حال ساخت</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('ready')" id="f-ready">آماده</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('delivered')" id="f-delivered">تحویل</button>
@@ -519,6 +520,19 @@ body.en .search-icon{right:auto;left:10px;}
       <div class="form-group"><label class="form-label">🇬🇧 <span id="stm-en">English</span></label><input class="form-control" type="text" id="stage-en" placeholder="e.g. Assembly"></div>
       <button class="btn btn-primary btn-block" onclick="addStage()">➕ <span id="stm-add-btn">افزودن مرحله</span></button>
     </div>
+  </div>
+</div>
+
+<!-- START ITEM PRODUCTION MODAL -->
+<div class="modal-overlay" id="startProdModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🏭 <span id="sp-title">شروع تولید جنس</span></div><button class="modal-close" onclick="closeModal('startProdModal')">✕</button></div>
+    <div id="sp-item-name" style="font-size:14px;font-weight:700;margin-bottom:10px"></div>
+    <div class="form-group"><label class="form-label" id="sp-stage-label">شروع از کدام مرحله؟</label>
+      <select class="form-control" id="sp-stage"></select>
+    </div>
+    <input type="hidden" id="sp-order-id">
+    <button class="btn btn-primary btn-block" onclick="confirmStartProduction()">✅ <span id="sp-confirm">شروع تولید</span></button>
   </div>
 </div>
 
@@ -754,7 +768,7 @@ const TR = {
     approve:'موافقة',reject:'رفض',remove:'حذف',
     pending_approval:'في انتظار موافقة المدير.',
     fab:'طلب جديد',order_detail:'تفاصيل الطلب',stage_transfer:'نقل المرحلة',
-    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
+    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع',status_paid:'مدفوع · جاهز للإنتاج',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
     notify_sent:'تم الارسال',saved:'تم الحفظ',err_fill:'يرجى ملء الحقول',
     err_login:'بيانات غير صحيحة',err_email:'البريد مسجل مسبقا',
     reg_success:'تم التسجيل! انتظر موافقة المدير.',no_data:'لا توجد بيانات',
@@ -775,7 +789,7 @@ const TR = {
     approve:'تایید',reject:'رد',remove:'حذف',
     pending_approval:'حساب شما ثبت شد و منتظر تایید مدیر است.',
     fab:'إنشاء فاتورة',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
-    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
+    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت',status_paid:'تأیید شده · آماده تولید',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
     notify_sent:'پیام ارسال شد',saved:'ذخیره شد',err_fill:'لطفا فیلدها را پر کنید',
     err_login:'اطلاعات اشتباه است',err_email:'ایمیل قبلا ثبت شده',
     reg_success:'ثبت نام انجام شد! منتظر تایید مدیر باشید.',no_data:'داده ای یافت نشد',
@@ -796,7 +810,7 @@ const TR = {
     approve:'Approve',reject:'Reject',remove:'Remove',
     pending_approval:'Your account is awaiting manager approval.',
     fab:'New Order',order_detail:'Order Details',stage_transfer:'Stage Transfer',
-    dept_label:'Department',status_pending_payment:'Awaiting Payment',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
+    dept_label:'Department',status_pending_payment:'Awaiting Payment',status_paid:'Paid · Ready to Build',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
     notify_sent:'Notification sent',saved:'Saved',err_fill:'Please fill required fields',
     err_login:'Invalid credentials',err_email:'Email already registered',
     reg_success:'Registered! Awaiting manager approval.',no_data:'No data found',
@@ -899,6 +913,7 @@ function setLang(l){
   document.getElementById('f-all').textContent='All / كل / همه';
   document.getElementById('f-all').textContent='All / الكل / همه';
   document.getElementById('f-pending').textContent=T('status_pending_payment');
+  var fpaid=document.getElementById('f-paid'); if(fpaid) fpaid.textContent=lang==='ar'?'جاهز للإنتاج':lang==='en'?'Ready to build':'آماده تولید';
   document.getElementById('f-building').textContent=T('status_building');
   document.getElementById('f-ready').textContent=T('status_ready');
   document.getElementById('f-delivered').textContent=T('status_delivered');
@@ -1084,7 +1099,7 @@ function renderDashboard(){
       }).join('');
   // Stage summary
   const stageCounts={};
-  allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment').forEach(o=>{ const s=o.current_stage||'نجاری'; stageCounts[s]=(stageCounts[s]||0)+1; });
+  allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid').forEach(o=>{ const s=o.current_stage||'نجاری'; stageCounts[s]=(stageCounts[s]||0)+1; });
   document.getElementById('dash-stages').innerHTML = Object.keys(stageCounts).length===0
     ? `<div style="color:var(--text2);font-size:12px;text-align:center;padding:10px">${T('no_data')}</div>`
     : Object.entries(stageCounts).map(([s,c])=>`
@@ -1127,7 +1142,7 @@ function renderOrders(){
     var dm=deptStageMatch(currentUser.department);
     filtered=filtered.filter(o=>dm.indexOf(o.current_stage)>-1||o.worker===currentUser.name);
   }
-  const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
 
   function orderCardThumb(o){
@@ -1226,7 +1241,7 @@ async function openOrderDetail(id){
   // Is this item part of a multi-item invoice? If so, delivery must be done at invoice level.
   const invoiceSiblings = o.invoice_id ? allOrders.filter(x=>String(x.invoice_id)===String(o.invoice_id)) : [o];
   const isMultiItem = invoiceSiblings.length>1;
-  const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const stepsHtml = allStages.map(s=>{
     const d = (s.order_num < (allStages.find(x=>x.name===o.current_stage)||{order_num:1}).order_num) ? 'done'
       : s.name===o.current_stage ? 'active' : 'pending';
@@ -1243,6 +1258,11 @@ async function openOrderDetail(id){
       imagesHtml='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">'+(lang==='en'?'Photos':lang==='ar'?'الصور':lang==='en'?'Photos':'عکس‌ها')+'</div><div class="img-grid" style="margin-bottom:12px">'+imgs.map(function(u,i){return '<div class="img-thumb" onclick="showLightbox(\''+o.id+'\','+i+')"><img src="'+u+'"></div>';}).join('')+'</div>';
     }
   } catch(e){ imagesHtml=''; }
+  // Always-available photo upload (works at any status, even after payment/production)
+  var addPhotoHtml = (isManager||currentUser.department==='حسابدار'||canTransfer)
+    ? '<input type="file" id="order-photo-file-'+o.id+'" accept="image/*" multiple style="display:none" onchange="addOrderPhotos('+o.id+',this)">'
+      +'<button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="document.getElementById(\'order-photo-file-'+o.id+'\').click()">📷 '+(lang==='ar'?'إضافة صور':lang==='en'?'Add photos':'افزودن عکس')+'</button>'
+    : '';
   document.getElementById('order-detail-content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;gap:8px">
       <div><div style="font-size:16px;font-weight:800">${o.product}</div><div style="font-size:11px;color:var(--text2);margin-top:2px">${o.id_code||''}</div></div>
@@ -1261,6 +1281,7 @@ async function openOrderDetail(id){
     </div>`:''}
     ${o.description?`<div class="card" style="margin-bottom:9px;font-size:12px;color:var(--text2)">${o.description}</div>`:''}
     ${imagesHtml}
+    ${addPhotoHtml}
     ${(isManager||currentUser.department==='حسابدار')?`
     <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='ar'?'العقد والفاتورة':lang==='en'?'Contract & Invoice':'قرارداد و فاکتور'}</div>
     <div class="img-grid" style="margin-bottom:6px">
@@ -1276,9 +1297,11 @@ async function openOrderDetail(id){
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('contract-file-${o.id}').click()">📄 ${lang==='ar'?'رفع عقد':lang==='en'?'Upload Contract':'آپلود قرارداد'}</button>
       <button class="btn btn-outline btn-sm" onclick="document.getElementById('invoice-file-${o.id}').click()">📎 ${lang==='ar'?'رفع فاتورة':lang==='en'?'Upload Invoice':'آپلود فاکتور'}</button>
     </div>`:''}
-    ${o.status==='pending_payment'?`
+    ${(o.status==='pending_payment'||o.status==='paid')?`
     <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${lang==='ar'?'هذا الطلب في انتظار العقد والدفع. بعد استلام الدفعة، اضغط لبدء الإنتاج.':lang==='en'?'This order is awaiting contract and payment. After receiving the deposit, press start production.':'این سفارش در انتظار قرارداد و پرداخت است. بعد از دریافت پیش‌پرداخت، دکمه شروع تولید را بزنید.'}</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">${o.status==='paid'
+        ? (lang==='ar'?'تم تأكيد الدفع. اختر متى تبدأ إنتاج هذا الصنف ومن أي مرحلة.':lang==='en'?'Payment confirmed. Choose when to start producing this item and from which stage.':'پرداخت تأیید شده. انتخاب کن این جنس کِی و از کدام مرحله وارد تولید شود.')
+        : (lang==='ar'?'هذا الطلب في انتظار العقد والدفع. بعد استلام الدفعة، اضغط لبدء الإنتاج.':lang==='en'?'This order is awaiting contract and payment. After receiving the deposit, press start production.':'این سفارش در انتظار قرارداد و پرداخت است. بعد از دریافت پیش‌پرداخت، دکمه شروع تولید را بزنید.')}</div>
       ${(isManager||currentUser.department==='حسابدار')?`<button class="btn btn-primary btn-block" onclick="startProduction(${o.id})">🏭 ${lang==='ar'?'بدء الإنتاج':lang==='en'?'Start Production':'شروع تولید'}</button>`:''}
     </div>`:`
     <div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">${lang==='en'?'Production Stages':lang==='ar'?'مراحل الإنتاج':lang==='en'?'Production Stages':'مراحل تولید'}</div>
@@ -1313,7 +1336,7 @@ function openInvoiceFolder(invId){
   var readyCount=items.filter(function(it){return it.status==='ready'||it.status==='delivered';}).length;
   var allReady=items.every(function(it){return it.status==='ready'||it.status==='delivered';});
   var allDelivered=items.every(function(it){return it.status==='delivered';});
-  var sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
+  var sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
 
   // Item rows — each still opens its own detail
   var itemsHtml=items.map(function(o){
@@ -1333,8 +1356,14 @@ function openInvoiceFolder(invId){
   }).join('');
 
   var firstId=items[0].id;
+  var anyPaid=items.some(function(it){return it.status==='paid';});
+  var paidCount=items.filter(function(it){return it.status==='paid';}).length;
   var startAllBtn=(anyPending&&canStart)
-    ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':lang==='en'?'Confirm payment & start production for whole invoice':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+')</button>'
+    ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد دفع الفاتورة كاملة':lang==='en'?'Confirm payment for whole invoice':'تأیید پرداخت کل فاکتور')+' ('+pendingCount+')</button>'
+    : '';
+  // Hint when items are paid but not yet sent to production
+  var paidHint=(anyPaid&&canStart)
+    ? '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;font-size:12px;color:var(--text2);text-align:center">✅ '+(lang==='ar'?('تم الدفع — اضغط على كل صنف لبدء إنتاجه واختيار مرحلته ('+paidCount+' بانتظار البدء)'):lang==='en'?('Paid — tap each item to start its production and pick its stage ('+paidCount+' awaiting start)'):('پرداخت شده — روی هر جنس بزن تا وارد تولیدش کنی و مرحله‌اش را انتخاب کنی ('+paidCount+' در انتظار شروع)'))+'</div>'
     : '';
   // Deliver-whole-invoice button: enabled only when ALL items are ready
   var deliverBtn='';
@@ -1366,6 +1395,7 @@ function openInvoiceFolder(invId){
     '</div>'+
     docBtns+
     startAllBtn+
+    paidHint+
     deliverBtn+
     '<div style="font-size:12px;font-weight:700;color:var(--text2);margin:10px 0 8px">'+(lang==='ar'?'الأصناف':lang==='en'?'Items':'اجناس')+'</div>'+
     itemsHtml;
@@ -1378,30 +1408,53 @@ async function updateProgress(id,val){
 }
 
 // Start production: move pending order into the production line (نجاری)
-async function startProduction(id){
-  var firstStage=(allStages&&allStages.length>0)?allStages[0].name:'نجاری';
-  await api('PATCH','orders',{status:'building',current_stage:firstStage,progress:5},'?id=eq.'+id);
-  var o=allOrders.find(x=>x.id===id);
-  if(o){ o.status='building'; o.current_stage=firstStage; o.progress=5; }
-  await api('POST','order_stages',{order_id:id,stage_name:firstStage,worker_name:currentUser.name,status:'active',started_at:new Date().toISOString()});
+// Open modal to pick which stage this item starts at (manual production start)
+function startProduction(id){
+  var o=allOrders.find(x=>x.id===id); if(!o) return;
+  document.getElementById('sp-title').textContent=lang==='ar'?'بدء إنتاج الصنف':lang==='en'?'Start item production':'شروع تولید جنس';
+  document.getElementById('sp-stage-label').textContent=lang==='ar'?'البدء من أي مرحلة؟':lang==='en'?'Start from which stage?':'شروع از کدام مرحله؟';
+  document.getElementById('sp-confirm').textContent=lang==='ar'?'بدء الإنتاج':lang==='en'?'Start production':'شروع تولید';
+  document.getElementById('sp-item-name').textContent=o.product+(o.id_code?' · '+o.id_code:'');
+  document.getElementById('sp-order-id').value=id;
+  // Build stage dropdown from dynamic stages
+  var sel=document.getElementById('sp-stage');
+  sel.innerHTML=allStages.map(function(s){
+    var fa=s.name_fa||s.name;
+    return '<option value="'+fa+'">'+stageLabel(fa)+'</option>';
+  }).join('');
   closeModal('orderDetailModal');
+  openModal('startProdModal');
+}
+
+async function confirmStartProduction(){
+  var id=document.getElementById('sp-order-id').value;
+  var chosenStage=document.getElementById('sp-stage').value;
+  if(!id||!chosenStage) return;
+  // progress based on chosen stage position
+  var idx=allStages.findIndex(function(s){return (s.name_fa||s.name)===chosenStage;});
+  var lastStageName=allStages.length?(allStages[allStages.length-1].name_fa||allStages[allStages.length-1].name):'';
+  var isLast=(chosenStage===lastStageName);
+  var status=isLast?'ready':'building';
+  var progress=isLast?100:(idx>=0?Math.round((idx/Math.max(allStages.length-1,1))*90)+5:5);
+  await api('PATCH','orders',{status:status,current_stage:chosenStage,progress:progress},'?id=eq.'+id);
+  await api('POST','order_stages',{order_id:id,stage_name:chosenStage,worker_name:currentUser.name,status:'active',started_at:new Date().toISOString()});
+  closeModal('startProdModal');
   await loadAll();
   showToast(lang==='ar'?'بدأ الإنتاج':lang==='en'?'Production started':'تولید شروع شد','success');
 }
 
-// ===== START PRODUCTION FOR WHOLE INVOICE (one click) + auto Receipt Voucher =====
+// ===== CONFIRM PAYMENT FOR WHOLE INVOICE (one click) + auto Receipt Voucher =====
+// Note: this only confirms payment. Production is started later, per-item, manually.
 var lastReceipt=null; // holds data for whatsapp send
 async function startInvoiceProduction(invId){
   var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId)&&o.status==='pending_payment';});
-  if(items.length===0){ showToast(lang==='ar'?'لا توجد أصناف للبدء':lang==='en'?'No items to start':'جنسی برای شروع نیست','error'); return; }
+  if(items.length===0){ showToast(lang==='ar'?'لا توجد أصناف':lang==='en'?'No items':'جنسی نیست','error'); return; }
   var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
-  var firstStage=(allStages&&allStages.length>0)?allStages[0].name:'نجاری';
-  // Move every pending item of this invoice into production
+  // Mark every pending item of this invoice as PAID (not building yet)
   for(var i=0;i<items.length;i++){
     var o=items[i];
-    await api('PATCH','orders',{status:'building',current_stage:firstStage,progress:5},'?id=eq.'+o.id);
-    o.status='building'; o.current_stage=firstStage; o.progress=5;
-    await api('POST','order_stages',{order_id:o.id,stage_name:firstStage,worker_name:currentUser.name,status:'active',started_at:new Date().toISOString()});
+    await api('PATCH','orders',{status:'paid'},'?id=eq.'+o.id);
+    o.status='paid';
   }
   // Build receipt voucher data
   var custName=inv?inv.customer_name:items[0].customer_name;
@@ -1415,7 +1468,7 @@ async function startInvoiceProduction(invId){
   lastReceipt={no:rcptNo,date:today,cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة مقدمة عن الفاتورة ':lang==='en'?'Advance payment for invoice ':'پیش‌پرداخت بابت فاکتور ')+invCode};
   closeModal('orderDetailModal');
   await loadAll();
-  showToast(lang==='ar'?'بدأ الإنتاج · سند القبض جاهز':lang==='en'?'Production started · Receipt voucher ready':'تولید شروع شد · سند قبض آماده است','success');
+  showToast(lang==='ar'?'تم تأكيد الدفع · سند القبض جاهز':lang==='en'?'Payment confirmed · Receipt ready':'پرداخت تأیید شد · سند قبض آماده است','success');
   // Open receipt voucher
   showReceiptVoucher();
 }
@@ -1633,6 +1686,24 @@ function uploadDoc(orderId,docType,input){
     img.src=e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// Append new photos to an order's images array — works at ANY status (even after payment)
+async function addOrderPhotos(orderId,input){
+  var files=Array.from(input.files); if(!files.length) return;
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var existing=[];
+  try { existing=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; } catch(e){ existing=[]; }
+  if(!Array.isArray(existing)) existing=[];
+  showToast(lang==='ar'?'جاري الرفع...':lang==='en'?'Uploading...':'در حال آپلود...','success');
+  for(var i=0;i<files.length;i++){
+    var compressed=await compressImage(files[i],0.6,1000);
+    existing.push(compressed);
+  }
+  await api('PATCH','orders',{images:JSON.stringify(existing)},'?id=eq.'+orderId);
+  o.images=JSON.stringify(existing);
+  showToast(T('saved'),'success');
+  openOrderDetail(orderId);
 }
 
 function showDocFull(orderId,docType){
@@ -2187,8 +2258,8 @@ function filterByStage(s){
 function renderProduction(){
   renderStages();
   const filtered = currentStageFilter==='all'
-    ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment')
-    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment');
+    ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
+    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid');
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
