@@ -1347,8 +1347,8 @@ function renderDashboard(){
     : Object.entries(stageCounts).map(([s,c])=>`
         <div class="card" style="padding:10px;margin-bottom:8px">
           <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:13px;font-weight:600">${s}</span>
-            <span class="badge badge-blue">${c} ${lang==='en'?'orders':lang==='ar'?'طلبات':lang==='en'?'Orders':'سفارش'}</span>
+            <span style="font-size:13px;font-weight:600">${stageLabel(s)}</span>
+            <span class="badge badge-blue">${c} ${lang==='en'?'orders':lang==='ar'?'طلبات':'سفارش'}</span>
           </div>
         </div>`).join('');
 }
