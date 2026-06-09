@@ -1275,8 +1275,7 @@ async function openOrderDetail(id){
   } catch(e){ imagesHtml=''; }
   // Always-available photo upload (works at any status, even after payment/production)
   var addPhotoHtml = (isManager||currentUser.department==='حسابدار'||canTransfer)
-    ? '<input type="file" id="order-photo-file-'+o.id+'" accept="image/*" multiple style="display:none" onchange="addOrderPhotos('+o.id+',this)">'
-      +'<button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="document.getElementById(\'order-photo-file-'+o.id+'\').click()">📷 '+(lang==='ar'?'إضافة صور':lang==='en'?'Add photos':'افزودن عکس')+'</button>'
+    ? '<button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="pickPhotos('+o.id+')">📷 '+(lang==='ar'?'إضافة صور':lang==='en'?'Add photos':'افزودن عکس')+'</button>'
     : '';
   document.getElementById('order-detail-content').innerHTML=`
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;gap:8px">
@@ -1304,13 +1303,11 @@ async function openOrderDetail(id){
       ${o.invoice_image?`<div class="img-thumb" onclick="showDocFull(${o.id},'invoice')"><img src="${o.invoice_image}"></div>`:''}
     </div>
     <div style="display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap">
-      <input type="file" id="contract-file-${o.id}" accept="image/*" style="display:none" onchange="uploadDoc(${o.id},'contract',this)">
-      <input type="file" id="invoice-file-${o.id}" accept="image/*" style="display:none" onchange="uploadDoc(${o.id},'invoice',this)">
       <button class="btn btn-primary btn-sm" onclick="createInvoice(${o.id})">🧾 ${lang==='ar'?'إنشاء فاتورة':lang==='en'?'Create Invoice':'ساخت فاکتور'}</button>
       <button class="btn btn-primary btn-sm" onclick="createContract(${o.id})">📜 ${lang==='ar'?'إنشاء عقد':lang==='en'?'Create Contract':'ساخت قرارداد'}</button>
       <button class="btn btn-green btn-sm" onclick="receiptForOrder(${o.id})">📥 ${lang==='ar'?'سند قبض':lang==='en'?'Receipt Voucher':'سند قبض'}</button>
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('contract-file-${o.id}').click()">📄 ${lang==='ar'?'رفع عقد':lang==='en'?'Upload Contract':'آپلود قرارداد'}</button>
-      <button class="btn btn-outline btn-sm" onclick="document.getElementById('invoice-file-${o.id}').click()">📎 ${lang==='ar'?'رفع فاتورة':lang==='en'?'Upload Invoice':'آپلود فاکتور'}</button>
+      <button class="btn btn-outline btn-sm" onclick="pickDoc(${o.id},'contract')">📄 ${lang==='ar'?'رفع عقد':lang==='en'?'Upload Contract':'آپلود قرارداد'}</button>
+      <button class="btn btn-outline btn-sm" onclick="pickDoc(${o.id},'invoice')">📎 ${lang==='ar'?'رفع فاتورة':lang==='en'?'Upload Invoice':'آپلود فاکتور'}</button>
     </div>`:''}
     ${(o.status==='pending_payment'||o.status==='paid')?`
     <div style="background:var(--surface2);border-radius:10px;padding:14px;margin-bottom:12px;text-align:center">
@@ -1679,6 +1676,32 @@ function receiptForOrder(orderId){
 }
 
 // Upload contract/invoice document for an order
+// Robust document picker: builds an input on the fly (works on mobile/iOS too)
+function pickDoc(orderId,docType){
+  var input=document.createElement('input');
+  input.type='file';
+  input.accept='image/*';
+  input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    var file=input.files[0];
+    if(file){
+      showToast(lang==='ar'?'جاري الرفع...':lang==='en'?'Uploading...':'در حال آپلود...','success');
+      try {
+        var compressed=await compressImage(file,0.65,1100);
+        var field=docType==='contract'?{contract_image:compressed}:{invoice_image:compressed};
+        await api('PATCH','orders',field,'?id=eq.'+orderId);
+        var o=allOrders.find(x=>x.id===orderId);
+        if(o){ if(docType==='contract')o.contract_image=compressed; else o.invoice_image=compressed; }
+        showToast(T('saved'),'success');
+        openOrderDetail(orderId);
+      } catch(e){ showToast('Error: '+e.message,'error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+
 function uploadDoc(orderId,docType,input){
   const file=input.files[0]; if(!file) return;
   const reader=new FileReader();
@@ -1701,6 +1724,23 @@ function uploadDoc(orderId,docType,input){
     img.src=e.target.result;
   };
   reader.readAsDataURL(file);
+}
+
+// Robust multi-photo picker (works on mobile/iOS too)
+function pickPhotos(orderId){
+  var input=document.createElement('input');
+  input.type='file';
+  input.accept='image/*';
+  input.multiple=true;
+  input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files&&input.files.length){
+      await addOrderPhotos(orderId,input);
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
 }
 
 // Append new photos to an order's images array — works at ANY status (even after payment)
