@@ -594,9 +594,9 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">الرقم الشخصي / شماره شخصی</label><input class="form-control" type="text" id="f-cid"></div>
     <div class="form-group"><label class="form-label" id="ml-delivery">تاریخ تحویل / تاريخ التسليم</label><input class="form-control" type="date" id="f-delivery"></div>
 
-    <div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 8px">📦 الأصناف / اجناس</div>
+    <div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 8px">📦 <span id="items-section-title">الأصناف / اجناس</span></div>
     <div id="items-container"></div>
-    <button class="btn btn-outline btn-sm btn-block" style="margin-bottom:14px" onclick="addOrderItem()">+ إضافة صنف / افزودن جنس</button>
+    <button class="btn btn-outline btn-sm btn-block" style="margin-bottom:14px" onclick="addOrderItem()">+ <span id="add-item-label">إضافة صنف / افزودن جنس</span></button>
 
     <div class="card" style="margin-bottom:12px;padding:12px">
       <div class="row"><span class="row-label" id="items-total-lbl">الإجمالي / مبلغ کل</span><span class="row-value" style="color:var(--accent);font-size:16px" id="items-total">0 QAR</span></div>
@@ -947,6 +947,8 @@ var LABEL_DICT=[
   // titles & buttons
   ['افزودن جنس به انبار','Add material','افزودن جنس به انبار'],
   ['إضافة مادة','Add material','افزودن جنس به انبار'],
+  ['الأصناف','Items','اجناس'],
+  ['إضافة صنف','Add item','افزودن جنس'],
   ['افزودن مشتری','Add customer','افزودن مشتری'],
   ['إضافة عميل','Add customer','افزودن مشتری'],
   ['درخواست خرید جنس','Request Material','درخواست خرید جنس'],
@@ -970,7 +972,7 @@ function autoTranslateLabels(l){
   if(!LABEL_LOOKUP) buildLabelLookup();
   var idx=l==='ar'?0:l==='en'?1:2;
   // Translate labels, option-less spans inside buttons, and standalone labels
-  var els=document.querySelectorAll('.form-label, .modal-title span, .btn span');
+  var els=document.querySelectorAll('.form-label, .modal-title span, .btn span, #items-section-title, #add-item-label');
   els.forEach(function(el){
     // skip if it contains dynamic template markers
     var raw=el.textContent.trim();
