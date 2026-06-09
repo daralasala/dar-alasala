@@ -386,17 +386,17 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
-    <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span>إضافة مادة / افزودن جنس به انبار</span></button>
+    <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
   <!-- CUSTOMERS -->
   <div class="page" id="page-customers">
     <div style="display:flex;gap:7px;margin-bottom:12px">
-      <button class="btn btn-primary btn-sm" style="flex:1" onclick="openCustomerModal()">➕ <span>إضافة عميل / افزودن مشتری</span></button>
-      <button class="btn btn-outline btn-sm" onclick="syncCustomersFromOrders()">🔄 <span>استيراد / همگام‌سازی</span></button>
+      <button class="btn btn-primary btn-sm" style="flex:1" onclick="openCustomerModal()">➕ <span id="cust-add-label">إضافة عميل / افزودن مشتری</span></button>
+      <button class="btn btn-outline btn-sm" onclick="syncCustomersFromOrders()">🔄 <span id="cust-sync-label">استيراد / همگام‌سازی</span></button>
     </div>
-    <button class="btn btn-green btn-block" style="margin-bottom:12px;background:#25D366" onclick="openBroadcastModal()">📢 <span>إرسال إعلان للجميع / ارسال تبلیغ به همه</span></button>
+    <button class="btn btn-green btn-block" style="margin-bottom:12px;background:#25D366" onclick="openBroadcastModal()">📢 <span id="cust-broadcast-label">إرسال إعلان للجميع / ارسال تبلیغ به همه</span></button>
     <input class="form-control" type="text" id="cust-search" placeholder="🔍 بحث / جستجو..." oninput="renderCustomers()" style="margin-bottom:12px">
     <div id="customers-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -862,6 +862,10 @@ function setLang(l){
   document.getElementById('order-search').placeholder=l==='en'?'Search...':'البحث... / جستجو...';
   // Fixed assets button + section titles (were stuck in Persian/Arabic)
   safeSet('fb-assets','🏛️ '+(l==='en'?'Fixed Assets':l==='ar'?'الأصول الثابتة':'دارایی‌های ثابت'));
+  safeSet('inv-add-label', l==='en'?'Add material':l==='ar'?'إضافة مادة':'افزودن جنس به انبار');
+  safeSet('cust-add-label', l==='en'?'Add customer':l==='ar'?'إضافة عميل':'افزودن مشتری');
+  safeSet('cust-sync-label', l==='en'?'Import / Sync':l==='ar'?'استيراد / مزامنة':'همگام‌سازی');
+  safeSet('cust-broadcast-label', l==='en'?'Send announcement to all':l==='ar'?'إرسال إعلان للجميع':'ارسال تبلیغ به همه');
   var slStages=document.getElementById('sl-stages-title'); if(slStages) slStages.textContent=l==='en'?'Production Stages':l==='ar'?'حالة مراحل الإنتاج':'وضعیت مراحل تولید';
   ['ar','fa','en'].forEach(x=>document.getElementById('lt-'+x).classList.toggle('active',x===l));
   document.querySelectorAll('.lang-pill').forEach(b=>b.classList.toggle('active',b.getAttribute('onclick').includes("'"+l+"'")));
