@@ -513,6 +513,25 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- REQUEST -> INVENTORY MODAL -->
+<div class="modal-overlay" id="reqToInvModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">📦 <span id="r2i-title">انتقال به انبار</span></div><button class="modal-close" onclick="closeModal('reqToInvModal')">✕</button></div>
+    <div id="r2i-item-name" style="font-size:14px;font-weight:700;margin-bottom:4px"></div>
+    <div id="r2i-req-qty" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>
+    <div id="r2i-exists-note" style="font-size:12px;color:var(--green);margin-bottom:10px;display:none"></div>
+    <div class="form-group"><label class="form-label" id="r2i-qty-label">مقدار (عدد)</label><input class="form-control" type="number" id="r2i-qty" value="0"></div>
+    <div class="form-group"><label class="form-label" id="r2i-unit-label">واحد</label>
+      <select class="form-control" id="r2i-unit"><option>عدد</option><option>متر</option><option>کیلو</option><option>لیتر</option><option>بسته</option><option>متر مربع</option></select>
+    </div>
+    <div class="form-group"><label class="form-label" id="r2i-price-label">قیمت واحد (QAR)</label><input class="form-control" type="number" id="r2i-price" value="0"></div>
+    <div class="form-group"><label class="form-label" id="r2i-min-label">حداقل موجودی (هشدار)</label><input class="form-control" type="number" id="r2i-min" value="0"></div>
+    <input type="hidden" id="r2i-req-id">
+    <input type="hidden" id="r2i-existing-id">
+    <button class="btn btn-primary btn-block" onclick="confirmReqToInv()">📦 <span id="r2i-confirm">افزودن به انبار</span></button>
+  </div>
+</div>
+
 <!-- STAGES MANAGER MODAL -->
 <div class="modal-overlay" id="stagesModal">
   <div class="modal" style="max-height:92vh">
@@ -3573,9 +3592,76 @@ async function savePurchaseRequest(){
 }
 
 async function updateRequest(id,status){
+  // When marking as purchased, open the transfer-to-inventory flow first
+  if(status==='bought'){
+    openReqToInv(id);
+    return;
+  }
   await api('PATCH','purchase_requests',{status:status},'?id=eq.'+id);
   renderRequests();
   showToast(T('saved'),'success');
+}
+
+// Open modal to transfer a purchased request into inventory
+function openReqToInv(reqId){
+  var r=allRequests.find(x=>x.id===reqId); if(!r) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('r2i-title').textContent=L('نقل إلى المخزون','Transfer to inventory','انتقال به انبار');
+  document.getElementById('r2i-qty-label').textContent=L('الكمية (رقم)','Quantity (number)','مقدار (عدد)');
+  document.getElementById('r2i-unit-label').textContent=L('الوحدة','Unit','واحد');
+  document.getElementById('r2i-price-label').textContent=L('سعر الوحدة (QAR)','Unit price (QAR)','قیمت واحد (QAR)');
+  document.getElementById('r2i-min-label').textContent=L('الحد الأدنى للمخزون (تنبيه)','Min stock (alert)','حداقل موجودی (هشدار)');
+  document.getElementById('r2i-confirm').textContent=L('إضافة للمخزون','Add to inventory','افزودن به انبار');
+  document.getElementById('r2i-item-name').textContent=r.item_name;
+  document.getElementById('r2i-req-qty').textContent=L('المطلوب','Requested','درخواستی')+': '+(r.quantity||'-');
+  document.getElementById('r2i-req-id').value=r.id;
+  // Try to extract a number from the request quantity text (e.g. "10 متر" -> 10)
+  var numMatch=(r.quantity||'').toString().match(/[\d.]+/);
+  document.getElementById('r2i-qty').value=numMatch?numMatch[0]:0;
+  // Check if item already exists in inventory (same name)
+  var existing=allInventory.find(function(x){return x.name&&x.name.trim()===r.item_name.trim();});
+  var note=document.getElementById('r2i-exists-note');
+  if(existing){
+    document.getElementById('r2i-existing-id').value=existing.id;
+    document.getElementById('r2i-unit').value=existing.unit||'عدد';
+    document.getElementById('r2i-price').value=existing.unit_price||0;
+    document.getElementById('r2i-min').value=existing.min_quantity||0;
+    note.style.display='block';
+    note.textContent='✅ '+L('موجود في المخزون — ستُضاف الكمية للرصيد الحالي ('+(existing.quantity||0)+')','In inventory — quantity will be added to current stock ('+(existing.quantity||0)+')','در انبار موجود است — مقدار به موجودی فعلی ('+(existing.quantity||0)+') اضافه می‌شود');
+  } else {
+    document.getElementById('r2i-existing-id').value='';
+    document.getElementById('r2i-unit').value='عدد';
+    document.getElementById('r2i-price').value=0;
+    document.getElementById('r2i-min').value=0;
+    note.style.display='none';
+  }
+  openModal('reqToInvModal');
+}
+
+async function confirmReqToInv(){
+  var reqId=document.getElementById('r2i-req-id').value;
+  var existingId=document.getElementById('r2i-existing-id').value;
+  var r=allRequests.find(x=>String(x.id)===String(reqId)); if(!r) return;
+  var qty=parseFloat(document.getElementById('r2i-qty').value)||0;
+  var unit=document.getElementById('r2i-unit').value;
+  var price=parseFloat(document.getElementById('r2i-price').value)||0;
+  var min=parseFloat(document.getElementById('r2i-min').value)||0;
+  if(existingId){
+    // Add to existing stock
+    var ex=allInventory.find(x=>String(x.id)===String(existingId));
+    var newQty=(ex?(ex.quantity||0):0)+qty;
+    await api('PATCH','inventory',{quantity:newQty,unit:unit,unit_price:price,min_quantity:min},'?id=eq.'+existingId);
+    if(ex){ ex.quantity=newQty; ex.unit_price=price; }
+  } else {
+    // Create new inventory item (carry over the request image if any)
+    await api('POST','inventory',{name:r.item_name,quantity:qty,unit:unit,unit_price:price,min_quantity:min,image:r.image||null});
+  }
+  // Mark request as bought
+  await api('PATCH','purchase_requests',{status:'bought'},'?id=eq.'+reqId);
+  closeModal('reqToInvModal');
+  await loadAll();
+  renderRequests();
+  showToast(lang==='ar'?'تمت الإضافة للمخزون':lang==='en'?'Added to inventory':'به انبار اضافه شد','success');
 }
 
 function renderNotifications(){
