@@ -536,6 +536,14 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- STAFF FILE MODAL -->
+<div class="modal-overlay" id="staffModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">👤 <span id="sf-title">فایل کارگر</span></div><button class="modal-close" onclick="closeModal('staffModal')">✕</button></div>
+    <div id="staff-file-content"></div>
+  </div>
+</div>
+
 <!-- NEW ORDER MODAL -->
 <div class="modal-overlay" id="newOrderModal">
   <div class="modal" style="max-height:92vh">
@@ -3202,15 +3210,14 @@ async function renderStaff(){
   document.getElementById('staff-list').innerHTML = active.length===0
     ? `<div class="empty-state"><div class="empty-icon">👥</div><div>${T('no_data')}</div></div>`
     : active.map((u,i)=>`
-      <div class="worker-item">
+      <div class="worker-item" ${currentUser?.role==='manager'?`onclick="openStaffFile(${u.id})" style="cursor:pointer"`:''}>
         <div class="w-avatar" style="background:${colors[i%colors.length]}">${u.name[0]}</div>
         <div class="w-info">
-          <div class="w-name">${u.name}</div>
-          <div class="w-task">${u.department} · ${u.email}</div>
+          <div class="w-name">${u.name} ${u.is_paused?'<span class="badge badge-orange" style="font-size:9px">'+(lang==='ar'?'موقوف · سفر':lang==='en'?'Paused · travel':'متوقف · سفر')+'</span>':''}</div>
+          <div class="w-task">${u.department}${u.salary?' · '+(u.salary||0).toLocaleString()+' QAR':''}</div>
         </div>
         <div style="display:flex;gap:5px;align-items:center">
-          <span class="badge badge-gold">${u.department}</span>
-          ${currentUser?.role==='manager'?`<button class="btn btn-red btn-sm" onclick="removeUser(${u.id})">🗑️</button>`:''}
+          ${currentUser?.role==='manager'?'<span style="font-size:16px;color:var(--text2)">📂</span>':`<span class="badge badge-gold">${u.department}</span>`}
         </div>
       </div>`).join('');
 }
@@ -3230,6 +3237,110 @@ async function removeUser(id){
   allUsers=users||[];
   renderStaff();
   showToast(T('saved'),'success');
+}
+
+// ===== STAFF FILE (employee details, salary, loans, costs) =====
+function openStaffFile(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  document.getElementById('sf-title').textContent=(lang==='ar'?'ملف الموظف':lang==='en'?'Employee File':'فایل کارگر')+' · '+u.name;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var fld=function(id,label,val,type){return '<div class="form-group"><label class="form-label">'+label+'</label><input class="form-control" type="'+(type||'text')+'" id="'+id+'" value="'+(val!=null?String(val).replace(/"/g,'&quot;'):'')+'"></div>';};
+  // Salary due info
+  var dueInfo='';
+  if(u.salary>0&&u.hire_date&&!u.is_paused){
+    var d=salaryDueInfo(u);
+    dueInfo='<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:10px;font-size:12px">'+
+      '⏰ '+L('الراتب القادم','Next salary','حقوق بعدی')+': <b>'+d.nextDate+'</b>'+
+      (d.daysLeft<=5?' <span style="color:var(--orange)">('+d.daysLeft+' '+L('يوم','days','روز')+')</span>':'')+
+      '</div>';
+  }
+  document.getElementById('staff-file-content').innerHTML=
+    dueInfo+
+    fld('sf-phone',L('الهاتف','Phone','تلفن'),u.phone,'text')+
+    fld('sf-qid',L('الرقم الشخصي QID','QID number','شماره QID'),u.qid,'text')+
+    '<div style="display:flex;gap:6px">'+
+      '<div style="flex:1">'+fld('sf-qid-issue',L('إصدار QID','QID issue','صدور QID'),u.qid_issue,'date')+'</div>'+
+      '<div style="flex:1">'+fld('sf-qid-expiry',L('انتهاء QID','QID expiry','انقضای QID'),u.qid_expiry,'date')+'</div>'+
+    '</div>'+
+    fld('sf-hire',L('تاريخ بدء العمل','Hire date','تاریخ شروع کار'),u.hire_date,'date')+
+    fld('sf-salary',L('الراتب الشهري (QAR)','Monthly salary (QAR)','حقوق ماهیانه (QAR)'),u.salary||0,'number')+
+    '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','قرض و هزینه‌ها')+'</div>'+
+    fld('sf-loan',L('رصيد السلفة (QAR)','Loan balance (QAR)','مانده قرض (QAR)'),u.loan_balance||0,'number')+
+    fld('sf-ticket',L('تكلفة التذكرة (QAR)','Ticket cost (QAR)','هزینه بلیط (QAR)'),u.ticket_cost||0,'number')+
+    fld('sf-other',L('تكاليف أخرى (QAR)','Other costs (QAR)','هزینه‌های دیگر (QAR)'),u.other_costs||0,'number')+
+    '<input type="hidden" id="sf-id" value="'+u.id+'">'+
+    '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveStaffFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
+    (u.salary>0?'<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="payStaffSalary('+u.id+')">💰 '+L('دفع الراتب (يُخصم من المالية)','Pay salary (deduct from finance)','پرداخت حقوق (از مالی کم می‌شود)')+'</button>':'')+
+    '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="toggleStaffPause('+u.id+')">'+(u.is_paused?'▶️ '+L('استئناف (عاد من السفر)','Resume (back from travel)','ادامه (برگشت از سفر)'):'⏸️ '+L('إيقاف مؤقت (سفر)','Pause (travel)','توقف موقت (سفر)'))+'</button>'+
+    '<button class="btn btn-red btn-block" onclick="removeUser('+u.id+');closeModal(\'staffModal\')">🗑️ '+L('حذف الموظف','Remove employee','حذف کارگر')+'</button>';
+  openModal('staffModal');
+}
+
+// Compute next salary due date based on hire day-of-month
+function salaryDueInfo(u){
+  var now=new Date();
+  var hire=new Date(u.hire_date);
+  var payDay=hire.getDate();
+  // candidate this month
+  var cand=new Date(now.getFullYear(),now.getMonth(),payDay);
+  // if last paid is in this cycle already, move to next month
+  if(u.last_salary_paid){
+    var lp=new Date(u.last_salary_paid);
+    if(lp.getFullYear()===cand.getFullYear()&&lp.getMonth()===cand.getMonth()){
+      cand=new Date(now.getFullYear(),now.getMonth()+1,payDay);
+    }
+  }
+  // if candidate already passed and not paid, it's overdue (keep it)
+  if(cand<now && !(u.last_salary_paid && new Date(u.last_salary_paid)>=cand)){
+    // overdue - keep cand as is
+  } else if(cand<now){
+    cand=new Date(now.getFullYear(),now.getMonth()+1,payDay);
+  }
+  var daysLeft=Math.ceil((cand-now)/(1000*60*60*24));
+  return {nextDate:cand.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0};
+}
+
+async function saveStaffFile(){
+  var id=document.getElementById('sf-id').value;
+  var body={
+    phone:document.getElementById('sf-phone').value.trim()||null,
+    qid:document.getElementById('sf-qid').value.trim()||null,
+    qid_issue:document.getElementById('sf-qid-issue').value||null,
+    qid_expiry:document.getElementById('sf-qid-expiry').value||null,
+    hire_date:document.getElementById('sf-hire').value||null,
+    salary:parseFloat(document.getElementById('sf-salary').value)||0,
+    loan_balance:parseFloat(document.getElementById('sf-loan').value)||0,
+    ticket_cost:parseFloat(document.getElementById('sf-ticket').value)||0,
+    other_costs:parseFloat(document.getElementById('sf-other').value)||0
+  };
+  await api('PATCH','users',body,'?id=eq.'+id);
+  var u=allUsers.find(x=>String(x.id)===String(id)); if(u) Object.assign(u,body);
+  closeModal('staffModal'); renderStaff();
+  showToast(T('saved'),'success');
+}
+
+async function payStaffSalary(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  var amount=u.salary||0;
+  if(amount<=0){ showToast(lang==='ar'?'لا يوجد راتب':lang==='en'?'No salary set':'حقوقی تعیین نشده','error'); return; }
+  if(!confirm((lang==='ar'?'دفع راتب ':lang==='en'?'Pay salary ':'پرداخت حقوق ')+u.name+' · '+amount.toLocaleString()+' QAR؟')) return;
+  // Record as expense (deducts from finance balance)
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name,category:'salary'})});
+  var today=new Date().toISOString().slice(0,10);
+  await api('PATCH','users',{last_salary_paid:today},'?id=eq.'+id);
+  u.last_salary_paid=today;
+  closeModal('staffModal');
+  await loadAll();
+  showToast(lang==='ar'?'تم دفع الراتب':lang==='en'?'Salary paid':'حقوق پرداخت شد','success');
+}
+
+async function toggleStaffPause(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  var newState=!u.is_paused;
+  await api('PATCH','users',{is_paused:newState},'?id=eq.'+id);
+  u.is_paused=newState;
+  closeModal('staffModal'); renderStaff();
+  showToast(newState?(lang==='ar'?'تم الإيقاف':lang==='en'?'Paused':'متوقف شد'):(lang==='ar'?'تم الاستئناف':lang==='en'?'Resumed':'ادامه یافت'),'success');
 }
 
 // ===== NOTIFICATIONS =====
@@ -3307,6 +3418,27 @@ function renderNotifications(){
     html+='<div class="notif-item unread" style="border-right:3px solid var(--green)"><div style="font-size:18px">🚚</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--green)">'+alertTxt+'</div><div style="font-size:12px;color:var(--text2)">'+o.product+' — '+(o.customer_name||'-')+'</div>'+waBtn+'</div></div>';
   });
   allUsers.filter(u=>u.status==='pending').forEach(u=>{ if(currentUser?.role==='manager') html+=`<div class="notif-item unread"><div style="font-size:18px">👤</div><div><div style="font-size:13px;font-weight:700">${T('pending')}</div><div style="font-size:12px;color:var(--text2)">${u.name} - ${u.department}</div></div></div>`; });
+  // Salary due + QID expiry alerts (manager only)
+  if(currentUser?.role==='manager'){
+    allUsers.filter(u=>u.status==='active'&&u.salary>0&&u.hire_date&&!u.is_paused).forEach(u=>{
+      var d=salaryDueInfo(u);
+      if(d.daysLeft<=5){
+        var txt=d.overdue
+          ? (lang==='ar'?'الراتب متأخر!':lang==='en'?'Salary overdue!':'حقوق عقب افتاده!')
+          : (lang==='ar'?('الراتب خلال '+d.daysLeft+' يوم'):lang==='en'?('Salary due in '+d.daysLeft+'d'):('سررسید حقوق تا '+d.daysLeft+' روز'));
+        html+='<div class="notif-item unread" style="border-right:3px solid var(--accent)" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">💰</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--accent)">'+txt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+(u.salary||0).toLocaleString()+' QAR</div></div></div>';
+      }
+    });
+    allUsers.filter(u=>u.status==='active'&&u.qid_expiry).forEach(u=>{
+      var days=Math.ceil((new Date(u.qid_expiry)-now)/(1000*60*60*24));
+      if(days<=30){
+        var qtxt=days<0
+          ? (lang==='ar'?'انتهت البطاقة!':lang==='en'?'QID expired!':'QID منقضی شده!')
+          : (lang==='ar'?('انتهاء البطاقة خلال '+days+' يوم'):lang==='en'?('QID expires in '+days+'d'):('انقضای QID تا '+days+' روز'));
+        html+='<div class="notif-item unread" style="border-right:3px solid var(--red)" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">🪪</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--red)">'+qtxt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+u.qid_expiry+'</div></div></div>';
+      }
+    });
+  }
   // Low stock alerts
   allInventory.filter(it=>(it.quantity||0)<=(it.min_quantity||0)).forEach(it=>{
     html+=`<div class="notif-item unread"><div style="font-size:18px">📦</div><div><div style="font-size:13px;font-weight:700">${lang==='ar'?'مخزون منخفض':lang==='en'?'Low stock':'موجودی کم'}: ${it.name}</div><div style="font-size:12px;color:var(--red)">${lang==='ar'?'المتبقي':lang==='en'?'Remaining':'باقیمانده'}: ${it.quantity||0} ${it.unit}</div></div></div>`;
