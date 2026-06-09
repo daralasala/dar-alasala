@@ -359,6 +359,11 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openAssetModal()">➕ <span>إضافة أصل / افزودن دارایی</span></button>
       <div id="assets-list"></div>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleFixedExp()" id="fb-fixed">🔁 <span>المصاريف الثابتة / هزینه‌های ثابت</span></button>
+    <div id="fixed-exp-section" style="display:none;margin-bottom:14px">
+      <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openFixedExpModal()">➕ <span id="fe-add-label">إضافة مصروف ثابت / افزودن هزینه ثابت</span></button>
+      <div id="fixed-exp-list"></div>
+    </div>
     <div class="section-title" id="sl-transactions">تراکنش‌های اخیر</div>
     <div id="transactions-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -533,6 +538,23 @@ body.en .search-icon{right:auto;left:10px;}
     </div>
     <input type="hidden" id="sp-order-id">
     <button class="btn btn-primary btn-block" onclick="confirmStartProduction()">✅ <span id="sp-confirm">شروع تولید</span></button>
+  </div>
+</div>
+
+<!-- FIXED EXPENSE MODAL -->
+<div class="modal-overlay" id="fixedExpModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🔁 <span id="fem-title">هزینه ثابت</span></div><button class="modal-close" onclick="closeModal('fixedExpModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="fem-name">نام هزینه</label><input class="form-control" type="text" id="fe-name" placeholder="مثلا: اجاره کارخانه، تلفن..."></div>
+    <div class="form-group"><label class="form-label" id="fem-amount">مبلغ (QAR)</label><input class="form-control" type="number" id="fe-amount" value="0"></div>
+    <div class="form-group"><label class="form-label" id="fem-cat">دسته‌بندی</label><input class="form-control" type="text" id="fe-cat" placeholder="مثلا: اجاره، قبوض..."></div>
+    <div class="form-group"><label class="form-label" id="fem-day">روز سررسید (روز ماه ۱-۳۱)</label><input class="form-control" type="number" id="fe-day" min="1" max="31" value="1"></div>
+    <div class="form-group"><label class="form-label" id="fem-img">عکس فاکتور</label>
+      <button type="button" class="btn btn-outline btn-block" onclick="pickFixedExpImage()">📷 <span id="fem-img-btn">انتخاب عکس</span></button>
+      <div id="fe-image-preview" style="margin-top:8px"></div>
+    </div>
+    <input type="hidden" id="fe-edit-id">
+    <button class="btn btn-primary btn-block" onclick="saveFixedExp()">💾 <span id="fem-save">ذخیره</span></button>
   </div>
 </div>
 
@@ -937,6 +959,7 @@ function setLang(l){
   document.getElementById('order-search').placeholder=l==='en'?'Search...':'البحث... / جستجو...';
   // Fixed assets button + section titles (were stuck in Persian/Arabic)
   safeSet('fb-assets','🏛️ '+(l==='en'?'Fixed Assets':l==='ar'?'الأصول الثابتة':'دارایی‌های ثابت'));
+  safeSet('fb-fixed','🔁 '+(l==='en'?'Fixed Expenses':l==='ar'?'المصاريف الثابتة':'هزینه‌های ثابت'));
   safeSet('inv-add-label', l==='en'?'Add material':l==='ar'?'إضافة مادة':'افزودن جنس به انبار');
   safeSet('cust-add-label', l==='en'?'Add customer':l==='ar'?'إضافة عميل':'افزودن مشتری');
   safeSet('cust-sync-label', l==='en'?'Import / Sync':l==='ar'?'استيراد / مزامنة':'همگام‌سازی');
@@ -1086,6 +1109,7 @@ async function loadAll(){
   loadSuppliers();
   loadInventory();
   loadAssets();
+  loadFixedExp();
   loadCustomers();
 }
 
@@ -2850,6 +2874,145 @@ async function loadAssets(){
   applyDepreciation();
 }
 
+// ===== FIXED EXPENSES (هزینه‌های ثابت ماهانه) =====
+var allFixedExp=[];
+var feImageData='';
+async function loadFixedExp(){
+  try {
+    var rows=await api('GET','fixed_expenses','','?select=*&order=due_day.asc');
+    allFixedExp=rows||[];
+  } catch(e){ allFixedExp=[]; }
+}
+function toggleFixedExp(){
+  var sec=document.getElementById('fixed-exp-section');
+  if(sec){ sec.style.display=sec.style.display==='none'?'block':'none'; if(sec.style.display==='block') renderFixedExp(); }
+}
+function fixedExpDueInfo(fe){
+  var now=new Date();
+  var day=Math.min(Math.max(fe.due_day||1,1),28);
+  var cand=new Date(now.getFullYear(),now.getMonth(),day);
+  if(fe.last_paid){
+    var lp=new Date(fe.last_paid);
+    if(lp.getFullYear()===cand.getFullYear()&&lp.getMonth()===cand.getMonth()){
+      cand=new Date(now.getFullYear(),now.getMonth()+1,day);
+    }
+  }
+  if(cand<now && !(fe.last_paid && new Date(fe.last_paid)>=cand)){
+    // overdue, keep
+  } else if(cand<now){
+    cand=new Date(now.getFullYear(),now.getMonth()+1,day);
+  }
+  var daysLeft=Math.ceil((cand-now)/(1000*60*60*24));
+  return {nextDate:cand.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0};
+}
+function renderFixedExp(){
+  var box=document.getElementById('fixed-exp-list'); if(!box) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(allFixedExp.length===0){ box.innerHTML='<div style="font-size:12px;color:var(--text2);text-align:center;padding:10px">'+T('no_data')+'</div>'; return; }
+  box.innerHTML=allFixedExp.map(function(fe){
+    var d=fixedExpDueInfo(fe);
+    var dueColor=d.overdue?'var(--red)':d.daysLeft<=5?'var(--orange)':'var(--text2)';
+    var thumb=fe.invoice_image?'<img src="'+fe.invoice_image+'" onclick="event.stopPropagation();showFixedExpImage('+fe.id+')" style="width:42px;height:42px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">':'<div style="width:42px;height:42px;background:var(--surface);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🔁</div>';
+    return '<div class="card" style="margin-bottom:8px;padding:10px">'+
+      '<div style="display:flex;gap:9px;align-items:center;margin-bottom:8px">'+thumb+
+      '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+fe.name+'</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+(fe.category||'')+' · '+(fe.amount||0).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:11px;color:'+dueColor+'">⏰ '+L('الاستحقاق','Due','سررسید')+': '+d.nextDate+(d.daysLeft<=5?' ('+d.daysLeft+' '+L('يوم','d','روز')+')':'')+'</div></div></div>'+
+      '<div style="display:flex;gap:6px">'+
+        '<button class="btn btn-green btn-sm" style="flex:1" onclick="payFixedExp('+fe.id+')">💰 '+L('دفع (خصم من المالية)','Pay (deduct)','پرداخت (کسر از مالی)')+'</button>'+
+        '<button class="btn btn-outline btn-sm" onclick="openFixedExpModal('+fe.id+')">✏️</button>'+
+        '<button class="btn btn-red btn-sm" onclick="deleteFixedExp('+fe.id+')">🗑️</button>'+
+      '</div></div>';
+  }).join('');
+}
+function openFixedExpModal(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('fem-title').textContent=id?L('تعديل مصروف ثابت','Edit fixed expense','ویرایش هزینه ثابت'):L('إضافة مصروف ثابت','Add fixed expense','افزودن هزینه ثابت');
+  document.getElementById('fem-name').textContent=L('اسم المصروف','Expense name','نام هزینه');
+  document.getElementById('fem-amount').textContent=L('المبلغ (QAR)','Amount (QAR)','مبلغ (QAR)');
+  document.getElementById('fem-cat').textContent=L('التصنيف','Category','دسته‌بندی');
+  document.getElementById('fem-day').textContent=L('يوم الاستحقاق (1-31)','Due day (1-31)','روز سررسید (۱-۳۱)');
+  document.getElementById('fem-img').textContent=L('صورة الفاتورة','Invoice photo','عکس فاکتور');
+  document.getElementById('fem-img-btn').textContent=L('اختر صورة','Choose photo','انتخاب عکس');
+  document.getElementById('fem-save').textContent=L('حفظ','Save','ذخیره');
+  feImageData='';
+  document.getElementById('fe-image-preview').innerHTML='';
+  if(id){
+    var fe=allFixedExp.find(x=>x.id===id);
+    if(fe){
+      document.getElementById('fe-edit-id').value=fe.id;
+      document.getElementById('fe-name').value=fe.name||'';
+      document.getElementById('fe-amount').value=fe.amount||0;
+      document.getElementById('fe-cat').value=fe.category||'';
+      document.getElementById('fe-day').value=fe.due_day||1;
+      feImageData=fe.invoice_image||'';
+      if(fe.invoice_image) document.getElementById('fe-image-preview').innerHTML='<img src="'+fe.invoice_image+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#fff">';
+    }
+  } else {
+    document.getElementById('fe-edit-id').value='';
+    document.getElementById('fe-name').value='';
+    document.getElementById('fe-amount').value=0;
+    document.getElementById('fe-cat').value='';
+    document.getElementById('fe-day').value=1;
+  }
+  openModal('fixedExpModal');
+}
+function pickFixedExpImage(){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      feImageData=await compressImage(input.files[0],0.6,1000);
+      document.getElementById('fe-image-preview').innerHTML='<img src="'+feImageData+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#fff">';
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+async function saveFixedExp(){
+  var id=document.getElementById('fe-edit-id').value;
+  var body={
+    name:document.getElementById('fe-name').value.trim(),
+    amount:parseFloat(document.getElementById('fe-amount').value)||0,
+    category:document.getElementById('fe-cat').value.trim()||null,
+    due_day:parseInt(document.getElementById('fe-day').value)||1,
+    invoice_image:feImageData||null
+  };
+  if(!body.name){ showToast(T('err_fill'),'error'); return; }
+  if(id){ await api('PATCH','fixed_expenses',body,'?id=eq.'+id); }
+  else { await api('POST','fixed_expenses',body); }
+  await loadFixedExp();
+  closeModal('fixedExpModal'); renderFixedExp();
+  showToast(T('saved'),'success');
+}
+async function payFixedExp(id){
+  var fe=allFixedExp.find(x=>x.id===id); if(!fe) return;
+  var amount=fe.amount||0;
+  if(amount<=0){ showToast(T('err_fill'),'error'); return; }
+  if(!confirm((lang==='ar'?'دفع ':lang==='en'?'Pay ':'پرداخت ')+fe.name+' · '+amount.toLocaleString()+' QAR؟')) return;
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'مصروف ثابت: ':lang==='en'?'Fixed expense: ':'هزینه ثابت: ')+fe.name,category:fe.category||'fixed'})});
+  var today=new Date().toISOString().slice(0,10);
+  await api('PATCH','fixed_expenses',{last_paid:today},'?id=eq.'+id);
+  fe.last_paid=today;
+  await loadAll();
+  showToast(lang==='ar'?'تم الدفع':lang==='en'?'Paid':'پرداخت شد','success');
+}
+async function deleteFixedExp(id){
+  if(!confirm(lang==='ar'?'حذف؟':lang==='en'?'Delete?':'حذف شود؟')) return;
+  await api('DELETE','fixed_expenses',null,'?id=eq.'+id);
+  await loadFixedExp(); renderFixedExp();
+  showToast(T('saved'),'success');
+}
+function showFixedExpImage(id){
+  var fe=allFixedExp.find(x=>x.id===id);
+  if(fe&&fe.invoice_image){
+    document.getElementById('lightbox-img').src=fe.invoice_image;
+    document.getElementById('lightbox').style.display='flex';
+  }
+}
+
+
 // Apply yearly 10% depreciation automatically based on time passed
 async function applyDepreciation(){
   var today=new Date();
@@ -3265,7 +3428,9 @@ function openStaffFile(id){
     fld('sf-hire',L('تاريخ بدء العمل','Hire date','تاریخ شروع کار'),u.hire_date,'date')+
     fld('sf-salary',L('الراتب الشهري (QAR)','Monthly salary (QAR)','حقوق ماهیانه (QAR)'),u.salary||0,'number')+
     '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','قرض و هزینه‌ها')+'</div>'+
-    fld('sf-loan',L('رصيد السلفة (QAR)','Loan balance (QAR)','مانده قرض (QAR)'),u.loan_balance||0,'number')+
+    fld('sf-loan',L('رصيد السلفة المتبقي (QAR)','Remaining loan balance (QAR)','مانده قرض (QAR)'),u.loan_balance||0,'number')+
+    fld('sf-loan-deduct',L('خصم من السلفة هذا الشهر (QAR)','Loan deduction this month (QAR)','کسر قرض این ماه (QAR)'),0,'number')+
+    '<div style="font-size:11px;color:var(--text2);margin:-4px 0 10px">'+L('يُخصم من راتب هذا الشهر وينقص من رصيد السلفة عند الدفع','Deducted from this month salary and subtracted from loan balance when paying','هنگام پرداخت حقوق، از حقوق این ماه کم و از مانده قرض کسر می‌شود')+'</div>'+
     fld('sf-ticket',L('تكلفة التذكرة (QAR)','Ticket cost (QAR)','هزینه بلیط (QAR)'),u.ticket_cost||0,'number')+
     fld('sf-other',L('تكاليف أخرى (QAR)','Other costs (QAR)','هزینه‌های دیگر (QAR)'),u.other_costs||0,'number')+
     '<input type="hidden" id="sf-id" value="'+u.id+'">'+
@@ -3321,14 +3486,29 @@ async function saveStaffFile(){
 
 async function payStaffSalary(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
-  var amount=u.salary||0;
-  if(amount<=0){ showToast(lang==='ar'?'لا يوجد راتب':lang==='en'?'No salary set':'حقوقی تعیین نشده','error'); return; }
-  if(!confirm((lang==='ar'?'دفع راتب ':lang==='en'?'Pay salary ':'پرداخت حقوق ')+u.name+' · '+amount.toLocaleString()+' QAR؟')) return;
-  // Record as expense (deducts from finance balance)
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name,category:'salary'})});
+  var salary=u.salary||0;
+  if(salary<=0){ showToast(lang==='ar'?'لا يوجد راتب':lang==='en'?'No salary set':'حقوقی تعیین نشده','error'); return; }
+  // Read loan deduction from the open form (default 0)
+  var deductEl=document.getElementById('sf-loan-deduct');
+  var loanDeduct=deductEl?(parseFloat(deductEl.value)||0):0;
+  var loanBal=u.loan_balance||0;
+  if(loanDeduct>loanBal) loanDeduct=loanBal; // can't deduct more than owed
+  var netPay=salary-loanDeduct; // actual amount handed to worker
+  if(netPay<0) netPay=0;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var msg=L('راتب','Salary','حقوق')+': '+salary.toLocaleString()+' QAR\n'+
+    (loanDeduct>0?(L('خصم السلفة','Loan deduction','کسر قرض')+': -'+loanDeduct.toLocaleString()+' QAR\n'):'')+
+    L('المدفوع للعامل','Paid to worker','پرداختی به کارگر')+': '+netPay.toLocaleString()+' QAR'+
+    (loanDeduct>0?('\n'+L('رصيد السلفة الجديد','New loan balance','مانده قرض جدید')+': '+(loanBal-loanDeduct).toLocaleString()+' QAR'):'');
+  if(!confirm(u.name+'\n\n'+msg)) return;
+  // Record NET pay as expense (deducts from finance balance)
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+(loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر قرض')+')'):''),category:'salary'})});
+  // Update loan balance + last paid date
   var today=new Date().toISOString().slice(0,10);
-  await api('PATCH','users',{last_salary_paid:today},'?id=eq.'+id);
-  u.last_salary_paid=today;
+  var patch={last_salary_paid:today};
+  if(loanDeduct>0) patch.loan_balance=loanBal-loanDeduct;
+  await api('PATCH','users',patch,'?id=eq.'+id);
+  Object.assign(u,patch);
   closeModal('staffModal');
   await loadAll();
   showToast(lang==='ar'?'تم دفع الراتب':lang==='en'?'Salary paid':'حقوق پرداخت شد','success');
@@ -3436,6 +3616,16 @@ function renderNotifications(){
           ? (lang==='ar'?'انتهت البطاقة!':lang==='en'?'QID expired!':'QID منقضی شده!')
           : (lang==='ar'?('انتهاء البطاقة خلال '+days+' يوم'):lang==='en'?('QID expires in '+days+'d'):('انقضای QID تا '+days+' روز'));
         html+='<div class="notif-item unread" style="border-right:3px solid var(--red)" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">🪪</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--red)">'+qtxt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+u.qid_expiry+'</div></div></div>';
+      }
+    });
+    // Fixed expense due alerts (5 days before)
+    allFixedExp.forEach(function(fe){
+      var d=fixedExpDueInfo(fe);
+      if(d.daysLeft<=5){
+        var ftxt=d.overdue
+          ? (lang==='ar'?'مصروف ثابت متأخر!':lang==='en'?'Fixed expense overdue!':'هزینه ثابت عقب افتاده!')
+          : (lang==='ar'?('مصروف ثابت خلال '+d.daysLeft+' يوم'):lang==='en'?('Fixed expense due in '+d.daysLeft+'d'):('سررسید هزینه ثابت تا '+d.daysLeft+' روز'));
+        html+='<div class="notif-item unread" style="border-right:3px solid var(--orange)" onclick="showTab(\'fin\');setTimeout(toggleFixedExp,200)"><div style="font-size:18px">🔁</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--orange)">'+ftxt+'</div><div style="font-size:12px;color:var(--text2)">'+fe.name+' · '+(fe.amount||0).toLocaleString()+' QAR</div></div></div>';
       }
     });
   }
