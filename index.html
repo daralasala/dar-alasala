@@ -468,6 +468,11 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">الكمية الحالية / موجودی فعلی</label><input class="form-control" type="number" id="inv-qty" value="0"></div>
     <div class="form-group"><label class="form-label">الحد الأدنى للتنبيه / حداقل موجودی (هشدار)</label><input class="form-control" type="number" id="inv-min" value="5"></div>
     <div class="form-group"><label class="form-label">سعر الوحدة / قیمت واحد (QAR)</label><input class="form-control" type="number" id="inv-price" value="0"></div>
+    <div class="form-group"><label class="form-label">صورة المادة / عکس جنس</label>
+      <input type="file" id="inv-image-file" accept="image/*" style="display:none" onchange="handleInvImage(this)">
+      <button type="button" class="btn btn-outline btn-block" onclick="document.getElementById('inv-image-file').click()">📷 <span>اختر صورة / انتخاب عکس</span></button>
+      <div id="inv-image-preview" style="margin-top:8px"></div>
+    </div>
     <button class="btn btn-primary btn-block" onclick="saveInventory()">💾 حفظ / ثبت</button>
   </div>
 </div>
@@ -493,6 +498,11 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label" id="rm-item">نام جنس / کالا</label><input class="form-control" type="text" id="req-item" placeholder="مثلا: چوب، رنگ، پیچ..."></div>
     <div class="form-group"><label class="form-label" id="rm-qty">مقدار / تعداد</label><input class="form-control" type="text" id="req-qty" placeholder="مثلا: 10 متر، 5 کیلو..."></div>
     <div class="form-group"><label class="form-label" id="rm-notes">توضیحات</label><textarea class="form-control" id="req-notes"></textarea></div>
+    <div class="form-group"><label class="form-label" id="rm-img-label">صورة / عکس</label>
+      <input type="file" id="req-image-file" accept="image/*" style="display:none" onchange="handleReqImage(this)">
+      <button type="button" class="btn btn-outline btn-block" onclick="document.getElementById('req-image-file').click()">📷 <span id="rm-img-btn">اختر صورة / انتخاب عکس</span></button>
+      <div id="req-image-preview" style="margin-top:8px"></div>
+    </div>
     <button class="btn btn-primary btn-block" onclick="savePurchaseRequest()">💾 <span id="rm-save">ثبت درخواست</span></button>
   </div>
 </div>
@@ -1179,6 +1189,9 @@ function renderOrders(){
 async function openOrderDetail(id){
   const o=allOrders.find(x=>x.id===id); if(!o) return;
   const rem=(o.total_price||0)-(o.prepay||0);
+  // Is this item part of a multi-item invoice? If so, delivery must be done at invoice level.
+  const invoiceSiblings = o.invoice_id ? allOrders.filter(x=>String(x.invoice_id)===String(o.invoice_id)) : [o];
+  const isMultiItem = invoiceSiblings.length>1;
   const sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const stepsHtml = allStages.map(s=>{
     const d = (s.order_num < (allStages.find(x=>x.name===o.current_stage)||{order_num:1}).order_num) ? 'done'
@@ -1240,7 +1253,9 @@ async function openOrderDetail(id){
     <div style="display:flex;gap:7px;flex-wrap:wrap">
       ${canTransfer&&o.status!=='delivered'&&o.status!=='pending_payment'?`<button class="btn btn-primary btn-sm" onclick="closeModal('orderDetailModal');openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
       ${isManager?`<button class="btn btn-green btn-sm" onclick="showToast(T('notify_sent'),'success')">📱</button>
-      <button class="btn btn-outline btn-sm" onclick="markDelivered(${o.id})">✅ ${T('status_delivered')}</button>
+      ${isMultiItem
+        ? `<button class="btn btn-outline btn-sm" onclick="closeModal('orderDetailModal');openInvoiceFolder('${o.invoice_id}')">📁 ${lang==='ar'?'التسليم من ملف الفاتورة':lang==='en'?'Deliver from invoice file':'تحویل از فایل فاکتور'}</button>`
+        : `<button class="btn btn-outline btn-sm" onclick="markDelivered(${o.id})">✅ ${T('status_delivered')}</button>`}
       <button class="btn btn-red btn-sm" onclick="deleteOrder(${o.id})">🗑️</button>`:''}
     </div>`}`;
   openModal('orderDetailModal');
@@ -1261,6 +1276,9 @@ function openInvoiceFolder(invId){
   var canStart=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
   var anyPending=items.some(function(it){return it.status==='pending_payment';});
   var pendingCount=items.filter(function(it){return it.status==='pending_payment';}).length;
+  var readyCount=items.filter(function(it){return it.status==='ready'||it.status==='delivered';}).length;
+  var allReady=items.every(function(it){return it.status==='ready'||it.status==='delivered';});
+  var allDelivered=items.every(function(it){return it.status==='delivered';});
   var sm={pending_payment:'badge-orange',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
 
   // Item rows — each still opens its own detail
@@ -1284,6 +1302,15 @@ function openInvoiceFolder(invId){
   var startAllBtn=(anyPending&&canStart)
     ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد الدفع وبدء إنتاج الفاتورة كاملة':lang==='en'?'Confirm payment & start production for whole invoice':'تایید پرداخت و شروع تولید کل فاکتور')+' ('+pendingCount+')</button>'
     : '';
+  // Deliver-whole-invoice button: enabled only when ALL items are ready
+  var deliverBtn='';
+  if(canStart && !anyPending && !allDelivered){
+    if(allReady){
+      deliverBtn='<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="markInvoiceDelivered(\''+invId+'\')">✅ '+(lang==='ar'?'تسليم الفاتورة كاملة':lang==='en'?'Deliver whole invoice':'تحویل کل فاکتور')+'</button>';
+    } else {
+      deliverBtn='<button class="btn btn-block" style="margin-bottom:8px;background:var(--surface2);color:var(--text3);cursor:not-allowed" disabled>⏳ '+(lang==='ar'?'التسليم متاح بعد جهوز كل الأصناف':lang==='en'?'Delivery available when all items ready':'تحویل بعد از آماده شدن همه اجناس فعال می‌شود')+' ('+readyCount+'/'+items.length+')</button>';
+    }
+  }
   var docBtns=(isManager||currentUser.department==='حسابدار')
     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+
         '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createInvoice('+firstId+')">🧾 '+(lang==='ar'?'فاتورة':lang==='en'?'Invoice':'فاکتور')+'</button>'+
@@ -1305,6 +1332,7 @@ function openInvoiceFolder(invId){
     '</div>'+
     docBtns+
     startAllBtn+
+    deliverBtn+
     '<div style="font-size:12px;font-weight:700;color:var(--text2);margin:10px 0 8px">'+(lang==='ar'?'الأصناف':lang==='en'?'Items':'اجناس')+'</div>'+
     itemsHtml;
   openModal('invoiceFolderModal');
@@ -1982,6 +2010,29 @@ async function markDelivered(id){
   closeModal('orderDetailModal'); await loadAll(); showToast(T('saved'),'success');
 }
 
+// Deliver the WHOLE invoice at once — only when every item is ready
+async function markInvoiceDelivered(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  if(items.length===0){ showToast(T('no_data'),'error'); return; }
+  var notReady=items.filter(function(o){return o.status!=='ready'&&o.status!=='delivered';});
+  if(notReady.length>0){
+    showToast(lang==='ar'?'لا يمكن التسليم: بعض الأصناف غير جاهزة':lang==='en'?'Cannot deliver: some items not ready':'تحویل ممکن نیست: بعضی اجناس آماده نیستند','error');
+    return;
+  }
+  if(!confirm(lang==='ar'?'تأكيد تسليم الفاتورة كاملة؟':lang==='en'?'Confirm delivery of the whole invoice?':'تحویل کل فاکتور تایید شود؟')) return;
+  for(var i=0;i<items.length;i++){
+    var o=items[i];
+    if(o.status==='delivered') continue;
+    var rem=(o.total_price||0)-(o.prepay||0);
+    await api('PATCH','orders',{status:'delivered',progress:100},'?id=eq.'+o.id);
+    if(rem>0){
+      await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+(o.customer_name||''),category:'payment'})});
+    }
+  }
+  closeModal('invoiceFolderModal'); await loadAll();
+  showToast(lang==='ar'?'تم تسليم الفاتورة':lang==='en'?'Invoice delivered':'فاکتور تحویل شد','success');
+}
+
 async function deleteOrder(id){
   if(!confirm('Delete / Delete?')) return;
   await api('DELETE','orders',null,`?id=eq.${id}`);
@@ -2241,6 +2292,22 @@ function showImgFull(transId){
   }
 }
 
+function showInvImage(id){
+  var it=allInventory.find(x=>x.id===id);
+  if(it&&it.image){
+    document.getElementById('lightbox-img').src=it.image;
+    document.getElementById('lightbox').style.display='flex';
+  }
+}
+
+function showReqImage(id){
+  var r=allRequests.find(x=>x.id===id);
+  if(r&&r.image){
+    document.getElementById('lightbox-img').src=r.image;
+    document.getElementById('lightbox').style.display='flex';
+  }
+}
+
 async function saveTransaction(type){
   const modalId=type==='income'?'incomeModal':'expenseModal';
   const amount=parseFloat(document.getElementById(type==='income'?'i-amount':'e-amount').value)||0;
@@ -2368,6 +2435,19 @@ async function editSupplierPhone(){
 }
 
 // ===== INVENTORY (انبار) =====
+var invImageData='';
+var reqImageData='';
+async function handleInvImage(input){
+  var file=input.files[0]; if(!file) return;
+  invImageData=await compressImage(file,0.6,900);
+  document.getElementById('inv-image-preview').innerHTML='<img src="'+invImageData+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#fff">';
+}
+async function handleReqImage(input){
+  var file=input.files[0]; if(!file) return;
+  reqImageData=await compressImage(file,0.6,900);
+  document.getElementById('req-image-preview').innerHTML='<img src="'+reqImageData+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#fff">';
+}
+
 async function loadInventory(){
   var inv=await api('GET','inventory','','?select=*&order=name.asc');
   allInventory=inv||[];
@@ -2384,10 +2464,14 @@ function renderInventory(){
   var canManage=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول خرید');
   box.innerHTML=allInventory.map(function(it){
     var low=(it.quantity||0)<=(it.min_quantity||0);
+    var thumb=it.image
+      ? '<img src="'+it.image+'" onclick="showInvImage('+it.id+')" style="width:46px;height:46px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">'
+      : '<div style="width:46px;height:46px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">📦</div>';
     return '<div class="card" style="margin-bottom:9px">'+
-      '<div class="card-header" style="margin-bottom:8px">'+
+      '<div class="card-header" style="margin-bottom:8px;align-items:center">'+
+      '<div style="display:flex;gap:9px;align-items:center;flex:1">'+thumb+
       '<div><div class="card-title">'+it.name+(low?' <span class="badge badge-red" style="font-size:9px">'+(lang==='ar'?'منخفض':lang==='en'?'Low':'کم')+'</span>':'')+'</div>'+
-      '<div class="card-sub">'+(lang==='ar'?'المخزون':lang==='en'?'Stock':'موجودی')+': <b style="color:'+(low?'var(--red)':'var(--green)')+'">'+(it.quantity||0)+'</b> '+it.unit+'</div></div>'+
+      '<div class="card-sub">'+(lang==='ar'?'المخزون':lang==='en'?'Stock':'موجودی')+': <b style="color:'+(low?'var(--red)':'var(--green)')+'">'+(it.quantity||0)+'</b> '+it.unit+'</div></div></div>'+
       (canManage?'<div style="text-align:left;font-size:11px;color:var(--text2)">'+(it.unit_price||0).toLocaleString()+' QAR</div>':'')+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
@@ -2407,6 +2491,8 @@ function openInventoryModal(){
   document.getElementById('inv-min').value='5';
   document.getElementById('inv-price').value='0';
   document.getElementById('inv-unit').value='عدد';
+  invImageData='';
+  document.getElementById('inv-image-preview').innerHTML='';
   openModal('inventoryModal');
 }
 
@@ -2419,6 +2505,8 @@ function editInventory(id){
   document.getElementById('inv-min').value=it.min_quantity||5;
   document.getElementById('inv-price').value=it.unit_price||0;
   document.getElementById('inv-unit').value=it.unit||'عدد';
+  invImageData=it.image||'';
+  document.getElementById('inv-image-preview').innerHTML=it.image?'<img src="'+it.image+'" style="width:100%;max-height:160px;object-fit:contain;border-radius:8px;background:#fff">':'';
   openModal('inventoryModal');
 }
 
@@ -2429,7 +2517,8 @@ async function saveInventory(){
     unit:document.getElementById('inv-unit').value,
     quantity:parseFloat(document.getElementById('inv-qty').value)||0,
     min_quantity:parseFloat(document.getElementById('inv-min').value)||0,
-    unit_price:parseFloat(document.getElementById('inv-price').value)||0
+    unit_price:parseFloat(document.getElementById('inv-price').value)||0,
+    image:invImageData||null
   };
   if(!body.name){ showToast(T('err_fill'),'error'); return; }
   if(id){ await api('PATCH','inventory',body,'?id=eq.'+id); }
@@ -2897,7 +2986,10 @@ async function renderRequests(){
     : list.map(r=>`
       <div class="card">
         <div class="card-header">
-          <div><div class="card-title">${r.item_name}</div><div class="card-sub">${r.quantity||''} · ${r.worker_name||''}</div></div>
+          <div style="display:flex;gap:9px;align-items:center;flex:1">
+            ${r.image?`<img src="${r.image}" onclick="showReqImage(${r.id})" style="width:46px;height:46px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">`:''}
+            <div><div class="card-title">${r.item_name}</div><div class="card-sub">${r.quantity||''} · ${r.worker_name||''}</div></div>
+          </div>
           <span class="badge ${stColors[r.status]||'badge-orange'}">${stText[r.status]||r.status}</span>
         </div>
         ${r.notes?`<div style="font-size:12px;color:var(--text2);margin-bottom:7px">${r.notes}</div>`:''}
@@ -2916,11 +3008,13 @@ async function savePurchaseRequest(){
   const qty=document.getElementById('req-qty').value.trim();
   const notes=document.getElementById('req-notes').value.trim();
   if(!item){ showToast(T('err_fill'),'error'); return; }
-  await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending'})});
+  await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending',image:reqImageData||null})});
   closeModal('reqModal');
   document.getElementById('req-item').value='';
   document.getElementById('req-qty').value='';
   document.getElementById('req-notes').value='';
+  reqImageData='';
+  document.getElementById('req-image-preview').innerHTML='';
   renderRequests();
   showToast(T('saved'),'success');
 }
