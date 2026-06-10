@@ -2037,34 +2037,36 @@ function createInvoice(orderId){
     invoiceItems=[{desc:o.product||'',qty:o.item_qty||1,price:o.item_price||o.total_price||0}];
   }
   renderInvoiceEditor(o);
+  var t=document.getElementById('inv-modal-title'); if(t) t.textContent=lang==='ar'?'فاتورة':lang==='en'?'Invoice':'فاکتور';
   openModal('invoiceModal');
 }
 
 function renderInvoiceEditor(o){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var invNo=o.id_code?o.id_code.replace('ORD-','INV-'):'INV-'+String(Date.now()).slice(-5);
   var today=new Date().toISOString().slice(0,10);
   var itemsRows=invoiceItems.map(function(it,i){
     return '<div style="display:flex;gap:5px;margin-bottom:6px">'+
-      '<input class="form-control" style="flex:3" placeholder="المواصفات" value="'+(it.desc||'').replace(/"/g,'&quot;')+'" oninput="invoiceItems['+i+'].desc=this.value">'+
-      '<input class="form-control" style="flex:1" type="number" placeholder="الكمية" value="'+it.qty+'" oninput="invoiceItems['+i+'].qty=parseFloat(this.value)||0;updateInvTotals()">'+
-      '<input class="form-control" style="flex:1.3" type="number" placeholder="السعر" value="'+it.price+'" oninput="invoiceItems['+i+'].price=parseFloat(this.value)||0;updateInvTotals()">'+
+      '<input class="form-control" style="flex:3" placeholder="'+L('المواصفات','Description','شرح')+'" value="'+(it.desc||'').replace(/"/g,'&quot;')+'" oninput="invoiceItems['+i+'].desc=this.value">'+
+      '<input class="form-control" style="flex:1" type="number" placeholder="'+L('الكمية','Qty','تعداد')+'" value="'+it.qty+'" oninput="invoiceItems['+i+'].qty=parseFloat(this.value)||0;updateInvTotals()">'+
+      '<input class="form-control" style="flex:1.3" type="number" placeholder="'+L('السعر','Price','قیمت')+'" value="'+it.price+'" oninput="invoiceItems['+i+'].price=parseFloat(this.value)||0;updateInvTotals()">'+
       '<button class="btn btn-red btn-sm" onclick="invoiceItems.splice('+i+',1);renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">✕</button>'+
     '</div>';
   }).join('');
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
   document.getElementById('invoice-editor').innerHTML=
-    '<div class="form-group"><label class="form-label">رقم الفاتورة / No</label><input class="form-control" id="inv-no" value="'+invNo+'"></div>'+
-    '<div class="form-group"><label class="form-label">اسم العميل / Customer</label><input class="form-control" id="inv-cust" value="'+(o.customer_name||'').replace(/"/g,'&quot;')+'"></div>'+
-    '<div class="form-group"><label class="form-label">رقم التواصل / Contact</label><input class="form-control" id="inv-contact" value="'+(o.customer_phone||'')+'"></div>'+
-    '<div class="form-group"><label class="form-label">التاريخ / Date</label><input class="form-control" type="date" id="inv-date" value="'+today+'"></div>'+
-    '<div class="form-label" style="margin-top:6px">الأصناف / Items</div>'+
-    '<div style="display:flex;gap:5px;margin-bottom:4px;font-size:10px;color:var(--text3)"><span style="flex:3">المواصفات</span><span style="flex:1">الكمية</span><span style="flex:1.3">السعر</span><span style="width:34px"></span></div>'+
+    '<div class="form-group"><label class="form-label">'+L('رقم الفاتورة','Invoice No','شماره فاکتور')+'</label><input class="form-control" id="inv-no" value="'+invNo+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('اسم العميل','Customer','نام مشتری')+'</label><input class="form-control" id="inv-cust" value="'+(o.customer_name||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('رقم التواصل','Contact','شماره تماس')+'</label><input class="form-control" id="inv-contact" value="'+(o.customer_phone||'')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('التاريخ','Date','تاریخ')+'</label><input class="form-control" type="date" id="inv-date" value="'+today+'"></div>'+
+    '<div class="form-label" style="margin-top:6px">'+L('الأصناف','Items','اجناس')+'</div>'+
+    '<div style="display:flex;gap:5px;margin-bottom:4px;font-size:10px;color:var(--text3)"><span style="flex:3">'+L('المواصفات','Description','شرح')+'</span><span style="flex:1">'+L('الكمية','Qty','تعداد')+'</span><span style="flex:1.3">'+L('السعر','Price','قیمت')+'</span><span style="width:34px"></span></div>'+
     itemsRows+
-    '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ إضافة صنف / افزودن قلم</button>'+
-    '<div class="form-group"><label class="form-label">الخصم / تخفیف (QAR)</label><input class="form-control" type="number" id="inv-discount" value="0" oninput="updateInvTotals()"></div>'+
-    '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">الإجمالي / Total</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">بعد الخصم / بعد تخفیف</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
-    '<button class="btn btn-primary btn-block" onclick="downloadInvoicePDF('+o.id+')">🖨️ طباعة وحفظ PDF / چاپ و ذخیره PDF</button>'+
-    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendInvoiceWhatsApp('+o.id+')">💬 رسالة واتساب / پیام واتساپ</button>';
+    '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ '+L('إضافة صنف','Add item','افزودن قلم')+'</button>'+
+    '<div class="form-group"><label class="form-label">'+L('الخصم','Discount','تخفیف')+' (QAR)</label><input class="form-control" type="number" id="inv-discount" value="0" oninput="updateInvTotals()"></div>'+
+    '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">'+L('الإجمالي','Total','مبلغ کل')+'</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">'+L('بعد الخصم','After discount','بعد از تخفیف')+'</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
+    '<button class="btn btn-primary btn-block" onclick="downloadInvoicePDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
+    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendInvoiceWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
 }
 
 function updateInvTotals(){
@@ -2261,10 +2263,12 @@ function createContract(orderId){
     contractItems=[o.product||''];
   }
   renderContractEditor(o);
+  var ct=document.getElementById('contract-title'); if(ct) ct.textContent=lang==='ar'?'عقد':lang==='en'?'Contract':'قرارداد';
   openModal('contractModal');
 }
 
 function renderContractEditor(o){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var contractNo=o.id_code?o.id_code.replace('ORD-','C-'):'C-'+String(Date.now()).slice(-5);
   var today=new Date().toISOString().slice(0,10);
   var prepay=o.prepay||0;
@@ -2282,21 +2286,21 @@ function renderContractEditor(o){
     '</div>';
   }).join('');
   document.getElementById('contract-editor').innerHTML=
-    '<div class="form-group"><label class="form-label">رقم العقد / شماره قرارداد</label><input class="form-control" id="c-no" value="'+contractNo+'"></div>'+
-    '<div class="form-group"><label class="form-label">التاريخ / تاریخ</label><input class="form-control" type="date" id="c-date" value="'+today+'"></div>'+
-    '<div class="form-group"><label class="form-label">اسم العميل (الطرف الثاني)</label><input class="form-control" id="c-cust" value="'+(o.customer_name||'').replace(/"/g,'&quot;')+'"></div>'+
-    '<div class="form-group"><label class="form-label">الرقم الشخصي / شماره شخصی</label><input class="form-control" id="c-id" value=""></div>'+
-    '<div class="form-group"><label class="form-label">هاتف / تلفن</label><input class="form-control" id="c-phone" value="'+(o.customer_phone||'')+'"></div>'+
-    '<div class="form-group"><label class="form-label">الموقع / موقعیت</label><input class="form-control" id="c-loc" value=""></div>'+
-    '<div class="form-label" style="margin-top:6px">الأعمال / کارها (بنود)</div>'+
+    '<div class="form-group"><label class="form-label">'+L('رقم العقد','Contract No','شماره قرارداد')+'</label><input class="form-control" id="c-no" value="'+contractNo+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('التاريخ','Date','تاریخ')+'</label><input class="form-control" type="date" id="c-date" value="'+today+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('اسم العميل (الطرف الثاني)','Customer (2nd party)','نام مشتری')+'</label><input class="form-control" id="c-cust" value="'+(o.customer_name||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('الرقم الشخصي','Personal ID','شماره شخصی')+'</label><input class="form-control" id="c-id" value=""></div>'+
+    '<div class="form-group"><label class="form-label">'+L('هاتف','Phone','تلفن')+'</label><input class="form-control" id="c-phone" value="'+(o.customer_phone||'')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('الموقع','Location','موقعیت')+'</label><input class="form-control" id="c-loc" value=""></div>'+
+    '<div class="form-label" style="margin-top:6px">'+L('الأعمال (بنود)','Work items','کارها (بندها)')+'</div>'+
     itemsRows+
-    '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="contractItems.push(\'\');renderContractEditor(allOrders.find(x=>x.id==='+o.id+'))">+ إضافة بند / افزودن بند</button>'+
-    '<div class="form-group"><label class="form-label">التكلفة الإجمالية (QAR) / مبلغ کل</label><input class="form-control" type="number" id="c-total" value="'+total+'" oninput="updateContractPay()"></div>'+
-    '<div class="form-group"><label class="form-label">دفعة عند التوقيع / پیش‌پرداخت</label><input class="form-control" type="number" id="c-prepay" value="'+prepay+'" oninput="updateContractPay()"></div>'+
-    '<div class="form-group"><label class="form-label">دفعة عند المعاينة / باقیمانده</label><input class="form-control" type="number" id="c-rem" value="'+rem+'" readonly></div>'+
-    '<div class="form-group"><label class="form-label">مدة التنفيذ / مدت اجرا</label><input class="form-control" id="c-duration" value="40 : 50 يوم عمل"></div>'+
-    '<button class="btn btn-primary btn-block" onclick="downloadContractPDF('+o.id+')">🖨️ طباعة وحفظ PDF / چاپ و ذخیره PDF</button>'+
-    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendContractWhatsApp('+o.id+')">💬 رسالة واتساب / پیام واتساپ</button>';
+    '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="contractItems.push(\'\');renderContractEditor(allOrders.find(x=>x.id==='+o.id+'))">+ '+L('إضافة بند','Add item','افزودن بند')+'</button>'+
+    '<div class="form-group"><label class="form-label">'+L('التكلفة الإجمالية','Total cost','مبلغ کل')+' (QAR)</label><input class="form-control" type="number" id="c-total" value="'+total+'" oninput="updateContractPay()"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('دفعة عند التوقيع','Payment on signing','پیش‌پرداخت')+'</label><input class="form-control" type="number" id="c-prepay" value="'+prepay+'" oninput="updateContractPay()"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('دفعة عند المعاينة','Payment on viewing','باقیمانده')+'</label><input class="form-control" type="number" id="c-rem" value="'+rem+'" readonly></div>'+
+    '<div class="form-group"><label class="form-label">'+L('مدة التنفيذ','Lead time','مدت اجرا')+'</label><input class="form-control" id="c-duration" value="40 : 50 '+L('يوم عمل','working days','روز کاری')+'"></div>'+
+    '<button class="btn btn-primary btn-block" onclick="downloadContractPDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
+    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendContractWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
 }
 
 function updateContractPay(){
