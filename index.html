@@ -393,6 +393,7 @@ body.en .search-icon{right:auto;left:10px;}
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
+    <button class="btn btn-outline btn-block" onclick="openUsageHistory()" id="usage-history-btn" style="margin-bottom:12px;display:none">📋 <span id="usage-history-label">سجل السحب / تاریخچه برداشت‌ها</span></button>
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
@@ -494,6 +495,14 @@ body.en .search-icon{right:auto;left:10px;}
       <select class="form-control" id="usage-order"><option value="">-- بدون سفارش / عمومی --</option></select>
     </div>
     <button class="btn btn-primary btn-block" onclick="saveUsage()">✅ تأكيد السحب / ثبت برداشت</button>
+  </div>
+</div>
+
+<!-- USAGE HISTORY MODAL -->
+<div class="modal-overlay" id="usageHistoryModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">📋 <span id="uh-title">تاریخچه برداشت</span></div><button class="modal-close" onclick="closeModal('usageHistoryModal')">✕</button></div>
+    <div id="usage-history-content"></div>
   </div>
 </div>
 
@@ -1057,6 +1066,7 @@ function refreshStaticLabels(l){
   safeSet('fe-add-label',P('إضافة مصروف ثابت','Add fixed expense','افزودن هزینه ثابت'));
   safeSet('fb-assets-lbl',P('الأصول الثابتة','Fixed Assets','دارایی‌های ثابت'));
   safeSet('fb-fixed-lbl',P('المصاريف الثابتة','Fixed Expenses','هزینه‌های ثابت'));
+  safeSet('usage-history-label',P('سجل السحب','Withdrawal history','تاریخچه برداشت‌ها'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
@@ -3015,6 +3025,10 @@ async function loadInventory(){
 function renderInventory(){
   var box=document.getElementById('inventory-list');
   if(!box) return;
+  // Usage-history button: manager & accountant only
+  var canSeeUsage=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
+  var uhBtn=document.getElementById('usage-history-btn');
+  if(uhBtn) uhBtn.style.display=canSeeUsage?'':'none';
   if(allInventory.length===0){
     box.innerHTML='<div class="empty-state"><div class="empty-icon">📦</div><div>'+T('no_data')+'</div></div>';
     return;
@@ -3034,6 +3048,7 @@ function renderInventory(){
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':lang==='en'?'Withdraw':'برداشت')+'</button>'+
+      (canSeeUsage?'<button class="btn btn-outline btn-sm" onclick="openItemUsageHistory('+it.id+')">📋 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>':'')+
       (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
       ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" onclick="deleteInventory('+it.id+')">🗑️</button>':'')+
@@ -3138,6 +3153,45 @@ async function saveUsage(){
   renderInventory();
   // Check low stock -> notification handled in renderNotifications
   showToast(T('saved'),'success');
+}
+
+// ===== USAGE HISTORY =====
+async function fetchUsageHistory(invId){
+  var q=invId?('?select=*&inventory_id=eq.'+invId+'&order=created_at.desc'):'?select=*&order=created_at.desc&limit=200';
+  try { return await api('GET','inventory_usage','',q); } catch(e){ return []; }
+}
+function renderUsageList(rows,titleText){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('uh-title').textContent=titleText||L('سجل السحب','Withdrawal history','تاریخچه برداشت');
+  var box=document.getElementById('usage-history-content');
+  if(!rows||rows.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">📋</div><div>'+T('no_data')+'</div></div>'; return; }
+  box.innerHTML=rows.map(function(r){
+    var when=r.created_at?r.created_at.slice(0,16).replace('T',' '):'';
+    var orderTxt=r.order_code?(' · '+r.order_code):(r.order_id?(' · #'+r.order_id):' · '+L('عام','General','عمومی'));
+    return '<div class="card" style="padding:10px;margin-bottom:7px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-size:13px;font-weight:700">'+r.item_name+'</div>'+
+        '<div style="font-size:13px;font-weight:800;color:var(--red)">−'+(r.quantity||0)+' '+(r.unit||'')+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:3px">👷 '+(r.worker_name||'-')+orderTxt+'</div>'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:2px">🕐 '+when+'</div>'+
+    '</div>';
+  }).join('');
+}
+async function openUsageHistory(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('usage-history-content').innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  openModal('usageHistoryModal');
+  var rows=await fetchUsageHistory(null);
+  renderUsageList(rows,L('سجل كل السحوبات','All withdrawals','تاریخچه همه برداشت‌ها'));
+}
+async function openItemUsageHistory(invId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var it=allInventory.find(x=>x.id===invId);
+  document.getElementById('usage-history-content').innerHTML='<div class="loading"><div class="spinner"></div></div>';
+  openModal('usageHistoryModal');
+  var rows=await fetchUsageHistory(invId);
+  renderUsageList(rows,(L('سحوبات','Withdrawals','برداشت‌های'))+' '+(it?it.name:''));
 }
 
 // ===== ASSETS (دارایی‌های ثابت با استهلاک) =====
