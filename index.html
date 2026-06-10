@@ -2699,14 +2699,25 @@ function renderFinance(){
   var incCard=document.getElementById('f-income')?.closest('.fin-card');
   var balCard=document.getElementById('f-balance')?.closest('.fin-card');
   var incBtn=document.getElementById('fb-income');
+  var assetsBtn=document.getElementById('fb-assets');
+  var assetsSec=document.getElementById('assets-section');
+  var fixedBtn=document.getElementById('fb-fixed');
+  var fixedSec=document.getElementById('fixed-exp-section');
   if(isPurchasing){
     if(incCard) incCard.style.display='none';
     if(balCard) balCard.style.display='none';
     if(incBtn) incBtn.style.display='none';
+    // Fixed assets & fixed expenses are manager/accountant only
+    if(assetsBtn) assetsBtn.style.display='none';
+    if(assetsSec) assetsSec.style.display='none';
+    if(fixedBtn) fixedBtn.style.display='none';
+    if(fixedSec) fixedSec.style.display='none';
   } else {
     if(incCard) incCard.style.display='';
     if(balCard) balCard.style.display='';
     if(incBtn) incBtn.style.display='';
+    if(assetsBtn) assetsBtn.style.display='';
+    if(fixedBtn) fixedBtn.style.display='';
     document.getElementById('f-income').textContent=income.toLocaleString()+' QAR';
     document.getElementById('f-balance').textContent=(income-expense).toLocaleString()+' QAR';
   }
