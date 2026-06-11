@@ -294,6 +294,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
+    <button class="tab" onclick="showTab('personal')" id="tab-personal" style="display:none">💳 <span id="t-personal">مخارج شخصی</span></button>
   </div>
 
   <!-- DASHBOARD -->
@@ -392,6 +393,13 @@ body.en .search-icon{right:auto;left:10px;}
     <div id="notif-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
+  <!-- PERSONAL EXPENSES -->
+  <div class="page" id="page-personal">
+    <button class="btn btn-primary btn-block" onclick="openPersonalExpModal()" style="margin-bottom:12px">➕ <span id="pe-add-label">إضافة مصروف / افزودن خرج</span></button>
+    <div id="personal-summary"></div>
+    <div id="personal-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
@@ -412,6 +420,30 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- CUSTOMER ADD/EDIT MODAL -->
+<!-- PERSONAL EXPENSE MODAL -->
+<div class="modal-overlay" id="personalExpModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">💳 <span id="pem-title">افزودن خرج</span></div><button class="modal-close" onclick="closeModal('personalExpModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="pem-amount">مبلغ (QAR)</label><input class="form-control" type="number" id="pe-amount" value="0"></div>
+    <div class="form-group"><label class="form-label" id="pem-cat">دسته‌بندی</label>
+      <select class="form-control" id="pe-cat">
+        <option value="غذا">🍽️ غذا</option>
+        <option value="قبوض">🧾 قبوض</option>
+        <option value="خرید">🛍️ خرید</option>
+        <option value="حمل‌ونقل">🚗 حمل‌ونقل</option>
+        <option value="سلامت">💊 سلامت</option>
+        <option value="آموزش">📚 آموزش</option>
+        <option value="سرگرمی">🎮 سرگرمی</option>
+        <option value="سایر">📦 سایر</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label" id="pem-desc">توضیحات</label><input class="form-control" type="text" id="pe-desc"></div>
+    <div class="form-group"><label class="form-label" id="pem-date">تاریخ</label><input class="form-control" type="date" id="pe-date"></div>
+    <input type="hidden" id="pe-edit-id">
+    <button class="btn btn-primary btn-block" onclick="savePersonalExp()">💾 <span id="pem-save">ذخیره</span></button>
+  </div>
+</div>
+
 <!-- CUSTOMER HISTORY MODAL -->
 <div class="modal-overlay" id="customerHistoryModal">
   <div class="modal" style="max-height:92vh">
@@ -632,6 +664,10 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label" id="as-dept-lbl">سمت / تخصص</label>
       <select class="form-control" id="as-dept"></select>
     </div>
+    <label style="display:flex;align-items:center;gap:8px;padding:9px;background:var(--surface2);border-radius:8px;margin-bottom:10px;cursor:pointer;font-size:13px">
+      <input type="checkbox" id="as-family" style="width:17px;height:17px" onchange="toggleFamilyMode()">
+      <span id="as-family-lbl">عضو خانواده (فقط مخارج شخصی)</span>
+    </label>
     <div id="as-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></div>
     <button class="btn btn-primary btn-block" onclick="addStaffMember()">💾 <span id="as-save">افزودن کارگر</span></button>
   </div>
@@ -1119,6 +1155,9 @@ function refreshStaticLabels(l){
   safeSet('usage-history-label',P('سجل السحب','Withdrawal history','تاریخچه برداشت‌ها'));
   safeSet('add-staff-label',P('إضافة موظف','Add employee','افزودن کارگر'));
   safeSet('manage-titles-label',P('إدارة المسميات','Manage titles','مدیریت سمت‌ها'));
+  safeSet('t-personal',P('مصاريفي','Personal','مخارج شخصی'));
+  safeSet('pe-add-label',P('إضافة مصروف','Add expense','افزودن خرج'));
+  safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
@@ -1309,14 +1348,18 @@ async function doRegister(){
 
 // ===== ACCESS CONTROL =====
 // All possible tabs (dashboard & notify always available to any logged-in user)
-var ALL_TABS=['dashboard','orders','production','inventory','customers','finance','staff','requests','notify'];
+var ALL_TABS=['dashboard','orders','production','inventory','customers','finance','staff','requests','notify','personal'];
 // Tabs that the manager grants individually
-var GRANTABLE_TABS=['orders','production','inventory','customers','finance','staff','requests'];
+var GRANTABLE_TABS=['orders','production','inventory','customers','finance','staff','requests','personal'];
 
 function getUserPermissions(u){
   u=u||currentUser;
   if(!u) return [];
   if(u.role==='manager') return ALL_TABS.slice(); // manager sees everything
+  // Family members see ONLY personal expenses
+  if(u.role==='family'||u.department==='خانواده'){
+    return ['personal'];
+  }
   // If explicit permissions set, use them
   if(u.permissions){
     try {
@@ -1341,6 +1384,14 @@ function applyTabPermissions(){
     var el=document.getElementById('tab-'+t);
     if(el) el.style.display=allowed.indexOf(t)>=0?'':'none';
   });
+  // Family role: hide everything except personal (even dashboard/notify)
+  var isFamily=currentUser&&(currentUser.role==='family'||currentUser.department==='خانواده');
+  ['dashboard','notify'].forEach(function(t){
+    var el=document.getElementById('tab-'+t);
+    if(el) el.style.display=isFamily?'none':'';
+  });
+  // If family, jump straight to personal tab
+  if(isFamily){ showTab('personal'); }
 }
 
 function enterApp(){
@@ -1391,6 +1442,7 @@ function showTab(tab){
   if(tab==='inventory') loadInventory();
   if(tab==='customers') loadCustomers();
   if(tab==='notify') renderNotifications();
+  if(tab==='personal'){ loadPersonalExp().then(renderPersonal); }
 }
 
 // ===== LOAD =====
@@ -3358,6 +3410,121 @@ async function loadAssets(){
 // ===== FIXED EXPENSES (هزینه‌های ثابت ماهانه) =====
 var allFixedExp=[];
 var feImageData='';
+// ===== PERSONAL EXPENSES (separate from factory finance) =====
+var allPersonalExp=[];
+async function loadPersonalExp(){
+  try {
+    var rows=await api('GET','personal_expenses','','?select=*&order=expense_date.desc&limit=300');
+    allPersonalExp=rows||[];
+  } catch(e){ allPersonalExp=[]; }
+}
+// Family members see only their own; manager sees all
+function visiblePersonalExp(){
+  if(currentUser&&currentUser.role==='manager') return allPersonalExp;
+  var me=currentUser?currentUser.name:'';
+  return allPersonalExp.filter(function(e){return e.spent_by===me;});
+}
+function openPersonalExpModal(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('pem-title').textContent=id?L('تعديل مصروف','Edit expense','ویرایش خرج'):L('إضافة مصروف','Add expense','افزودن خرج');
+  document.getElementById('pem-amount').textContent=L('المبلغ (QAR)','Amount (QAR)','مبلغ (QAR)');
+  document.getElementById('pem-cat').textContent=L('التصنيف','Category','دسته‌بندی');
+  document.getElementById('pem-desc').textContent=L('الوصف','Description','توضیحات');
+  document.getElementById('pem-date').textContent=L('التاريخ','Date','تاریخ');
+  document.getElementById('pem-save').textContent=L('حفظ','Save','ذخیره');
+  if(id){
+    var e=allPersonalExp.find(x=>x.id===id);
+    if(e){
+      document.getElementById('pe-edit-id').value=e.id;
+      document.getElementById('pe-amount').value=e.amount||0;
+      document.getElementById('pe-cat').value=e.category||'سایر';
+      document.getElementById('pe-desc').value=e.description||'';
+      document.getElementById('pe-date').value=e.expense_date||new Date().toISOString().slice(0,10);
+    }
+  } else {
+    document.getElementById('pe-edit-id').value='';
+    document.getElementById('pe-amount').value=0;
+    document.getElementById('pe-cat').value='غذا';
+    document.getElementById('pe-desc').value='';
+    document.getElementById('pe-date').value=new Date().toISOString().slice(0,10);
+  }
+  openModal('personalExpModal');
+}
+async function savePersonalExp(){
+  var id=document.getElementById('pe-edit-id').value;
+  var body={
+    amount:parseFloat(document.getElementById('pe-amount').value)||0,
+    category:document.getElementById('pe-cat').value,
+    description:document.getElementById('pe-desc').value.trim()||null,
+    expense_date:document.getElementById('pe-date').value||new Date().toISOString().slice(0,10)
+  };
+  if(body.amount<=0){ showToast(T('err_fill'),'error'); return; }
+  if(id){ await api('PATCH','personal_expenses',body,'?id=eq.'+id); }
+  else { body.spent_by=currentUser?currentUser.name:''; await api('POST','personal_expenses',body); }
+  await loadPersonalExp();
+  closeModal('personalExpModal');
+  renderPersonal();
+  showToast(T('saved'),'success');
+}
+async function deletePersonalExp(id){
+  if(!confirm(lang==='ar'?'حذف؟':lang==='en'?'Delete?':'حذف شود؟')) return;
+  await api('DELETE','personal_expenses',null,'?id=eq.'+id);
+  await loadPersonalExp();
+  renderPersonal();
+  showToast(T('saved'),'success');
+}
+function renderPersonal(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var isManager=currentUser&&currentUser.role==='manager';
+  var list=visiblePersonalExp();
+  var now=new Date();
+  var thisMonth=list.filter(function(e){
+    if(!e.expense_date) return false;
+    var d=new Date(e.expense_date);
+    return d.getFullYear()===now.getFullYear()&&d.getMonth()===now.getMonth();
+  });
+  var monthTotal=thisMonth.reduce(function(s,e){return s+(e.amount||0);},0);
+  var allTotal=list.reduce(function(s,e){return s+(e.amount||0);},0);
+  // Summary
+  var summary='<div class="card" style="margin-bottom:12px">'+
+    '<div class="row"><span class="row-label">📅 '+L('مصروف هذا الشهر','This month','خرج این ماه')+'</span><span class="row-value" style="color:var(--accent)">'+monthTotal.toLocaleString()+' QAR</span></div>'+
+    '<div class="row" style="margin-bottom:0"><span class="row-label">💳 '+L('الإجمالي','Total','مجموع کل')+'</span><span class="row-value" style="color:var(--red)">'+allTotal.toLocaleString()+' QAR</span></div>'+
+  '</div>';
+  // Manager: per-person breakdown
+  if(isManager){
+    var byPerson={};
+    list.forEach(function(e){ var p=e.spent_by||'-'; byPerson[p]=(byPerson[p]||0)+(e.amount||0); });
+    var people=Object.keys(byPerson);
+    if(people.length>0){
+      summary+='<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:6px">'+L('حسب الشخص','By person','بر اساس شخص')+'</div>';
+      summary+='<div class="card" style="margin-bottom:12px">'+people.map(function(p,i){
+        return '<div class="row"'+(i===people.length-1?' style="margin-bottom:0"':'')+'><span class="row-label">👤 '+p+'</span><span class="row-value">'+byPerson[p].toLocaleString()+' QAR</span></div>';
+      }).join('')+'</div>';
+    }
+  }
+  document.getElementById('personal-summary').innerHTML=summary;
+  // List
+  var box=document.getElementById('personal-list');
+  if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">💳</div><div>'+T('no_data')+'</div></div>'; return; }
+  var catEmoji={'غذا':'🍽️','قبوض':'🧾','خرید':'🛍️','حمل‌ونقل':'🚗','سلامت':'💊','آموزش':'📚','سرگرمی':'🎮','سایر':'📦'};
+  box.innerHTML=list.map(function(e){
+    var canEdit=isManager||(e.spent_by===(currentUser?currentUser.name:''));
+    return '<div class="card" style="padding:10px;margin-bottom:7px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="display:flex;align-items:center;gap:8px">'+
+          '<span style="font-size:18px">'+(catEmoji[e.category]||'📦')+'</span>'+
+          '<div><div style="font-size:13px;font-weight:600">'+(e.description||e.category||'-')+'</div>'+
+          '<div style="font-size:11px;color:var(--text2)">'+(e.expense_date||'')+(isManager?(' · 👤 '+(e.spent_by||'-')):'')+'</div></div>'+
+        '</div>'+
+        '<div style="display:flex;align-items:center;gap:6px">'+
+          '<span style="font-size:14px;font-weight:800;color:var(--red)">−'+(e.amount||0).toLocaleString()+'</span>'+
+          (canEdit?'<button class="btn btn-outline btn-sm" onclick="openPersonalExpModal('+e.id+')">✏️</button><button class="btn btn-red btn-sm" onclick="deletePersonalExp('+e.id+')">🗑️</button>':'')+
+        '</div>'+
+      '</div>'+
+    '</div>';
+  }).join('');
+}
+
 async function loadFixedExp(){
   try {
     var rows=await api('GET','fixed_expenses','','?select=*&order=due_day.asc');
@@ -3981,8 +4148,18 @@ function openAddStaffModal(){
   document.getElementById('as-pass').value='';
   var deptSel=document.getElementById('as-dept');
   deptSel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+  var famCb=document.getElementById('as-family'); if(famCb) famCb.checked=false;
+  toggleFamilyMode();
   document.getElementById('as-err').style.display='none';
   openModal('addStaffModal');
+}
+
+function toggleFamilyMode(){
+  var isFam=document.getElementById('as-family').checked;
+  var deptSel=document.getElementById('as-dept');
+  var deptLbl=document.getElementById('as-dept-lbl');
+  // Family members don't need a job title
+  if(deptSel) deptSel.parentElement.style.display=isFam?'none':'';
 }
 
 async function addStaffMember(){
@@ -3995,14 +4172,19 @@ async function addStaffMember(){
   if(!name||!email||!pass){ err.style.display='block'; err.textContent=T('err_fill'); return; }
   var existing=await api('GET','users','','?email=eq.'+encodeURIComponent(email));
   if(existing&&existing.length>0){ err.style.display='block'; err.textContent=L('البريد مستخدم','Email already used','این ایمیل قبلاً استفاده شده'); return; }
-  // Manager creates worker -> active immediately, but NO access until granted
-  var res=await api('POST','users',{name:name,email:email,password:pass,role:'worker',department:dept||'-',status:'active',permissions:'[]'});
+  var isFamily=document.getElementById('as-family').checked;
+  var newUser=isFamily
+    ? {name:name,email:email,password:pass,role:'family',department:'خانواده',status:'active',permissions:'["personal"]'}
+    : {name:name,email:email,password:pass,role:'worker',department:dept||'-',status:'active',permissions:'[]'};
+  var res=await api('POST','users',newUser);
   if(!res){ err.style.display='block'; err.textContent='خطا'; return; }
   closeModal('addStaffModal');
   var users=await api('GET','users','','?select=*&order=created_at.desc');
   allUsers=users||[];
   renderStaff();
-  showToast(L('تمت إضافة الموظف · امنح الصلاحيات من ملفه','Employee added · grant access in their file','کارگر اضافه شد · از فایلش دسترسی بده'),'success');
+  showToast(isFamily
+    ? L('تمت إضافة فرد العائلة','Family member added','عضو خانواده اضافه شد')
+    : L('تمت إضافة الموظف · امنح الصلاحيات من ملفه','Employee added · grant access in their file','کارگر اضافه شد · از فایلش دسترسی بده'),'success');
 }
 
 // Build the access-permissions checkbox section for a staff file
