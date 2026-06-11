@@ -359,7 +359,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div style="display:flex;gap:7px;margin-bottom:12px">
       <button class="btn btn-green btn-sm" onclick="openModal('incomeModal')" id="fb-income">+ درآمد</button>
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
-      <button class="btn btn-blue btn-sm" onclick="openModal('purchaseModal')" id="fb-purchase">🛒 خرید</button>
+      <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
@@ -853,8 +853,11 @@ body.en .search-icon{right:auto;left:10px;}
       </div>
       <div class="form-group" id="due-date-wrap" style="display:none"><label class="form-label">تاريخ الاستحقاق / تاریخ سررسید</label><input class="form-control" type="date" id="p-due"></div>
       <div class="form-group"><label class="form-label" id="pm-date">تاریخ فاکتور</label><input class="form-control" type="date" id="p-date"></div>
-      <div class="form-group"><label class="form-label" id="pm-total">مبلغ کل (QAR)</label><input class="form-control" type="number" id="p-total"></div>
-      <div class="form-group"><label class="form-label" id="pm-items">اقلام خرید</label><textarea class="form-control" id="p-items" placeholder="نام کالا - تعداد - قیمت&#10;نام کالا - تعداد - قیمت"></textarea></div>
+      <div class="form-label" id="pm-items-title" style="margin-top:6px">🛒 اقلام خرید</div>
+      <div id="p-items-container"></div>
+      <button class="btn btn-outline btn-sm btn-block" style="margin-bottom:10px" onclick="addPurchaseItem()">+ <span id="pm-add-item">افزودن قلم</span></button>
+      <div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label" id="pm-total-lbl">مبلغ کل</span><span class="row-value" id="p-total-display" style="color:var(--accent)">0 QAR</span></div></div>
+      <input type="hidden" id="p-total">
     </div>
     <button class="btn btn-blue btn-block" onclick="savePurchase()">💾 <span id="pm-save">ثبت خرید</span></button>
   </div>
@@ -1323,8 +1326,9 @@ function setLang(l){
   document.getElementById('pm-ai').textContent=T('ai_proc');
   document.getElementById('pm-supplier').textContent=T('supplier');
   document.getElementById('pm-date').textContent=T('inv_date');
-  document.getElementById('pm-total').textContent=T('total');
-  document.getElementById('pm-items').textContent=T('items');
+  var pmTitle=document.getElementById('pm-items-title'); if(pmTitle) pmTitle.textContent='🛒 '+(l==='ar'?'أصناف الشراء':l==='en'?'Purchase items':'اقلام خرید');
+  var pmAdd=document.getElementById('pm-add-item'); if(pmAdd) pmAdd.textContent=l==='ar'?'إضافة صنف':l==='en'?'Add item':'افزودن قلم';
+  var pmTot=document.getElementById('pm-total-lbl'); if(pmTot) pmTot.textContent=T('total');
   document.getElementById('pm-save').textContent=T('save_purchase');
   document.getElementById('f-all').textContent='All / كل / همه';
   document.getElementById('f-all').textContent='All / الكل / همه';
@@ -3278,32 +3282,153 @@ async function handleInvoice(input){
   reader.readAsDataURL(file);
 }
 
+// ===== MULTI-ITEM PURCHASE (each item auto-added to inventory) =====
+var purchaseItems=[]; // {invId, name, qty, unit, price, image}
+function openPurchaseModal(){
+  resetPurchaseItems();
+  openModal('purchaseModal');
+}
+function resetPurchaseItems(){
+  purchaseItems=[{invId:'__new__',name:'',qty:1,unit:'عدد',price:0,image:''}];
+  renderPurchaseItems();
+}
+function addPurchaseItem(){
+  purchaseItems.push({invId:'__new__',name:'',qty:1,unit:'عدد',price:0,image:''});
+  renderPurchaseItems();
+}
+function removePurchaseItem(i){
+  purchaseItems.splice(i,1);
+  if(purchaseItems.length===0) purchaseItems.push({invId:'__new__',name:'',qty:1,unit:'عدد',price:0,image:''});
+  renderPurchaseItems();
+}
+function updatePurchaseTotal(){
+  var total=purchaseItems.reduce(function(s,it){return s+((it.qty||0)*(it.price||0));},0);
+  var disp=document.getElementById('p-total-display');
+  if(disp) disp.textContent=total.toLocaleString()+' QAR';
+  var hidden=document.getElementById('p-total');
+  if(hidden) hidden.value=total;
+}
+function onPurchaseItemCatalog(i){
+  var sel=document.getElementById('pi-cat-'+i);
+  var val=sel.value;
+  purchaseItems[i].invId=val;
+  if(val!=='__new__'){
+    var ex=allInventory.find(function(x){return String(x.id)===String(val);});
+    if(ex){
+      purchaseItems[i].name=ex.name||'';
+      purchaseItems[i].unit=ex.unit||'عدد';
+      purchaseItems[i].image=ex.image||'';
+      if(!purchaseItems[i].price) purchaseItems[i].price=ex.unit_price||0;
+    }
+  }
+  renderPurchaseItems();
+}
+function pickPurchaseItemImage(i){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        purchaseItems[i].image=await compressImage(input.files[0],0.6,700);
+        renderPurchaseItems();
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+function renderPurchaseItems(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var box=document.getElementById('p-items-container'); if(!box) return;
+  var catalogOpts=function(sel){
+    var o='<option value="__new__">➕ '+L('مادة جديدة','New item','جنس جدید')+'</option>';
+    o+=allInventory.map(function(it){return '<option value="'+it.id+'"'+(String(sel)===String(it.id)?' selected':'')+'>'+(it.name||'')+'</option>';}).join('');
+    return o;
+  };
+  box.innerHTML=purchaseItems.map(function(it,i){
+    var isNew=it.invId==='__new__';
+    var newFields=isNew
+      ? '<input class="form-control" style="margin-bottom:5px" placeholder="'+L('اسم المادة','Material name','نام جنس')+'" value="'+(it.name||'').replace(/"/g,'&quot;')+'" oninput="purchaseItems['+i+'].name=this.value">'+
+        '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
+          (it.image?'<img src="'+it.image+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px">':'')+
+          '<button class="btn btn-outline btn-sm" onclick="pickPurchaseItemImage('+i+')">📷 '+(it.image?L('تغيير','Change','تغییر'):L('صورة','Photo','عکس'))+'</button>'+
+        '</div>'
+      : '';
+    return '<div class="card" style="padding:9px;margin-bottom:7px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'+
+        '<span style="font-size:11px;color:var(--text2)">'+L('صنف','Item','قلم')+' '+(i+1)+'</span>'+
+        '<button class="btn btn-red btn-sm" onclick="removePurchaseItem('+i+')">✕</button>'+
+      '</div>'+
+      '<select class="form-control" style="margin-bottom:5px" onchange="onPurchaseItemCatalog('+i+')">'+catalogOpts(it.invId)+'</select>'+
+      newFields+
+      '<div style="display:flex;gap:5px">'+
+        '<input class="form-control" type="number" style="flex:1" placeholder="'+L('كمية','Qty','تعداد')+'" value="'+(it.qty||'')+'" oninput="purchaseItems['+i+'].qty=parseFloat(this.value)||0;updatePurchaseTotal()">'+
+        '<select class="form-control" style="flex:1" onchange="purchaseItems['+i+'].unit=this.value">'+
+          ['عدد','متر','کیلو','لیتر','بسته','متر مربع'].map(function(u){return '<option'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
+        '</select>'+
+        '<input class="form-control" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text2);text-align:left;margin-top:4px">'+((it.qty||0)*(it.price||0)).toLocaleString()+' QAR</div>'+
+    '</div>';
+  }).join('');
+  updatePurchaseTotal();
+}
+
 async function savePurchase(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   const supplier=document.getElementById('p-supplier').value;
-  const total=parseFloat(document.getElementById('p-total').value)||0;
-  const items=document.getElementById('p-items').value;
   const date=document.getElementById('p-date').value;
   const payType=document.getElementById('p-paytype').value;
   const due=document.getElementById('p-due').value;
   const isCredit=payType==='credit';
-  if(!total){ showToast(T('err_fill'),'error'); return; }
+  // Validate items
+  var validItems=purchaseItems.filter(function(it){
+    return (it.invId!=='__new__'||it.name.trim()) && (it.qty>0);
+  });
+  if(validItems.length===0){ showToast(L('أضف صنفاً واحداً على الأقل','Add at least one item','حداقل یک قلم اضافه کن'),'error'); return; }
   if(!supplier){ showToast(lang==='ar'?'اختر الشركة':lang==='en'?'Select company':'شرکت را انتخاب کنید','error'); return; }
+  const total=validItems.reduce(function(s,it){return s+((it.qty||0)*(it.price||0));},0);
+  if(!total){ showToast(T('err_fill'),'error'); return; }
+  // Build a readable item summary for the purchase record
+  var itemsSummary=validItems.map(function(it){return it.name+' ('+it.qty+' '+it.unit+' × '+it.price+')';}).join(' / ');
   var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':lang==='en'?' (Credit)':' (قرضی)'):'');
+  // 1) Financial transaction
   const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
   const trans=tRes.ok?await tRes.json():null;
   if(trans&&trans[0]){
-    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:items,invoice_date:date||null,invoice_image:invoiceImage||null});
+    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null});
+  }
+  // 2) Add each item to inventory (existing -> add qty; new -> create)
+  for(var i=0;i<validItems.length;i++){
+    var it=validItems[i];
+    if(it.invId!=='__new__'){
+      var ex=allInventory.find(function(x){return String(x.id)===String(it.invId);});
+      if(ex){
+        var newQty=(ex.quantity||0)+(it.qty||0);
+        var patch={quantity:newQty,unit_price:it.price||ex.unit_price||0};
+        await api('PATCH','inventory',patch,'?id=eq.'+ex.id);
+        ex.quantity=newQty;
+      }
+    } else {
+      // try match by name to avoid duplicates
+      var match=allInventory.find(function(x){return x.name&&x.name.trim()===it.name.trim();});
+      if(match){
+        var nq=(match.quantity||0)+(it.qty||0);
+        await api('PATCH','inventory',{quantity:nq,unit_price:it.price||match.unit_price||0},'?id=eq.'+match.id);
+        match.quantity=nq;
+      } else {
+        await api('POST','inventory',{name:it.name,quantity:it.qty,unit:it.unit,unit_price:it.price,min_quantity:0,image:it.image||null});
+      }
+    }
   }
   invoiceImage=null;
   closeModal('purchaseModal');
-  const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
-  allTransactions=newTrans||[];
-  const newPurch=await api('GET','purchases','','?select=*&order=created_at.desc&limit=50');
-  allPurchases=newPurch||[];
+  await loadAll();
   renderFinance();
-  showToast(T('saved'),'success');
-  document.getElementById('p-total').value='';
-  document.getElementById('p-items').value='';
+  showToast(L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
+  // reset
+  resetPurchaseItems();
   document.getElementById('p-due').value='';
   document.getElementById('invoice-preview').innerHTML='';
 }
