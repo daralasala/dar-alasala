@@ -412,6 +412,14 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- CUSTOMER ADD/EDIT MODAL -->
+<!-- CUSTOMER HISTORY MODAL -->
+<div class="modal-overlay" id="customerHistoryModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">📁 <span id="ch-title">تاریخچه مشتری</span></div><button class="modal-close" onclick="closeModal('customerHistoryModal')">✕</button></div>
+    <div id="customer-history-content"></div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="customerModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">👤 <span id="cm-title">افزودن مشتری</span></div><button class="modal-close" onclick="closeModal('customerModal')">✕</button></div>
@@ -3591,7 +3599,9 @@ function renderCustomers(){
       '<div class="card-sub">'+(c.phone||'-')+'</div></div>'+
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
+      (c.phone?'<button class="btn btn-primary btn-sm" onclick="window.location.href=\'tel:'+(c.phone||'').replace(/[^0-9+]/g,'')+'\'">📞 '+(lang==='ar'?'اتصال':lang==='en'?'Call':'تماس')+'</button>':'')+
       (wa?'<button class="btn btn-green btn-sm" style="background:#25D366" onclick="msgCustomer(\''+wa+'\')">💬 '+(lang==='ar'?'واتساب':lang==='en'?'WhatsApp':'واتساپ')+'</button>':'')+
+      '<button class="btn btn-outline btn-sm" onclick="openCustomerHistory('+c.id+')">📁 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editCustomer('+c.id+')">✏️</button>'+
       '<button class="btn btn-red btn-sm" onclick="deleteCustomer('+c.id+')">🗑️</button>'+
       '</div>'+
@@ -3601,6 +3611,55 @@ function renderCustomers(){
 
 function msgCustomer(wa){
   window.open('https://wa.me/'+wa,'_blank');
+}
+
+// Show a customer's full order/invoice history + totals
+function openCustomerHistory(custId){
+  var c=allCustomers.find(x=>x.id===custId); if(!c) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('ch-title').textContent=(L('سجل العميل','Customer history','تاریخچه مشتری'))+' · '+c.name;
+  // Match orders by customer name OR phone
+  var cname=(c.name||'').trim();
+  var cphone=(c.phone||'').replace(/[^0-9]/g,'');
+  var orders=allOrders.filter(function(o){
+    var on=(o.customer_name||'').trim();
+    var op=(o.customer_phone||'').replace(/[^0-9]/g,'');
+    return (cname&&on===cname)||(cphone&&op&&op===cphone);
+  });
+  var box=document.getElementById('customer-history-content');
+  if(orders.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">📭</div><div>'+L('لا توجد طلبات بعد','No orders yet','هنوز سفارشی نیست')+'</div></div>';
+    openModal('customerHistoryModal');
+    return;
+  }
+  // Totals
+  var totalValue=orders.reduce(function(s,o){return s+(o.total_price||0);},0);
+  var totalPaid=orders.reduce(function(s,o){return s+(o.prepay||0)+(o.status==='delivered'?((o.total_price||0)-(o.prepay||0)):0);},0);
+  var delivered=orders.filter(function(o){return o.status==='delivered';}).length;
+  var statusBadge={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple'};
+  // Summary card
+  var summary='<div class="card" style="margin-bottom:12px">'+
+    '<div class="row"><span class="row-label">📦 '+L('إجمالي الطلبات','Total orders','کل سفارش‌ها')+'</span><span class="row-value">'+orders.length+'</span></div>'+
+    '<div class="row"><span class="row-label">✅ '+L('تم التسليم','Delivered','تحویل‌شده')+'</span><span class="row-value">'+delivered+'</span></div>'+
+    '<div class="row"><span class="row-label">💰 '+L('إجمالي القيمة','Total value','مجموع ارزش')+'</span><span class="row-value" style="color:var(--accent)">'+totalValue.toLocaleString()+' QAR</span></div>'+
+    '<div class="row" style="margin-bottom:0"><span class="row-label">💵 '+L('المدفوع','Paid','پرداخت‌شده')+'</span><span class="row-value" style="color:var(--green)">'+totalPaid.toLocaleString()+' QAR</span></div>'+
+  '</div>';
+  // Orders list (newest first)
+  var sorted=orders.slice().sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);});
+  var rows=sorted.map(function(o){
+    var when=o.created_at?o.created_at.slice(0,10):'';
+    var st=T('status_'+(o.status||'pending_payment'));
+    return '<div class="card" style="margin-bottom:7px;padding:10px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
+        '<div style="font-size:13px;font-weight:700">'+o.product+'</div>'+
+        '<span class="badge '+(statusBadge[o.status]||'badge-orange')+'">'+st+'</span>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+(o.id_code||'')+' · '+when+'</div>'+
+      '<div style="font-size:12px;color:var(--accent);margin-top:3px">'+(o.total_price||0).toLocaleString()+' QAR</div>'+
+    '</div>';
+  }).join('');
+  box.innerHTML=summary+'<div style="font-size:12px;font-weight:700;color:var(--text2);margin-bottom:8px">'+L('الطلبات','Orders','سفارش‌ها')+'</div>'+rows;
+  openModal('customerHistoryModal');
 }
 
 function openCustomerModal(){
