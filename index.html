@@ -3073,6 +3073,9 @@ function renderFinance(){
     if(assetsSec) assetsSec.style.display='none';
     if(fixedBtn) fixedBtn.style.display='none';
     if(fixedSec) fixedSec.style.display='none';
+    // Real balance is MANAGER ONLY — never for purchasing
+    var rcHide=document.getElementById('f-realbalance-card');
+    if(rcHide) rcHide.style.display='none';
   } else {
     if(incCard) incCard.style.display='';
     if(balCard) balCard.style.display='';
