@@ -3284,7 +3284,14 @@ async function handleInvoice(input){
 
 // ===== MULTI-ITEM PURCHASE (each item auto-added to inventory) =====
 var purchaseItems=[]; // {invId, name, qty, unit, price, image}
-function openPurchaseModal(){
+async function openPurchaseModal(){
+  // Make sure inventory is loaded so the catalog dropdown is populated
+  try {
+    if(!allInventory || allInventory.length===0){
+      var inv=await api('GET','inventory','','?select=*&order=name.asc');
+      allInventory=inv||[];
+    }
+  } catch(e){}
   resetPurchaseItems();
   openModal('purchaseModal');
 }
