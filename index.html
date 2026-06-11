@@ -405,7 +405,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-primary btn-sm" style="flex:1" onclick="openCustomerModal()">➕ <span id="cust-add-label">إضافة عميل / افزودن مشتری</span></button>
       <button class="btn btn-outline btn-sm" onclick="syncCustomersFromOrders()">🔄 <span id="cust-sync-label">استيراد / همگام‌سازی</span></button>
     </div>
-    <button class="btn btn-green btn-block" style="margin-bottom:12px;background:#25D366" onclick="openBroadcastModal()">📢 <span id="cust-broadcast-label">إرسال إعلان للجميع / ارسال تبلیغ به همه</span></button>
+    <button class="btn btn-green btn-block" style="margin-bottom:12px;background:#25D366;color:#fff" onclick="openBroadcastModal()">📢 <span id="cust-broadcast-label">إرسال إعلان للجميع / ارسال تبلیغ به همه</span></button>
     <input class="form-control" type="text" id="cust-search" placeholder="🔍 بحث / جستجو..." oninput="renderCustomers()" style="margin-bottom:12px">
     <div id="customers-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -444,7 +444,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-outline btn-sm btn-block" id="share-img-btn" style="display:none;margin-top:8px" onclick="shareBroadcastImage()">📲 <span id="bc-share-lbl">مشاركة الصورة عبر واتساب / اشتراک عکس در واتساپ</span></button>
     </div>
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px" id="broadcast-note"></div>
-    <button class="btn btn-green btn-block" style="background:#25D366" onclick="startBroadcast()">📤 <span id="bc-send-lbl">إرسال النص للكل / ارسال متن به همه</span></button>
+    <button class="btn btn-green btn-block" style="background:#25D366;color:#fff" onclick="startBroadcast()">📤 <span id="bc-send-lbl">إرسال النص للكل / ارسال متن به همه</span></button>
   </div>
 </div>
 
@@ -2171,7 +2171,7 @@ function renderInvoiceEditor(o){
     '<div class="form-group"><label class="form-label">'+L('الخصم','Discount','تخفیف')+' (QAR)</label><input class="form-control" type="number" id="inv-discount" value="0" oninput="updateInvTotals()"></div>'+
     '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">'+L('الإجمالي','Total','مبلغ کل')+'</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">'+L('بعد الخصم','After discount','بعد از تخفیف')+'</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
     '<button class="btn btn-primary btn-block" onclick="downloadInvoicePDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
-    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendInvoiceWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
+    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E;color:#fff" onclick="sendInvoiceWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
 }
 
 function updateInvTotals(){
@@ -2405,7 +2405,7 @@ function renderContractEditor(o){
     '<div class="form-group"><label class="form-label">'+L('دفعة عند المعاينة','Payment on viewing','باقیمانده')+'</label><input class="form-control" type="number" id="c-rem" value="'+rem+'" readonly></div>'+
     '<div class="form-group"><label class="form-label">'+L('مدة التنفيذ','Lead time','مدت اجرا')+'</label><input class="form-control" id="c-duration" value="40 : 50 '+L('يوم عمل','working days','روز کاری')+'"></div>'+
     '<button class="btn btn-primary btn-block" onclick="downloadContractPDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
-    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E" onclick="sendContractWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
+    '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E;color:#fff" onclick="sendContractWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
 }
 
 function updateContractPay(){
@@ -3600,7 +3600,7 @@ function renderCustomers(){
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       (c.phone?'<button class="btn btn-primary btn-sm" onclick="window.location.href=\'tel:'+(c.phone||'').replace(/[^0-9+]/g,'')+'\'">📞 '+(lang==='ar'?'اتصال':lang==='en'?'Call':'تماس')+'</button>':'')+
-      (wa?'<button class="btn btn-green btn-sm" style="background:#25D366" onclick="msgCustomer(\''+wa+'\')">💬 '+(lang==='ar'?'واتساب':lang==='en'?'WhatsApp':'واتساپ')+'</button>':'')+
+      (wa?'<button class="btn btn-green btn-sm" style="background:#25D366;color:#fff" onclick="msgCustomer(\''+wa+'\')">💬 '+(lang==='ar'?'واتساب':lang==='en'?'WhatsApp':'واتساپ')+'</button>':'')+
       '<button class="btn btn-outline btn-sm" onclick="openCustomerHistory('+c.id+')">📁 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editCustomer('+c.id+')">✏️</button>'+
       '<button class="btn btn-red btn-sm" onclick="deleteCustomer('+c.id+')">🗑️</button>'+
