@@ -400,7 +400,8 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- PERSONAL EXPENSES -->
   <div class="page" id="page-personal">
-    <button class="btn btn-primary btn-block" onclick="openPersonalExpModal()" style="margin-bottom:12px">➕ <span id="pe-add-label">إضافة مصروف / افزودن خرج</span></button>
+    <button class="btn btn-primary btn-block" onclick="openPersonalExpModal()" style="margin-bottom:8px">➕ <span id="pe-add-label">إضافة مصروف / افزودن خرج</span></button>
+    <button class="btn btn-outline btn-block" onclick="openFamilyInfo()" id="family-info-btn" style="margin-bottom:12px;display:none">👨‍👩‍👧 <span id="family-info-label">معلومات العائلة / مشخصات خانواده</span></button>
     <div id="personal-summary"></div>
     <div id="personal-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -425,6 +426,22 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- CUSTOMER ADD/EDIT MODAL -->
+<!-- FAMILY LIST MODAL -->
+<div class="modal-overlay" id="familyListModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">👨‍👩‍👧 <span id="fl-modal-title">مشخصات خانواده</span></div><button class="modal-close" onclick="closeModal('familyListModal')">✕</button></div>
+    <div id="family-list-content"></div>
+  </div>
+</div>
+
+<!-- FAMILY MEMBER FILE MODAL -->
+<div class="modal-overlay" id="familyFileModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">📋 <span id="ff-title">فایل خانواده</span></div><button class="modal-close" onclick="closeModal('familyFileModal')">✕</button></div>
+    <div id="family-file-content"></div>
+  </div>
+</div>
+
 <!-- PERSONAL EXPENSE MODAL -->
 <div class="modal-overlay" id="personalExpModal">
   <div class="modal">
@@ -1170,6 +1187,7 @@ function refreshStaticLabels(l){
   safeSet('manage-titles-label',P('إدارة المسميات','Manage titles','مدیریت سمت‌ها'));
   safeSet('t-personal',P('مصاريفي','Personal','مخارج شخصی'));
   safeSet('pe-add-label',P('إضافة مصروف','Add expense','افزودن خرج'));
+  safeSet('family-info-label',P('معلومات العائلة','Family info','مشخصات خانواده'));
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
@@ -3510,6 +3528,8 @@ async function deletePersonalExp(id){
 function renderPersonal(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var isManager=currentUser&&currentUser.role==='manager';
+  var famBtn=document.getElementById('family-info-btn');
+  if(famBtn) famBtn.style.display=isManager?'':'none';
   var list=visiblePersonalExp();
   var now=new Date();
   var thisMonth=list.filter(function(e){
@@ -3557,6 +3577,101 @@ function renderPersonal(){
       '</div>'+
     '</div>';
   }).join('');
+}
+
+// ===== FAMILY INFO (dates & reminders, manager only) =====
+function familyMembers(){
+  return allUsers.filter(function(u){return (u.role==='family'||u.department==='خانواده')&&u.status!=='rejected';});
+}
+function openFamilyInfo(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('fl-modal-title').textContent=L('معلومات العائلة','Family info','مشخصات خانواده');
+  var fams=familyMembers();
+  var box=document.getElementById('family-list-content');
+  if(fams.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">👨‍👩‍👧</div><div>'+L('لا يوجد أفراد عائلة بعد','No family members yet','هنوز عضو خانواده‌ای نیست')+'</div></div>';
+  } else {
+    var colors=['linear-gradient(135deg,#9b6dff,#6d4dff)','linear-gradient(135deg,#ff6db5,#ff4d94)','linear-gradient(135deg,#4dc9ff,#4d8bff)'];
+    box.innerHTML=fams.map(function(u,i){
+      return '<div class="worker-item" onclick="openFamilyFile('+u.id+')" style="cursor:pointer">'+
+        (u.photo?'<img src="'+u.photo+'" class="w-avatar" style="object-fit:cover">':'<div class="w-avatar" style="background:'+colors[i%colors.length]+'">'+u.name[0]+'</div>')+
+        '<div class="w-info"><div class="w-name">'+u.name+'</div><div class="w-task">'+(u.phone||'-')+'</div></div>'+
+        '<span style="font-size:16px;color:var(--text2)">📂</span>'+
+      '</div>';
+    }).join('');
+  }
+  openModal('familyListModal');
+}
+function openFamilyFile(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('ff-title').textContent=(L('ملف','File','فایل'))+' · '+u.name;
+  var fld=function(fid,label,val,type){return '<div class="form-group"><label class="form-label">'+label+'</label><input class="form-control" type="'+(type||'text')+'" id="'+fid+'" value="'+(val!=null?String(val).replace(/"/g,'&quot;'):'')+'"></div>';};
+  // Photo
+  ffPhotoData=u.photo||'';
+  var photoHtml='<div style="text-align:center;margin-bottom:12px">'+
+    (u.photo
+      ? '<img src="'+u.photo+'" style="width:90px;height:90px;border-radius:50%;object-fit:cover;border:2px solid #9b6dff">'
+      : '<div style="width:90px;height:90px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text2)">'+(u.name?u.name[0].toUpperCase():'👤')+'</div>')+
+    '<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="pickFamilyPhoto('+u.id+')">📷 '+L('صورة','Photo','عکس')+'</button></div>'+
+  '</div>';
+  document.getElementById('family-file-content').innerHTML=
+    photoHtml+
+    fld('ff-phone',L('الهاتف','Phone','تلفن'),u.phone,'text')+
+    fld('ff-birth',L('تاريخ الميلاد','Birth date','تاریخ تولد'),u.birth_date,'date')+
+    fld('ff-qid',L('رقم الإقامة QID','Residence ID (QID)','شماره اقامه'),u.qid,'text')+
+    fld('ff-res-start',L('بداية الإقامة','Residence start','شروع اقامه'),u.residence_start,'date')+
+    fld('ff-res-exp',L('انتهاء الإقامة','Residence expiry','انقضای اقامه'),u.residence_expiry,'date')+
+    fld('ff-marriage',L('تاريخ الزواج / العقد','Marriage date','تاریخ ازدواج/عقد'),u.marriage_date,'date')+
+    '<input type="hidden" id="ff-id" value="'+u.id+'">'+
+    '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveFamilyFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
+    '<button class="btn btn-red btn-block" onclick="deleteFamilyMember('+u.id+')">🗑️ '+L('حذف فرد العائلة','Remove family member','حذف عضو خانواده')+'</button>';
+  openModal('familyFileModal');
+}
+var ffPhotoData='';
+function pickFamilyPhoto(id){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      showToast(lang==='ar'?'جاري الرفع...':lang==='en'?'Uploading...':'در حال آپلود...','success');
+      try {
+        var compressed=await compressImage(input.files[0],0.6,500);
+        await api('PATCH','users',{photo:compressed},'?id=eq.'+id);
+        var u=allUsers.find(x=>x.id===id); if(u) u.photo=compressed;
+        showToast(T('saved'),'success');
+        openFamilyFile(id);
+      } catch(e){ showToast('Error: '+e.message,'error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+async function saveFamilyFile(){
+  var id=document.getElementById('ff-id').value;
+  var body={
+    phone:document.getElementById('ff-phone').value.trim()||null,
+    birth_date:document.getElementById('ff-birth').value||null,
+    qid:document.getElementById('ff-qid').value.trim()||null,
+    residence_start:document.getElementById('ff-res-start').value||null,
+    residence_expiry:document.getElementById('ff-res-exp').value||null,
+    marriage_date:document.getElementById('ff-marriage').value||null
+  };
+  await api('PATCH','users',body,'?id=eq.'+id);
+  var u=allUsers.find(x=>String(x.id)===String(id)); if(u) Object.assign(u,body);
+  closeModal('familyFileModal');
+  showToast(T('saved'),'success');
+}
+async function deleteFamilyMember(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var u=allUsers.find(x=>x.id===id);
+  if(!confirm(L('حذف فرد العائلة؟ ','Remove family member? ','حذف عضو خانواده؟ ')+(u?u.name:''))) return;
+  await api('DELETE','users',null,'?id=eq.'+id);
+  allUsers=allUsers.filter(x=>x.id!==id);
+  closeModal('familyFileModal');
+  closeModal('familyListModal');
+  showToast(T('saved'),'success');
 }
 
 async function loadFixedExp(){
@@ -4610,6 +4725,41 @@ function renderNotifications(){
   allInventory.filter(it=>(it.quantity||0)<=(it.min_quantity||0)).forEach(it=>{
     html+=`<div class="notif-item unread"><div style="font-size:18px">📦</div><div><div style="font-size:13px;font-weight:700">${lang==='ar'?'مخزون منخفض':lang==='en'?'Low stock':'موجودی کم'}: ${it.name}</div><div style="font-size:12px;color:var(--red)">${lang==='ar'?'المتبقي':lang==='en'?'Remaining':'باقیمانده'}: ${it.quantity||0} ${it.unit}</div></div></div>`;
   });
+  // Family date reminders (5 days before) — MANAGER ONLY
+  if(currentUser&&currentUser.role==='manager'){
+    var Lf=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+    // Days until the next occurrence of an annual date (birthday / anniversary)
+    var daysToAnnual=function(dateStr){
+      if(!dateStr) return null;
+      var d=new Date(dateStr); if(isNaN(d)) return null;
+      var t=new Date(now.getFullYear(),d.getMonth(),d.getDate());
+      if(t<new Date(now.getFullYear(),now.getMonth(),now.getDate())) t.setFullYear(now.getFullYear()+1);
+      return Math.ceil((t-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/(1000*60*60*24));
+    };
+    // Days until a fixed future date (residence expiry)
+    var daysToFixed=function(dateStr){
+      if(!dateStr) return null;
+      var d=new Date(dateStr); if(isNaN(d)) return null;
+      return Math.ceil((d-new Date(now.getFullYear(),now.getMonth(),now.getDate()))/(1000*60*60*24));
+    };
+    familyMembers().forEach(function(u){
+      // Birthday
+      var bd=daysToAnnual(u.birth_date);
+      if(bd!==null&&bd<=5&&bd>=0){
+        html+='<div class="notif-item unread" style="border-right:3px solid #ff6db5" onclick="openFamilyFile('+u.id+')"><div style="font-size:18px">🎂</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#ff6db5">'+Lf('عيد ميلاد','Birthday','تولد')+': '+u.name+'</div><div style="font-size:12px;color:var(--text2)">'+(bd===0?Lf('اليوم','Today','امروز'):bd+' '+Lf('يوم','days','روز'))+'</div></div></div>';
+      }
+      // Residence expiry
+      var re=daysToFixed(u.residence_expiry);
+      if(re!==null&&re<=5&&re>=0){
+        html+='<div class="notif-item unread" style="border-right:3px solid var(--red)" onclick="openFamilyFile('+u.id+')"><div style="font-size:18px">🪪</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--red)">'+Lf('انتهاء الإقامة','Residence expiry','انقضای اقامه')+': '+u.name+'</div><div style="font-size:12px;color:var(--text2)">'+u.residence_expiry+' · '+(re===0?Lf('اليوم','Today','امروز'):re+' '+Lf('يوم','days','روز'))+'</div></div></div>';
+      }
+      // Marriage anniversary
+      var md=daysToAnnual(u.marriage_date);
+      if(md!==null&&md<=5&&md>=0){
+        html+='<div class="notif-item unread" style="border-right:3px solid #9b6dff" onclick="openFamilyFile('+u.id+')"><div style="font-size:18px">💍</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:#9b6dff">'+Lf('ذكرى الزواج','Marriage anniversary','سالگرد ازدواج')+': '+u.name+'</div><div style="font-size:12px;color:var(--text2)">'+(md===0?Lf('اليوم','Today','امروز'):md+' '+Lf('يوم','days','روز'))+'</div></div></div>';
+      }
+    });
+  }
   document.getElementById('notif-list').innerHTML=html||`<div class="empty-state"><div class="empty-icon">✅</div><div>${T('no_data')}</div></div>`;
 }
 
