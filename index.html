@@ -388,7 +388,8 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- PURCHASE REQUESTS -->
   <div class="page" id="page-requests">
-    <button class="btn btn-primary btn-block" onclick="openModal('reqModal')" style="margin-bottom:12px">➕ <span id="req-new-btn">درخواست خرید جدید</span></button>
+    <button class="btn btn-primary btn-block" onclick="openModal('reqModal')" style="margin-bottom:8px">➕ <span id="req-new-btn">درخواست خرید جدید</span></button>
+    <button class="btn btn-outline btn-block" onclick="openMaterialsShoppingList()" id="mat-shop-btn" style="margin-bottom:12px;display:none">🧵 <span id="mat-shop-label">قائمة أقمشة الطلبات / لیست پارچه سفارشات</span></button>
     <div class="section-title" id="req-list-title">درخواست‌های خرید</div>
     <div id="requests-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -725,6 +726,37 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- ORDER DETAIL MODAL -->
+<!-- MATERIALS SHOPPING LIST MODAL -->
+<div class="modal-overlay" id="matShopModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">🧵 <span id="ms-title">لیست خرید پارچه</span></div><button class="modal-close" onclick="closeModal('matShopModal')">✕</button></div>
+    <div id="mat-shop-content"></div>
+  </div>
+</div>
+
+<!-- MATERIAL MODAL -->
+<div class="modal-overlay" id="materialModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🧵 <span id="mat-modal-title">افزودن ماده</span></div><button class="modal-close" onclick="closeModal('materialModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="mat-name-lbl">نام / شماره پارچه یا ماده</label><input class="form-control" type="text" id="mat-name" placeholder="مثلا: پارچه کد 123"></div>
+    <div style="display:flex;gap:8px">
+      <div class="form-group" style="flex:1"><label class="form-label" id="mat-qty-lbl">مقدار</label><input class="form-control" type="number" id="mat-qty" placeholder="8"></div>
+      <div class="form-group" style="flex:1"><label class="form-label" id="mat-unit-lbl">واحد</label>
+        <select class="form-control" id="mat-unit">
+          <option value="متر">متر</option>
+          <option value="عدد">عدد</option>
+          <option value="کیلو">کیلو</option>
+          <option value="متر مربع">متر مربع</option>
+          <option value="بسته">بسته</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group"><label class="form-label" id="mat-note-lbl">یادداشت (رنگ، نوع...)</label><input class="form-control" type="text" id="mat-note"></div>
+    <input type="hidden" id="mat-order-id"><input type="hidden" id="mat-idx">
+    <button class="btn btn-primary btn-block" onclick="saveMaterial()">💾 <span id="mat-save">ذخیره</span></button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="orderDetailModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="od-title">جزئیات سفارش</div><button class="modal-close" onclick="closeModal('orderDetailModal')">✕</button></div>
@@ -1188,6 +1220,7 @@ function refreshStaticLabels(l){
   safeSet('t-personal',P('مصاريفي','Personal','مخارج شخصی'));
   safeSet('pe-add-label',P('إضافة مصروف','Add expense','افزودن خرج'));
   safeSet('family-info-label',P('معلومات العائلة','Family info','مشخصات خانواده'));
+  safeSet('mat-shop-label',P('قائمة أقمشة الطلبات','Orders fabric list','لیست پارچه سفارشات'));
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
@@ -1673,6 +1706,133 @@ function renderOrders(){
 }
 
 // ===== ORDER DETAIL =====
+// ===== ORDER MATERIALS (fabric/wood/etc needed for an order) =====
+function openMaterialsShoppingList(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('ms-title').textContent=L('قائمة شراء المواد','Materials shopping list','لیست خرید مواد');
+  // Orders still in production (not delivered) that have unbought materials
+  var pending=allOrders.filter(function(o){
+    if(o.status==='delivered') return false;
+    var mats=getOrderMaterials(o);
+    return mats.some(function(m){return !m.bought;});
+  });
+  var box=document.getElementById('mat-shop-content');
+  if(pending.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">✅</div><div>'+L('لا مواد للشراء','Nothing to buy','چیزی برای خرید نیست')+'</div></div>';
+    openModal('matShopModal'); return;
+  }
+  box.innerHTML=pending.map(function(o){
+    var mats=getOrderMaterials(o).filter(function(m){return !m.bought;});
+    var rows=mats.map(function(m){
+      var globalIdx=getOrderMaterials(o).indexOf(m);
+      return '<div style="display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--surface2);border-radius:8px;margin-bottom:5px">'+
+        '<div style="flex:1"><div style="font-size:13px;font-weight:600">🧵 '+(m.name||'-')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">'+(m.qty||'')+' '+(m.unit||'')+(m.note?(' · '+m.note):'')+'</div></div>'+
+        '<button class="btn btn-green btn-sm" style="background:#4caf82;color:#fff" onclick="markMatBoughtFromList('+o.id+','+globalIdx+')">✅ '+L('تم','Done','خریدم')+'</button>'+
+      '</div>';
+    }).join('');
+    return '<div class="card" style="margin-bottom:10px;padding:11px">'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:7px">📦 '+o.product+' <span style="font-size:11px;color:var(--text2)">· '+(o.id_code||'')+' · '+(o.customer_name||'')+'</span></div>'+
+      rows+
+    '</div>';
+  }).join('');
+  openModal('matShopModal');
+}
+async function markMatBoughtFromList(orderId,idx){
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var mats=getOrderMaterials(o);
+  if(mats[idx]){ mats[idx].bought=true; }
+  await api('PATCH','orders',{materials:JSON.stringify(mats)},'?id=eq.'+orderId);
+  o.materials=JSON.stringify(mats);
+  openMaterialsShoppingList();
+  showToast(T('saved'),'success');
+}
+function getOrderMaterials(o){
+  if(!o.materials) return [];
+  try { var m=typeof o.materials==='string'?JSON.parse(o.materials):o.materials; return Array.isArray(m)?m:[]; }
+  catch(e){ return []; }
+}
+function renderOrderMaterials(o){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var mats=getOrderMaterials(o);
+  var canEdit=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول خرید'||currentUser.department==='روکش‌کار'||currentUser.department==='فورمن');
+  var rows=mats.length===0
+    ? '<div style="font-size:12px;color:var(--text2);text-align:center;padding:8px">'+L('لا توجد مواد بعد','No materials yet','هنوز ماده‌ای ثبت نشده')+'</div>'
+    : mats.map(function(m,i){
+        var boughtStyle=m.bought?'opacity:.55;text-decoration:line-through':'';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px;'+boughtStyle+'">'+
+          '<div style="flex:1"><div style="font-size:13px;font-weight:600">🧵 '+(m.name||'-')+'</div>'+
+          '<div style="font-size:11px;color:var(--text2)">'+(m.qty||'')+' '+(m.unit||'')+(m.note?(' · '+m.note):'')+'</div></div>'+
+          (canEdit?'<button class="btn '+(m.bought?'btn-outline':'btn-green')+' btn-sm" style="'+(m.bought?'':'background:#4caf82;color:#fff')+'" onclick="toggleMaterialBought('+o.id+','+i+')">'+(m.bought?'↩️':'✅')+'</button>'+
+          '<button class="btn btn-outline btn-sm" onclick="openMaterialModal('+o.id+','+i+')">✏️</button>'+
+          '<button class="btn btn-red btn-sm" onclick="deleteMaterial('+o.id+','+i+')">🗑️</button>':'')+
+        '</div>';
+      }).join('');
+  return '<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">🧵 '+L('المواد المطلوبة (قماش، خشب...)','Required materials (fabric, wood...)','مواد مورد نیاز (پارچه، چوب...)')+'</div>'+
+    rows+
+    (canEdit?'<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="openMaterialModal('+o.id+',-1)">➕ '+L('إضافة مادة','Add material','افزودن ماده')+'</button>':'<div style="margin-bottom:12px"></div>');
+}
+function openMaterialModal(orderId,idx){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var mats=getOrderMaterials(o);
+  var m=(idx>=0&&mats[idx])?mats[idx]:{name:'',qty:'',unit:'متر',note:''};
+  document.getElementById('mat-modal-title').textContent=idx>=0?L('تعديل مادة','Edit material','ویرایش ماده'):L('إضافة مادة','Add material','افزودن ماده');
+  document.getElementById('mat-name-lbl').textContent=L('اسم / رقم القماش أو المادة','Fabric/material name or code','نام / شماره پارچه یا ماده');
+  document.getElementById('mat-qty-lbl').textContent=L('الكمية','Quantity','مقدار');
+  document.getElementById('mat-unit-lbl').textContent=L('الوحدة','Unit','واحد');
+  document.getElementById('mat-note-lbl').textContent=L('ملاحظة (لون، نوع...)','Note (color, type...)','یادداشت (رنگ، نوع...)');
+  document.getElementById('mat-save').textContent=L('حفظ','Save','ذخیره');
+  document.getElementById('mat-order-id').value=orderId;
+  document.getElementById('mat-idx').value=idx;
+  document.getElementById('mat-name').value=m.name||'';
+  document.getElementById('mat-qty').value=m.qty||'';
+  document.getElementById('mat-unit').value=m.unit||'متر';
+  document.getElementById('mat-note').value=m.note||'';
+  openModal('materialModal');
+}
+async function saveMaterial(){
+  var orderId=parseInt(document.getElementById('mat-order-id').value);
+  var idx=parseInt(document.getElementById('mat-idx').value);
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var name=document.getElementById('mat-name').value.trim();
+  if(!name){ showToast(T('err_fill'),'error'); return; }
+  var mats=getOrderMaterials(o);
+  var entry={
+    name:name,
+    qty:document.getElementById('mat-qty').value.trim(),
+    unit:document.getElementById('mat-unit').value,
+    note:document.getElementById('mat-note').value.trim(),
+    bought:(idx>=0&&mats[idx])?!!mats[idx].bought:false
+  };
+  if(idx>=0) mats[idx]=entry; else mats.push(entry);
+  await api('PATCH','orders',{materials:JSON.stringify(mats)},'?id=eq.'+orderId);
+  o.materials=JSON.stringify(mats);
+  closeModal('materialModal');
+  openOrderDetail(orderId);
+  showToast(T('saved'),'success');
+}
+async function toggleMaterialBought(orderId,idx){
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  var mats=getOrderMaterials(o);
+  if(!mats[idx]) return;
+  mats[idx].bought=!mats[idx].bought;
+  await api('PATCH','orders',{materials:JSON.stringify(mats)},'?id=eq.'+orderId);
+  o.materials=JSON.stringify(mats);
+  openOrderDetail(orderId);
+}
+async function deleteMaterial(orderId,idx){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  if(!confirm(L('حذف هذه المادة؟','Delete this material?','این ماده حذف شود؟'))) return;
+  var mats=getOrderMaterials(o);
+  mats.splice(idx,1);
+  await api('PATCH','orders',{materials:JSON.stringify(mats)},'?id=eq.'+orderId);
+  o.materials=JSON.stringify(mats);
+  openOrderDetail(orderId);
+  showToast(T('saved'),'success');
+}
+
 async function openOrderDetail(id){
   const o=allOrders.find(x=>x.id===id); if(!o) return;
   const rem=(o.total_price||0)-(o.prepay||0);
@@ -1717,6 +1877,7 @@ async function openOrderDetail(id){
       <div class="row" style="margin-bottom:0"><span class="row-label">⏳ Due</span><span class="row-value" style="color:var(--red)">${rem.toLocaleString()} QAR</span></div>
     </div>`:''}
     ${o.description?`<div class="card" style="margin-bottom:9px;font-size:12px;color:var(--text2)">${o.description}</div>`:''}
+    ${renderOrderMaterials(o)}
     ${imagesHtml}
     ${addPhotoHtml}
     ${(isManager||currentUser.department==='حسابدار')?`
@@ -4546,6 +4707,8 @@ async function renderRequests(){
   const reqs=await api('GET','purchase_requests','','?select=*&order=created_at.desc');
   allRequests=reqs||[];
   const isManagerOrBuyer = currentUser&&(currentUser.role==='manager'||currentUser.department==='مسئول خرید');
+  var msBtn=document.getElementById('mat-shop-btn');
+  if(msBtn) msBtn.style.display=(isManagerOrBuyer||(currentUser&&currentUser.department==='حسابدار'))?'':'none';
   // Workers see only their own requests; manager/buyer see all
   var list=isManagerOrBuyer?allRequests:allRequests.filter(r=>r.worker_name&&r.worker_name.indexOf(currentUser.name)>-1);
   const stColors={pending:'badge-orange',approved:'badge-green',bought:'badge-blue',rejected:'badge-red'};
