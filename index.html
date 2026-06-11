@@ -3316,6 +3316,8 @@ function updatePurchaseTotal(){
   if(hidden) hidden.value=total;
 }
 function onPurchaseItemCatalog(i){
+  // Preserve any qty/price the user already typed in this row before re-render
+  syncPurchaseRowFromDOM(i);
   var sel=document.getElementById('pi-cat-'+i);
   var val=sel.value;
   purchaseItems[i].invId=val;
@@ -3329,6 +3331,17 @@ function onPurchaseItemCatalog(i){
     }
   }
   renderPurchaseItems();
+}
+// Read the current DOM values of a row back into the data model
+function syncPurchaseRowFromDOM(i){
+  var qEl=document.getElementById('pi-qty-'+i);
+  var pEl=document.getElementById('pi-price-'+i);
+  var nEl=document.getElementById('pi-name-'+i);
+  var uEl=document.getElementById('pi-unit-'+i);
+  if(qEl) purchaseItems[i].qty=parseFloat(qEl.value)||0;
+  if(pEl) purchaseItems[i].price=parseFloat(pEl.value)||0;
+  if(nEl) purchaseItems[i].name=nEl.value;
+  if(uEl) purchaseItems[i].unit=uEl.value;
 }
 function pickPurchaseItemImage(i){
   var input=document.createElement('input');
@@ -3356,7 +3369,7 @@ function renderPurchaseItems(){
   box.innerHTML=purchaseItems.map(function(it,i){
     var isNew=it.invId==='__new__';
     var newFields=isNew
-      ? '<input class="form-control" style="margin-bottom:5px" placeholder="'+L('اسم المادة','Material name','نام جنس')+'" value="'+(it.name||'').replace(/"/g,'&quot;')+'" oninput="purchaseItems['+i+'].name=this.value">'+
+      ? '<input class="form-control" id="pi-name-'+i+'" style="margin-bottom:5px" placeholder="'+L('اسم المادة','Material name','نام جنس')+'" value="'+(it.name||'').replace(/"/g,'&quot;')+'" oninput="purchaseItems['+i+'].name=this.value">'+
         '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">'+
           (it.image?'<img src="'+it.image+'" style="width:36px;height:36px;object-fit:cover;border-radius:6px">':'')+
           '<button class="btn btn-outline btn-sm" onclick="pickPurchaseItemImage('+i+')">📷 '+(it.image?L('تغيير','Change','تغییر'):L('صورة','Photo','عکس'))+'</button>'+
@@ -3367,14 +3380,14 @@ function renderPurchaseItems(){
         '<span style="font-size:11px;color:var(--text2)">'+L('صنف','Item','قلم')+' '+(i+1)+'</span>'+
         '<button class="btn btn-red btn-sm" onclick="removePurchaseItem('+i+')">✕</button>'+
       '</div>'+
-      '<select class="form-control" style="margin-bottom:5px" onchange="onPurchaseItemCatalog('+i+')">'+catalogOpts(it.invId)+'</select>'+
+      '<select class="form-control" id="pi-cat-'+i+'" style="margin-bottom:5px" onchange="onPurchaseItemCatalog('+i+')">'+catalogOpts(it.invId)+'</select>'+
       newFields+
       '<div style="display:flex;gap:5px">'+
-        '<input class="form-control" type="number" style="flex:1" placeholder="'+L('كمية','Qty','تعداد')+'" value="'+(it.qty||'')+'" oninput="purchaseItems['+i+'].qty=parseFloat(this.value)||0;updatePurchaseTotal()">'+
-        '<select class="form-control" style="flex:1" onchange="purchaseItems['+i+'].unit=this.value">'+
+        '<input class="form-control" id="pi-qty-'+i+'" type="number" style="flex:1" placeholder="'+L('كمية','Qty','تعداد')+'" value="'+(it.qty||'')+'" oninput="purchaseItems['+i+'].qty=parseFloat(this.value)||0;updatePurchaseTotal()">'+
+        '<select class="form-control" id="pi-unit-'+i+'" style="flex:1" onchange="purchaseItems['+i+'].unit=this.value">'+
           ['عدد','متر','کیلو','لیتر','بسته','متر مربع'].map(function(u){return '<option'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
         '</select>'+
-        '<input class="form-control" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
+        '<input class="form-control" id="pi-price-'+i+'" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
       '</div>'+
       '<div style="font-size:11px;color:var(--text2);text-align:left;margin-top:4px">'+((it.qty||0)*(it.price||0)).toLocaleString()+' QAR</div>'+
     '</div>';
@@ -3384,6 +3397,8 @@ function renderPurchaseItems(){
 
 async function savePurchase(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  // Read all current field values from the DOM into the model first
+  for(var s=0;s<purchaseItems.length;s++){ syncPurchaseRowFromDOM(s); }
   const supplier=document.getElementById('p-supplier').value;
   const date=document.getElementById('p-date').value;
   const payType=document.getElementById('p-paytype').value;
