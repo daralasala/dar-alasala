@@ -1086,13 +1086,13 @@ var LABEL_DICT=[
   ['اجاره','Rent','اجاره'],
   ['برق و آب','Utilities','برق و آب'],
   ['تجهیزات','Equipment','تجهیزات'],
-  ['غذا','Food','غذا'],
-  ['قبوض','Bills','قبوض'],
-  ['خرید','Shopping','خرید'],
-  ['حمل‌ونقل','Transport','حمل‌ونقل'],
-  ['سلامت','Health','سلامت'],
-  ['آموزش','Education','آموزش'],
-  ['سرگرمی','Entertainment','سرگرمی'],
+  ['طعام','Food','غذا'],
+  ['فواتير','Bills','قبوض'],
+  ['تسوق','Shopping','خرید'],
+  ['نقل','Transport','حمل‌ونقل'],
+  ['صحة','Health','سلامت'],
+  ['تعليم','Education','آموزش'],
+  ['ترفيه','Entertainment','سرگرمی'],
   ['افزودن مشتری','Add customer','افزودن مشتری'],
   ['إضافة عميل','Add customer','افزودن مشتری'],
   ['درخواست خرید جنس','Request Material','درخواست خرید جنس'],
@@ -1139,12 +1139,14 @@ function autoTranslateLabels(l){
   document.querySelectorAll('select option').forEach(function(op){
     var raw=(op.textContent||'').trim();
     if(!raw) return;
-    // capture leading emoji if present
+    // capture leading emoji (incl. variation selectors \uFE0F and ZWJ \u200D)
+    var emRe=/^([\u2600-\u27BF\uFE00-\uFE0F\u200D\uD83C-\uDBFF\uDC00-\uDFFF\s]+)/;
     var em='';
-    var emMatch=raw.match(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/);
-    if(emMatch){ em=emMatch[1]+' '; }
-    var core=raw.replace(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/,'').replace(/\([^)]*\)/g,'').trim();
-    var hit=LABEL_LOOKUP[raw]||LABEL_LOOKUP[core]||LABEL_LOOKUP[raw.replace(/^([\u2600-\u27BF\uD83C-\uDBFF\uDC00-\uDFFF]+)\s*/,'').trim()];
+    var emMatch=raw.match(emRe);
+    var rest=raw;
+    if(emMatch){ em=emMatch[1].trim()+' '; rest=raw.slice(emMatch[1].length); }
+    var core=rest.replace(/\([^)]*\)/g,'').trim();
+    var hit=LABEL_LOOKUP[raw]||LABEL_LOOKUP[core]||LABEL_LOOKUP[rest.trim()];
     if(hit){ op.textContent=em+hit[idx]; }
   });
 }
