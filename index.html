@@ -370,7 +370,8 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- STAFF -->
   <div class="page" id="page-staff">
-    <button class="btn btn-primary btn-block" onclick="openAddStaffModal()" id="add-staff-btn" style="margin-bottom:12px;display:none">➕ <span id="add-staff-label">إضافة موظف / افزودن کارگر</span></button>
+    <button class="btn btn-primary btn-block" onclick="openAddStaffModal()" id="add-staff-btn" style="margin-bottom:8px;display:none">➕ <span id="add-staff-label">إضافة موظف / افزودن کارگر</span></button>
+    <button class="btn btn-outline btn-block" onclick="openJobTitlesManager()" id="manage-titles-btn" style="margin-bottom:12px;display:none">⚙️ <span id="manage-titles-label">إدارة المسميات / مدیریت سمت‌ها</span></button>
     <div id="pending-users-section" style="display:none">
       <div class="section-title" id="sl-pending">در انتظار تایید</div>
       <div id="pending-list"></div>
@@ -588,6 +589,31 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- STAFF FILE MODAL -->
+<!-- JOB TITLES MANAGER MODAL -->
+<div class="modal-overlay" id="jobTitlesModal">
+  <div class="modal" style="max-height:92vh">
+    <div class="modal-header"><div class="modal-title">⚙️ <span id="jt-title">مدیریت سمت‌ها</span></div><button class="modal-close" onclick="closeModal('jobTitlesModal')">✕</button></div>
+    <div id="job-titles-list" style="margin-bottom:12px"></div>
+    <div style="border-top:1px solid var(--border);padding-top:10px">
+      <div class="form-group"><label class="form-label" id="jt-new-lbl">سمت جدید</label><input class="form-control" type="text" id="jt-new" placeholder="مثلا: انباردار"></div>
+      <button class="btn btn-primary btn-block" onclick="addJobTitle()">➕ <span id="jt-add">افزودن سمت</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- APPROVE ROLE MODAL -->
+<div class="modal-overlay" id="approveRoleModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">✅ <span id="ar-title">تعیین سمت و تایید</span></div><button class="modal-close" onclick="closeModal('approveRoleModal')">✕</button></div>
+    <div id="ar-name" style="font-size:14px;font-weight:700;margin-bottom:10px"></div>
+    <div class="form-group"><label class="form-label" id="ar-dept-lbl">سمت کاری</label>
+      <select class="form-control" id="ar-dept"></select>
+    </div>
+    <input type="hidden" id="ar-uid">
+    <button class="btn btn-green btn-block" onclick="confirmApproveRole()">✅ <span id="ar-confirm">تایید کارگر</span></button>
+  </div>
+</div>
+
 <!-- ADD STAFF MODAL -->
 <div class="modal-overlay" id="addStaffModal">
   <div class="modal">
@@ -595,7 +621,9 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label" id="as-name-lbl">نام</label><input class="form-control" type="text" id="as-name"></div>
     <div class="form-group"><label class="form-label" id="as-email-lbl">ایمیل (برای ورود)</label><input class="form-control" type="email" id="as-email" placeholder="name@example.com"></div>
     <div class="form-group"><label class="form-label" id="as-pass-lbl">رمز عبور</label><input class="form-control" type="text" id="as-pass"></div>
-    <div class="form-group"><label class="form-label" id="as-dept-lbl">سمت / تخصص</label><input class="form-control" type="text" id="as-dept" placeholder="مثلا: نجار، راننده..."></div>
+    <div class="form-group"><label class="form-label" id="as-dept-lbl">سمت / تخصص</label>
+      <select class="form-control" id="as-dept"></select>
+    </div>
     <div id="as-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></div>
     <button class="btn btn-primary btn-block" onclick="addStaffMember()">💾 <span id="as-save">افزودن کارگر</span></button>
   </div>
@@ -1082,6 +1110,7 @@ function refreshStaticLabels(l){
   safeSet('fb-fixed-lbl',P('المصاريف الثابتة','Fixed Expenses','هزینه‌های ثابت'));
   safeSet('usage-history-label',P('سجل السحب','Withdrawal history','تاریخچه برداشت‌ها'));
   safeSet('add-staff-label',P('إضافة موظف','Add employee','افزودن کارگر'));
+  safeSet('manage-titles-label',P('إدارة المسميات','Manage titles','مدیریت سمت‌ها'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
@@ -1215,6 +1244,14 @@ function switchAuth(mode){
   document.getElementById('register-form').style.display = mode==='register'?'block':'none';
   document.getElementById('tab-login').classList.toggle('active', mode==='login');
   document.getElementById('tab-register').classList.toggle('active', mode==='register');
+  if(mode==='register'){ populateRegDept(); }
+}
+
+async function populateRegDept(){
+  var sel=document.getElementById('r-dept'); if(!sel) return;
+  // Load titles from DB if not already loaded
+  try { await loadJobTitles(); } catch(e){}
+  sel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
 }
 
 function doLogin(){
@@ -1363,6 +1400,7 @@ async function loadAll(){
   allPurchases = purch||[];
   allInvoices = invs||[];
   await loadStages();
+  await loadJobTitles();
   renderDashboard();
   renderOrders();
   renderStages();
@@ -3054,6 +3092,65 @@ async function loadStages(){
     }
   } catch(e){ console.log('loadStages fallback to defaults',e); }
 }
+
+// ===== JOB TITLES =====
+var allJobTitles=['نجار','جوشکار','رنگ‌کار','روکش‌کار','بازرس','فورمن','راننده','حسابدار','مسئول فروش','مسئول خرید','برق‌کار','کمک‌کارگر'];
+async function loadJobTitles(){
+  try {
+    var rows=await api('GET','job_titles','','?select=*&order=id.asc');
+    if(rows&&rows.length>0){ allJobTitles=rows.map(function(r){return {id:r.id,name:r.name};}); }
+  } catch(e){ /* keep defaults */ }
+}
+// Return plain array of title names (handles both default strings and DB objects)
+function jobTitleNames(){
+  return allJobTitles.map(function(t){return typeof t==='string'?t:t.name;});
+}
+function openJobTitlesManager(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('jt-title').textContent=L('إدارة المسميات الوظيفية','Manage job titles','مدیریت سمت‌ها');
+  document.getElementById('jt-new-lbl').textContent=L('مسمى جديد','New title','سمت جدید');
+  document.getElementById('jt-add').textContent=L('إضافة مسمى','Add title','افزودن سمت');
+  document.getElementById('jt-new').value='';
+  renderJobTitlesList();
+  openModal('jobTitlesModal');
+}
+function renderJobTitlesList(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var box=document.getElementById('job-titles-list'); if(!box) return;
+  var names=jobTitleNames();
+  if(names.length===0){ box.innerHTML='<div style="font-size:12px;color:var(--text2);text-align:center;padding:10px">'+T('no_data')+'</div>'; return; }
+  box.innerHTML=allJobTitles.map(function(t){
+    var name=typeof t==='string'?t:t.name;
+    var id=typeof t==='string'?'':t.id;
+    var inUse=allUsers.filter(function(u){return u.department===name&&u.status!=='rejected';}).length;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px">'+
+      '<span style="flex:1;font-size:13px;font-weight:600">'+name+(inUse>0?' <span style="font-size:10px;color:var(--text2)">('+inUse+')</span>':'')+'</span>'+
+      '<button class="btn btn-red btn-sm" onclick="deleteJobTitle('+(id?id:'null')+',\''+name.replace(/'/g,"\\'")+'\')">🗑️</button>'+
+    '</div>';
+  }).join('');
+}
+async function addJobTitle(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var name=document.getElementById('jt-new').value.trim();
+  if(!name){ showToast(T('err_fill'),'error'); return; }
+  if(jobTitleNames().indexOf(name)>=0){ showToast(L('موجود مسبقاً','Already exists','قبلاً هست'),'error'); return; }
+  await api('POST','job_titles',{name:name});
+  await loadJobTitles();
+  document.getElementById('jt-new').value='';
+  renderJobTitlesList();
+  showToast(T('saved'),'success');
+}
+async function deleteJobTitle(id,name){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var inUse=allUsers.filter(function(u){return u.department===name&&u.status!=='rejected';}).length;
+  if(inUse>0){ showToast(L('لا يمكن الحذف: '+inUse+' موظف بهذا المسمى','Cannot delete: '+inUse+' staff have this title','حذف ممکن نیست: '+inUse+' کارگر این سمت را دارند'),'error'); return; }
+  if(!confirm(L('حذف المسمى؟ ','Delete title? ','حذف سمت؟ ')+name)) return;
+  if(id){ await api('DELETE','job_titles',null,'?id=eq.'+id); }
+  await loadJobTitles();
+  renderJobTitlesList();
+  showToast(T('saved'),'success');
+}
+
 async function handleInvImage(input){
   var file=input.files[0]; if(!file) return;
   invImageData=await compressImage(file,0.6,900);
@@ -3734,6 +3831,8 @@ async function renderStaff(){
   const active=allUsers.filter(u=>u.status==='active');
   var addBtn=document.getElementById('add-staff-btn');
   if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
+  var mtBtn=document.getElementById('manage-titles-btn');
+  if(mtBtn) mtBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   const sec=document.getElementById('pending-users-section');
   if(pending.length>0&&currentUser?.role==='manager'){
     sec.style.display='block';
@@ -3752,7 +3851,7 @@ async function renderStaff(){
     ? `<div class="empty-state"><div class="empty-icon">👥</div><div>${T('no_data')}</div></div>`
     : active.map((u,i)=>`
       <div class="worker-item" ${currentUser?.role==='manager'?`onclick="openStaffFile(${u.id})" style="cursor:pointer"`:''}>
-        <div class="w-avatar" style="background:${colors[i%colors.length]}">${u.name[0]}</div>
+        ${u.photo?`<img src="${u.photo}" class="w-avatar" style="object-fit:cover">`:`<div class="w-avatar" style="background:${colors[i%colors.length]}">${u.name[0]}</div>`}
         <div class="w-info">
           <div class="w-name">${u.name} ${u.is_paused?'<span class="badge badge-orange" style="font-size:9px">'+(lang==='ar'?'موقوف · سفر':lang==='en'?'Paused · travel':'متوقف · سفر')+'</span>':''}</div>
           <div class="w-task">${u.department}${u.salary?' · '+(u.salary||0).toLocaleString()+' QAR':''}</div>
@@ -3763,18 +3862,30 @@ async function renderStaff(){
       </div>`).join('');
 }
 
-// Approve a pending worker after setting/confirming their job title
-async function approveWithRole(id){
+// Approve a pending worker after setting/confirming their job title (from list)
+function approveWithRole(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  var current=u.department&&u.department!=='-'?u.department:'';
-  var role=prompt(L('المسمى الوظيفي لهذا الموظف:','Job title for this employee:','سمت کاری این کارگر چیست؟'),current);
-  if(role===null) return; // cancelled
-  role=role.trim();
-  if(!role){ showToast(L('أدخل المسمى','Enter a title','سمت را وارد کن'),'error'); return; }
+  document.getElementById('ar-title').textContent=L('تعيين المسمى والقبول','Set title & approve','تعیین سمت و تایید');
+  document.getElementById('ar-dept-lbl').textContent=L('المسمى الوظيفي','Job title','سمت کاری');
+  document.getElementById('ar-confirm').textContent=L('قبول الموظف','Approve employee','تایید کارگر');
+  document.getElementById('ar-name').textContent=u.name;
+  document.getElementById('ar-uid').value=u.id;
+  var sel=document.getElementById('ar-dept');
+  var names=jobTitleNames();
+  sel.innerHTML=names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+((u.department===n)?' selected':'')+'>'+n+'</option>';}).join('');
+  openModal('approveRoleModal');
+}
+
+async function confirmApproveRole(){
+  var id=document.getElementById('ar-uid').value;
+  var role=document.getElementById('ar-dept').value;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(!role){ showToast(L('اختر المسمى','Select a title','سمت را انتخاب کن'),'error'); return; }
   await api('PATCH','users',{status:'active',department:role},'?id=eq.'+id);
   var users=await api('GET','users','','?select=*&order=created_at.desc');
   allUsers=users||[];
+  closeModal('approveRoleModal');
   renderStaff();
   showToast(L('تم القبول · امنح الصلاحيات من ملفه','Approved · grant access in their file','تایید شد · از فایلش دسترسی بده'),'success');
 }
@@ -3809,7 +3920,8 @@ function openAddStaffModal(){
   document.getElementById('as-name').value='';
   document.getElementById('as-email').value='';
   document.getElementById('as-pass').value='';
-  document.getElementById('as-dept').value='';
+  var deptSel=document.getElementById('as-dept');
+  deptSel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
   document.getElementById('as-err').style.display='none';
   openModal('addStaffModal');
 }
@@ -3867,6 +3979,34 @@ function buildPermissionsSection(u){
   '</div>';
 }
 
+var staffPhotoData='';
+function pickStaffPhoto(id){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      showToast(lang==='ar'?'جاري الرفع...':lang==='en'?'Uploading...':'در حال آپلود...','success');
+      try {
+        var compressed=await compressImage(input.files[0],0.6,500);
+        await api('PATCH','users',{photo:compressed},'?id=eq.'+id);
+        var u=allUsers.find(x=>x.id===id); if(u) u.photo=compressed;
+        showToast(T('saved'),'success');
+        openStaffFile(id);
+      } catch(e){ showToast('Error: '+e.message,'error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+function showStaffPhoto(id){
+  var u=allUsers.find(x=>x.id===id);
+  if(u&&u.photo){
+    document.getElementById('lightbox-img').src=u.photo;
+    document.getElementById('lightbox').style.display='flex';
+  }
+}
+
 function openStaffFile(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   document.getElementById('sf-title').textContent=(lang==='ar'?'ملف الموظف':lang==='en'?'Employee File':'فایل کارگر')+' · '+u.name;
@@ -3881,7 +4021,18 @@ function openStaffFile(id){
       (d.daysLeft<=5?' <span style="color:var(--orange)">('+d.daysLeft+' '+L('يوم','days','روز')+')</span>':'')+
       '</div>';
   }
+  // Staff photo section
+  staffPhotoData=u.photo||'';
+  var photoHtml='<div style="text-align:center;margin-bottom:12px">'+
+    '<div id="sf-photo-wrap" style="display:inline-block">'+
+      (u.photo
+        ? '<img src="'+u.photo+'" onclick="showStaffPhoto('+u.id+')" style="width:90px;height:90px;border-radius:50%;object-fit:cover;cursor:pointer;border:2px solid var(--accent)">'
+        : '<div style="width:90px;height:90px;border-radius:50%;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:32px;color:var(--text2)">'+(u.name?u.name[0].toUpperCase():'👤')+'</div>')+
+    '</div>'+
+    '<div style="margin-top:8px"><button class="btn btn-outline btn-sm" onclick="pickStaffPhoto('+u.id+')">📷 '+L('صورة الموظف','Employee photo','عکس کارگر')+'</button></div>'+
+  '</div>';
   document.getElementById('staff-file-content').innerHTML=
+    photoHtml+
     dueInfo+
     fld('sf-phone',L('الهاتف','Phone','تلفن'),u.phone,'text')+
     fld('sf-qid',L('الرقم الشخصي QID','QID number','شماره QID'),u.qid,'text')+
