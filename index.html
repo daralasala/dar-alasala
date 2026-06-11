@@ -1477,7 +1477,7 @@ function renderDashboard(){
   const done = allOrders.filter(o=>o.status==='delivered').length;
   const now=new Date(); const we=new Date(now); we.setDate(we.getDate()+7);
   const week = allOrders.filter(o=>{ if(!o.delivery_date)return false; const d=new Date(o.delivery_date); return d>=now&&d<=we; }).length;
-  const activeStaff = allUsers.filter(u=>u.status==='active').length;
+  const activeStaff = allUsers.filter(u=>u.status==='active'&&u.role!=='family'&&u.department!=='خانواده').length;
   document.getElementById('s-active').textContent=active;
   document.getElementById('s-done').textContent=done;
   document.getElementById('s-week').textContent=week;
@@ -4053,8 +4053,9 @@ async function shareBroadcastImage(){
 
 // ===== STAFF =====
 async function renderStaff(){
-  const pending=allUsers.filter(u=>u.status==='pending');
-  const active=allUsers.filter(u=>u.status==='active');
+  const isFam=function(u){return u.role==='family'||u.department==='خانواده';};
+  const pending=allUsers.filter(u=>u.status==='pending'&&!isFam(u));
+  const active=allUsers.filter(u=>u.status==='active'&&!isFam(u));
   var addBtn=document.getElementById('add-staff-btn');
   if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   var mtBtn=document.getElementById('manage-titles-btn');
