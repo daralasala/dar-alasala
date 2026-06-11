@@ -370,6 +370,7 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- STAFF -->
   <div class="page" id="page-staff">
+    <button class="btn btn-primary btn-block" onclick="openAddStaffModal()" id="add-staff-btn" style="margin-bottom:12px;display:none">➕ <span id="add-staff-label">إضافة موظف / افزودن کارگر</span></button>
     <div id="pending-users-section" style="display:none">
       <div class="section-title" id="sl-pending">در انتظار تایید</div>
       <div id="pending-list"></div>
@@ -587,6 +588,19 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- STAFF FILE MODAL -->
+<!-- ADD STAFF MODAL -->
+<div class="modal-overlay" id="addStaffModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">➕ <span id="as-title">افزودن کارگر</span></div><button class="modal-close" onclick="closeModal('addStaffModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="as-name-lbl">نام</label><input class="form-control" type="text" id="as-name"></div>
+    <div class="form-group"><label class="form-label" id="as-email-lbl">ایمیل (برای ورود)</label><input class="form-control" type="email" id="as-email" placeholder="name@example.com"></div>
+    <div class="form-group"><label class="form-label" id="as-pass-lbl">رمز عبور</label><input class="form-control" type="text" id="as-pass"></div>
+    <div class="form-group"><label class="form-label" id="as-dept-lbl">سمت / تخصص</label><input class="form-control" type="text" id="as-dept" placeholder="مثلا: نجار، راننده..."></div>
+    <div id="as-err" style="display:none;color:var(--red);font-size:12px;margin-bottom:8px"></div>
+    <button class="btn btn-primary btn-block" onclick="addStaffMember()">💾 <span id="as-save">افزودن کارگر</span></button>
+  </div>
+</div>
+
 <div class="modal-overlay" id="staffModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">👤 <span id="sf-title">فایل کارگر</span></div><button class="modal-close" onclick="closeModal('staffModal')">✕</button></div>
@@ -1067,6 +1081,7 @@ function refreshStaticLabels(l){
   safeSet('fb-assets-lbl',P('الأصول الثابتة','Fixed Assets','دارایی‌های ثابت'));
   safeSet('fb-fixed-lbl',P('المصاريف الثابتة','Fixed Expenses','هزینه‌های ثابت'));
   safeSet('usage-history-label',P('سجل السحب','Withdrawal history','تاریخچه برداشت‌ها'));
+  safeSet('add-staff-label',P('إضافة موظف','Add employee','افزودن کارگر'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
@@ -3717,6 +3732,8 @@ async function shareBroadcastImage(){
 async function renderStaff(){
   const pending=allUsers.filter(u=>u.status==='pending');
   const active=allUsers.filter(u=>u.status==='active');
+  var addBtn=document.getElementById('add-staff-btn');
+  if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   const sec=document.getElementById('pending-users-section');
   if(pending.length>0&&currentUser?.role==='manager'){
     sec.style.display='block';
@@ -3725,7 +3742,7 @@ async function renderStaff(){
         <div class="w-avatar" style="background:linear-gradient(135deg,var(--orange),var(--accent2))">${u.name[0]}</div>
         <div class="w-info"><div class="w-name">${u.name}</div><div class="w-task">${u.department} · ${u.email}</div></div>
         <div style="display:flex;gap:5px">
-          <button class="btn btn-green btn-sm" onclick="approveUser(${u.id},'active')">✅</button>
+          <button class="btn btn-green btn-sm" onclick="approveWithRole(${u.id})">✅ ${lang==='ar'?'قبول':lang==='en'?'Approve':'تایید'}</button>
           <button class="btn btn-red btn-sm" onclick="approveUser(${u.id},'rejected')">✕</button>
         </div>
       </div>`).join('');
@@ -3746,6 +3763,22 @@ async function renderStaff(){
       </div>`).join('');
 }
 
+// Approve a pending worker after setting/confirming their job title
+async function approveWithRole(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var current=u.department&&u.department!=='-'?u.department:'';
+  var role=prompt(L('المسمى الوظيفي لهذا الموظف:','Job title for this employee:','سمت کاری این کارگر چیست؟'),current);
+  if(role===null) return; // cancelled
+  role=role.trim();
+  if(!role){ showToast(L('أدخل المسمى','Enter a title','سمت را وارد کن'),'error'); return; }
+  await api('PATCH','users',{status:'active',department:role},'?id=eq.'+id);
+  var users=await api('GET','users','','?select=*&order=created_at.desc');
+  allUsers=users||[];
+  renderStaff();
+  showToast(L('تم القبول · امنح الصلاحيات من ملفه','Approved · grant access in their file','تایید شد · از فایلش دسترسی بده'),'success');
+}
+
 async function approveUser(id, status){
   await api('PATCH','users',{status},`?id=eq.${id}`);
   const users=await api('GET','users','','?select=*&order=created_at.desc');
@@ -3764,6 +3797,43 @@ async function removeUser(id){
 }
 
 // ===== STAFF FILE (employee details, salary, loans, costs) =====
+// ===== ADD STAFF (manager creates worker directly) =====
+function openAddStaffModal(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('as-title').textContent=L('إضافة موظف','Add employee','افزودن کارگر');
+  document.getElementById('as-name-lbl').textContent=L('الاسم','Name','نام');
+  document.getElementById('as-email-lbl').textContent=L('البريد (لتسجيل الدخول)','Email (for login)','ایمیل (برای ورود)');
+  document.getElementById('as-pass-lbl').textContent=L('كلمة المرور','Password','رمز عبور');
+  document.getElementById('as-dept-lbl').textContent=L('المسمى الوظيفي','Job title','سمت / تخصص');
+  document.getElementById('as-save').textContent=L('إضافة موظف','Add employee','افزودن کارگر');
+  document.getElementById('as-name').value='';
+  document.getElementById('as-email').value='';
+  document.getElementById('as-pass').value='';
+  document.getElementById('as-dept').value='';
+  document.getElementById('as-err').style.display='none';
+  openModal('addStaffModal');
+}
+
+async function addStaffMember(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var name=document.getElementById('as-name').value.trim();
+  var email=document.getElementById('as-email').value.trim().toLowerCase();
+  var pass=document.getElementById('as-pass').value;
+  var dept=document.getElementById('as-dept').value.trim();
+  var err=document.getElementById('as-err');
+  if(!name||!email||!pass){ err.style.display='block'; err.textContent=T('err_fill'); return; }
+  var existing=await api('GET','users','','?email=eq.'+encodeURIComponent(email));
+  if(existing&&existing.length>0){ err.style.display='block'; err.textContent=L('البريد مستخدم','Email already used','این ایمیل قبلاً استفاده شده'); return; }
+  // Manager creates worker -> active immediately, but NO access until granted
+  var res=await api('POST','users',{name:name,email:email,password:pass,role:'worker',department:dept||'-',status:'active',permissions:'[]'});
+  if(!res){ err.style.display='block'; err.textContent='خطا'; return; }
+  closeModal('addStaffModal');
+  var users=await api('GET','users','','?select=*&order=created_at.desc');
+  allUsers=users||[];
+  renderStaff();
+  showToast(L('تمت إضافة الموظف · امنح الصلاحيات من ملفه','Employee added · grant access in their file','کارگر اضافه شد · از فایلش دسترسی بده'),'success');
+}
+
 // Build the access-permissions checkbox section for a staff file
 function buildPermissionsSection(u){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
