@@ -346,6 +346,11 @@ body.en .search-icon{right:auto;left:10px;}
       <div class="fin-amount" style="color:var(--accent)" id="f-balance">-</div>
       <div class="fin-label" id="fl-balance">موجودی خالص</div>
     </div>
+    <div class="fin-card" id="f-realbalance-card" style="border-color:rgba(155,109,255,.4);margin-bottom:14px;display:none">
+      <div class="fin-amount" style="color:#9b6dff" id="f-realbalance">-</div>
+      <div class="fin-label" id="fl-realbalance">موجودی واقعی (بعد از مخارج شخصی)</div>
+      <div style="font-size:10px;color:var(--text2);margin-top:3px" id="fl-realbalance-note">فقط شما این را می‌بینید</div>
+    </div>
     <div class="fin-card" id="f-debt-card" style="border-color:rgba(230,150,30,.4);margin-bottom:14px;display:none">
       <div class="fin-amount" style="color:#e6961e" id="f-debt">-</div>
       <div class="fin-label" id="fl-debt">الديون المستحقة / بدهی معوق</div>
@@ -1221,6 +1226,8 @@ function setLang(l){
   document.getElementById('fl-income').textContent=T('income_lbl');
   document.getElementById('fl-expense').textContent=T('expense_lbl');
   document.getElementById('fl-balance').textContent=T('balance_lbl');
+  var flr=document.getElementById('fl-realbalance'); if(flr) flr.textContent=l==='ar'?'الرصيد الفعلي (بعد المصاريف الشخصية)':l==='en'?'Real balance (after personal expenses)':'موجودی واقعی (بعد از مخارج شخصی)';
+  var flrn=document.getElementById('fl-realbalance-note'); if(flrn) flrn.textContent=l==='ar'?'أنت وحدك ترى هذا':l==='en'?'Only you can see this':'فقط شما این را می‌بینید';
   document.getElementById('fb-income').innerHTML=T('income_btn');
   document.getElementById('fb-expense').innerHTML=T('expense_btn');
   document.getElementById('fb-purchase').innerHTML=T('purchase_btn');
@@ -2877,6 +2884,25 @@ function renderFinance(){
     if(fixedBtn) fixedBtn.style.display='';
     document.getElementById('f-income').textContent=income.toLocaleString()+' QAR';
     document.getElementById('f-balance').textContent=(income-expense).toLocaleString()+' QAR';
+    // Real balance (after personal expenses) — MANAGER ONLY
+    var realCard=document.getElementById('f-realbalance-card');
+    if(realCard){
+      if(currentUser&&currentUser.role==='manager'){
+        // ensure personal expenses are loaded, then compute
+        loadPersonalExp().then(function(){
+          var personalTotal=allPersonalExp.reduce(function(s,e){return s+(e.amount||0);},0);
+          var real=(income-expense)-personalTotal;
+          var rc=document.getElementById('f-realbalance-card');
+          var rv=document.getElementById('f-realbalance');
+          if(rc&&rv){
+            rc.style.display='';
+            rv.textContent=real.toLocaleString()+' QAR';
+          }
+        });
+      } else {
+        realCard.style.display='none';
+      }
+    }
   }
   document.getElementById('f-expense').textContent=expense.toLocaleString()+' QAR';
   // Show outstanding debt card
