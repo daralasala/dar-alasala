@@ -595,6 +595,14 @@ body.en .search-icon{right:auto;left:10px;}
     <div id="r2i-item-name" style="font-size:14px;font-weight:700;margin-bottom:4px"></div>
     <div id="r2i-req-qty" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>
     <div id="r2i-exists-note" style="font-size:12px;color:var(--green);margin-bottom:10px;display:none"></div>
+    <div class="form-group"><label class="form-label" id="r2i-catalog-label">انتخاب از اجناس موجود</label>
+      <select class="form-control" id="r2i-catalog" onchange="onR2ICatalogChange()"></select>
+    </div>
+    <div id="r2i-img-section" style="text-align:center;margin-bottom:10px">
+      <div id="r2i-img-preview"></div>
+      <button class="btn btn-outline btn-sm" id="r2i-img-btn" onclick="pickR2IImage()" style="margin-top:6px">📷 <span id="r2i-img-label">عکس جنس</span></button>
+    </div>
+    <div class="form-group"><label class="form-label" id="r2i-name-label">نام جنس</label><input class="form-control" type="text" id="r2i-name-input"></div>
     <div class="form-group"><label class="form-label" id="r2i-qty-label">مقدار (عدد)</label><input class="form-control" type="number" id="r2i-qty" value="0"></div>
     <div class="form-group"><label class="form-label" id="r2i-unit-label">واحد</label>
       <select class="form-control" id="r2i-unit"><option>عدد</option><option>متر</option><option>کیلو</option><option>لیتر</option><option>بسته</option><option>متر مربع</option></select>
@@ -4793,61 +4801,122 @@ async function updateRequest(id,status){
 }
 
 // Open modal to transfer a purchased request into inventory
+var r2iImageData='';
 function openReqToInv(reqId){
   var r=allRequests.find(x=>x.id===reqId); if(!r) return;
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   document.getElementById('r2i-title').textContent=L('نقل إلى المخزون','Transfer to inventory','انتقال به انبار');
+  document.getElementById('r2i-catalog-label').textContent=L('اختر من المواد الموجودة','Pick from existing items','انتخاب از اجناس موجود');
+  document.getElementById('r2i-name-label').textContent=L('اسم المادة','Material name','نام جنس');
   document.getElementById('r2i-qty-label').textContent=L('الكمية (رقم)','Quantity (number)','مقدار (عدد)');
   document.getElementById('r2i-unit-label').textContent=L('الوحدة','Unit','واحد');
   document.getElementById('r2i-price-label').textContent=L('سعر الوحدة (QAR)','Unit price (QAR)','قیمت واحد (QAR)');
   document.getElementById('r2i-min-label').textContent=L('الحد الأدنى للمخزون (تنبيه)','Min stock (alert)','حداقل موجودی (هشدار)');
+  document.getElementById('r2i-img-label').textContent=L('صورة المادة','Material photo','عکس جنس');
   document.getElementById('r2i-confirm').textContent=L('إضافة للمخزون','Add to inventory','افزودن به انبار');
   document.getElementById('r2i-item-name').textContent=r.item_name;
   document.getElementById('r2i-req-qty').textContent=L('المطلوب','Requested','درخواستی')+': '+(r.quantity||'-');
   document.getElementById('r2i-req-id').value=r.id;
-  // Try to extract a number from the request quantity text (e.g. "10 متر" -> 10)
+  // Build catalog dropdown from existing inventory
+  var cat=document.getElementById('r2i-catalog');
+  var opts='<option value="__new__">➕ '+L('مادة جديدة','New item','جنس جدید')+'</option>';
+  opts+=allInventory.map(function(it){return '<option value="'+it.id+'">'+(it.name||'')+(it.quantity!=null?(' ('+it.quantity+' '+(it.unit||'')+')'):'')+'</option>';}).join('');
+  cat.innerHTML=opts;
+  // Try to extract a number from the request quantity text
   var numMatch=(r.quantity||'').toString().match(/[\d.]+/);
   document.getElementById('r2i-qty').value=numMatch?numMatch[0]:0;
-  // Check if item already exists in inventory (same name)
+  // Auto-match by name
   var existing=allInventory.find(function(x){return x.name&&x.name.trim()===r.item_name.trim();});
-  var note=document.getElementById('r2i-exists-note');
   if(existing){
-    document.getElementById('r2i-existing-id').value=existing.id;
-    document.getElementById('r2i-unit').value=existing.unit||'عدد';
-    document.getElementById('r2i-price').value=existing.unit_price||0;
-    document.getElementById('r2i-min').value=existing.min_quantity||0;
-    note.style.display='block';
-    note.textContent='✅ '+L('موجود في المخزون — ستُضاف الكمية للرصيد الحالي ('+(existing.quantity||0)+')','In inventory — quantity will be added to current stock ('+(existing.quantity||0)+')','در انبار موجود است — مقدار به موجودی فعلی ('+(existing.quantity||0)+') اضافه می‌شود');
+    cat.value=String(existing.id);
   } else {
-    document.getElementById('r2i-existing-id').value='';
-    document.getElementById('r2i-unit').value='عدد';
-    document.getElementById('r2i-price').value=0;
-    document.getElementById('r2i-min').value=0;
-    note.style.display='none';
+    cat.value='__new__';
+    document.getElementById('r2i-name-input').value=r.item_name;
+    r2iImageData=r.image||'';
+  }
+  onR2ICatalogChange(); // fill fields based on selection
+  // If new and request had an image, show it
+  if(!existing && r.image){
+    r2iImageData=r.image;
+    document.getElementById('r2i-img-preview').innerHTML='<img src="'+r.image+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px">';
   }
   openModal('reqToInvModal');
 }
 
+// When catalog selection changes, fill name/unit/price/image accordingly
+function onR2ICatalogChange(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var val=document.getElementById('r2i-catalog').value;
+  var nameInput=document.getElementById('r2i-name-input');
+  var note=document.getElementById('r2i-exists-note');
+  var preview=document.getElementById('r2i-img-preview');
+  if(val==='__new__'){
+    document.getElementById('r2i-existing-id').value='';
+    nameInput.removeAttribute('readonly');
+    nameInput.style.opacity='1';
+    note.style.display='none';
+    if(!r2iImageData){ preview.innerHTML=''; }
+  } else {
+    var ex=allInventory.find(function(x){return String(x.id)===String(val);});
+    if(ex){
+      document.getElementById('r2i-existing-id').value=ex.id;
+      nameInput.value=ex.name||'';
+      nameInput.setAttribute('readonly','readonly');
+      nameInput.style.opacity='.6';
+      document.getElementById('r2i-unit').value=ex.unit||'عدد';
+      document.getElementById('r2i-price').value=ex.unit_price||0;
+      document.getElementById('r2i-min').value=ex.min_quantity||0;
+      r2iImageData=ex.image||'';
+      preview.innerHTML=ex.image?'<img src="'+ex.image+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px">':'';
+      note.style.display='block';
+      note.textContent='✅ '+L('موجود — ستُضاف الكمية للرصيد ('+(ex.quantity||0)+')','In stock — qty added to balance ('+(ex.quantity||0)+')','موجود است — مقدار به موجودی ('+(ex.quantity||0)+') اضافه می‌شود');
+    }
+  }
+}
+
+// Pick/replace the item image
+function pickR2IImage(){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        r2iImageData=await compressImage(input.files[0],0.6,700);
+        document.getElementById('r2i-img-preview').innerHTML='<img src="'+r2iImageData+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px">';
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+
 async function confirmReqToInv(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var reqId=document.getElementById('r2i-req-id').value;
   var existingId=document.getElementById('r2i-existing-id').value;
   var r=allRequests.find(x=>String(x.id)===String(reqId)); if(!r) return;
+  var name=document.getElementById('r2i-name-input').value.trim();
   var qty=parseFloat(document.getElementById('r2i-qty').value)||0;
   var unit=document.getElementById('r2i-unit').value;
   var price=parseFloat(document.getElementById('r2i-price').value)||0;
   var min=parseFloat(document.getElementById('r2i-min').value)||0;
   if(existingId){
-    // Add to existing stock
+    // Add to existing stock (keep its image; update image only if a new one was picked)
     var ex=allInventory.find(x=>String(x.id)===String(existingId));
     var newQty=(ex?(ex.quantity||0):0)+qty;
-    await api('PATCH','inventory',{quantity:newQty,unit:unit,unit_price:price,min_quantity:min},'?id=eq.'+existingId);
-    if(ex){ ex.quantity=newQty; ex.unit_price=price; }
+    var patch={quantity:newQty,unit:unit,unit_price:price,min_quantity:min};
+    if(r2iImageData && (!ex||!ex.image)){ patch.image=r2iImageData; }
+    await api('PATCH','inventory',patch,'?id=eq.'+existingId);
+    if(ex){ ex.quantity=newQty; ex.unit_price=price; if(patch.image) ex.image=patch.image; }
   } else {
-    // Create new inventory item (carry over the request image if any)
-    await api('POST','inventory',{name:r.item_name,quantity:qty,unit:unit,unit_price:price,min_quantity:min,image:r.image||null});
+    // Create new inventory item with chosen name + image
+    if(!name){ showToast(T('err_fill'),'error'); return; }
+    await api('POST','inventory',{name:name,quantity:qty,unit:unit,unit_price:price,min_quantity:min,image:r2iImageData||r.image||null});
   }
   // Mark request as bought
   await api('PATCH','purchase_requests',{status:'bought'},'?id=eq.'+reqId);
+  r2iImageData='';
   closeModal('reqToInvModal');
   await loadAll();
   renderRequests();
