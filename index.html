@@ -1239,12 +1239,48 @@ async function doRegister(){
   if(!name||!email||!pass){ err.style.display='block'; err.textContent=T('err_fill'); return; }
   const existing = await api('GET','users','',`?email=eq.${encodeURIComponent(email)}`);
   if(existing && existing.length>0){ err.style.display='block'; err.textContent=T('err_email'); return; }
-  const res = await api('POST','users',{name,email,password:pass,role:'worker',department:dept,status:'pending'});
+  const res = await api('POST','users',{name,email,password:pass,role:'worker',department:dept,status:'pending',permissions:'[]'});
   if(!res){ err.style.display='block'; err.textContent='خطا در ثبت‌نام'; return; }
   err.style.display='none';
   msg.style.display='block';
   msg.textContent=T('reg_success');
   setTimeout(()=>switchAuth('login'),2500);
+}
+
+// ===== ACCESS CONTROL =====
+// All possible tabs (dashboard & notify always available to any logged-in user)
+var ALL_TABS=['dashboard','orders','production','inventory','customers','finance','staff','requests','notify'];
+// Tabs that the manager grants individually
+var GRANTABLE_TABS=['orders','production','inventory','customers','finance','staff','requests'];
+
+function getUserPermissions(u){
+  u=u||currentUser;
+  if(!u) return [];
+  if(u.role==='manager') return ALL_TABS.slice(); // manager sees everything
+  // If explicit permissions set, use them
+  if(u.permissions){
+    try {
+      var p=typeof u.permissions==='string'?JSON.parse(u.permissions):u.permissions;
+      if(Array.isArray(p)) return ['dashboard','notify'].concat(p);
+    } catch(e){}
+  }
+  // Fallback: legacy department-based access (so existing staff keep working)
+  var dep=u.department;
+  var tabs=['dashboard','notify','production'];
+  if(dep==='حسابدار') tabs=tabs.concat(['orders','finance','customers','inventory','requests']);
+  else if(dep==='مسئول خرید') tabs=tabs.concat(['finance','inventory','requests']);
+  else if(dep==='مسئول فروش') tabs=tabs.concat(['orders','customers']);
+  else if(dep==='راننده') tabs=tabs.concat(['orders']);
+  else tabs=tabs.concat(['orders','inventory','requests']); // workshop workers
+  return tabs;
+}
+
+function applyTabPermissions(){
+  var allowed=getUserPermissions(currentUser);
+  GRANTABLE_TABS.forEach(function(t){
+    var el=document.getElementById('tab-'+t);
+    if(el) el.style.display=allowed.indexOf(t)>=0?'':'none';
+  });
 }
 
 function enterApp(){
@@ -1258,15 +1294,8 @@ function enterApp(){
     document.getElementById('uname').textContent=currentUser.name;
     document.getElementById('uavatar').textContent=currentUser.name[0].toUpperCase();
     setLang(lang);
-    // Hide tabs based on role
-    if(currentUser.role!=='manager'){
-      document.getElementById('tab-finance').style.display='none';
-      document.getElementById('tab-staff').style.display='none';
-    }
-    // Purchasing and Accountant can see finance
-    if(currentUser.department==='مسئول خرید'||currentUser.department==='حسابدار'){
-      document.getElementById('tab-finance').style.display='';
-    }
+    // Show only tabs this user is permitted to access
+    applyTabPermissions();
     loadAll();
   },380);
 }
@@ -1285,6 +1314,11 @@ function doLogout(){
 
 // ===== TABS =====
 function showTab(tab){
+  // Block access to tabs the user isn't permitted to see
+  if(currentUser && getUserPermissions(currentUser).indexOf(tab)<0){
+    showToast(lang==='ar'?'لا تملك صلاحية':lang==='en'?'No permission':'دسترسی ندارید','error');
+    return;
+  }
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
@@ -3730,6 +3764,39 @@ async function removeUser(id){
 }
 
 // ===== STAFF FILE (employee details, salary, loans, costs) =====
+// Build the access-permissions checkbox section for a staff file
+function buildPermissionsSection(u){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(u.role==='manager'){
+    return '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;color:var(--text2)">👑 '+L('المدير لديه صلاحية كاملة','Manager has full access','مدیر به همه‌چیز دسترسی دارد')+'</div>';
+  }
+  var tabNames={
+    orders:L('الطلبات','Orders','سفارشات'),
+    production:L('الإنتاج','Production','تولید'),
+    inventory:L('المخزون','Inventory','انبار'),
+    customers:L('العملاء','Customers','مشتری‌ها'),
+    finance:L('المالية','Finance','مالی'),
+    staff:L('الموظفين','Staff','کارکنان'),
+    requests:L('طلبات الشراء','Purchase requests','درخواست خرید')
+  };
+  // current permissions (explicit list, else empty so manager sets fresh)
+  var current=[];
+  if(u.permissions){
+    try { var p=typeof u.permissions==='string'?JSON.parse(u.permissions):u.permissions; if(Array.isArray(p)) current=p; } catch(e){}
+  }
+  var rows=GRANTABLE_TABS.map(function(t){
+    var checked=current.indexOf(t)>=0?'checked':'';
+    return '<label style="display:flex;align-items:center;gap:8px;padding:7px 9px;background:var(--surface2);border-radius:8px;margin-bottom:5px;cursor:pointer;font-size:13px">'+
+      '<input type="checkbox" class="perm-cb" value="'+t+'" '+checked+' style="width:17px;height:17px">'+
+      '<span>'+tabNames[t]+'</span></label>';
+  }).join('');
+  return '<div style="border-top:1px solid var(--border);margin:12px 0;padding-top:10px">'+
+    '<div style="font-size:12px;font-weight:700;color:var(--accent);margin-bottom:8px">🔐 '+L('الصلاحيات (ما يمكنه رؤيته)','Access permissions (what they can see)','دسترسی‌ها (به چه چیزی دسترسی دارد)')+'</div>'+
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:8px">'+L('بدون تحديد = لا يرى شيئاً سوى لوحة التحكم','Nothing checked = sees only dashboard','بدون تیک = فقط داشبورد را می‌بیند')+'</div>'+
+    rows+
+  '</div>';
+}
+
 function openStaffFile(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   document.getElementById('sf-title').textContent=(lang==='ar'?'ملف الموظف':lang==='en'?'Employee File':'فایل کارگر')+' · '+u.name;
@@ -3760,6 +3827,7 @@ function openStaffFile(id){
     '<div style="font-size:11px;color:var(--text2);margin:-4px 0 10px">'+L('يُخصم من راتب هذا الشهر وينقص من رصيد السلفة عند الدفع','Deducted from this month salary and subtracted from loan balance when paying','هنگام پرداخت حقوق، از حقوق این ماه کم و از مانده قرض کسر می‌شود')+'</div>'+
     fld('sf-ticket',L('تكلفة التذكرة (QAR)','Ticket cost (QAR)','هزینه بلیط (QAR)'),u.ticket_cost||0,'number')+
     fld('sf-other',L('تكاليف أخرى (QAR)','Other costs (QAR)','هزینه‌های دیگر (QAR)'),u.other_costs||0,'number')+
+    buildPermissionsSection(u)+
     '<input type="hidden" id="sf-id" value="'+u.id+'">'+
     '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveStaffFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
     (u.salary>0?'<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="payStaffSalary('+u.id+')">💰 '+L('دفع الراتب (يُخصم من المالية)','Pay salary (deduct from finance)','پرداخت حقوق (از مالی کم می‌شود)')+'</button>':'')+
@@ -3805,9 +3873,18 @@ async function saveStaffFile(){
     ticket_cost:parseFloat(document.getElementById('sf-ticket').value)||0,
     other_costs:parseFloat(document.getElementById('sf-other').value)||0
   };
+  // Collect permission checkboxes (if present)
+  var cbs=document.querySelectorAll('.perm-cb');
+  if(cbs.length>0){
+    var perms=[];
+    cbs.forEach(function(cb){ if(cb.checked) perms.push(cb.value); });
+    body.permissions=JSON.stringify(perms);
+  }
   await api('PATCH','users',body,'?id=eq.'+id);
   var u=allUsers.find(x=>String(x.id)===String(id)); if(u) Object.assign(u,body);
   closeModal('staffModal'); renderStaff();
+  // If editing self, re-apply tab permissions live
+  if(currentUser&&String(currentUser.id)===String(id)){ Object.assign(currentUser,body); applyTabPermissions(); }
   showToast(T('saved'),'success');
 }
 
