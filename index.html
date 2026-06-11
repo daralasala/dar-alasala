@@ -156,6 +156,7 @@ body.en .notif-item.unread{border-left-color:var(--accent);}
 
 /* MODAL */
 .modal-overlay{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.78);backdrop-filter:blur(4px);display:none;align-items:flex-end;justify-content:center;}
+.modal-overlay.modal-top{z-index:320;}
 .modal-overlay.open{display:flex;}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:22px 22px 0 0;padding:20px;width:100%;max-width:430px;max-height:88vh;overflow-y:auto;animation:slideUp .26s ease;}
 @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
@@ -436,7 +437,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- FAMILY MEMBER FILE MODAL -->
-<div class="modal-overlay" id="familyFileModal">
+<div class="modal-overlay modal-top" id="familyFileModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">📋 <span id="ff-title">فایل خانواده</span></div><button class="modal-close" onclick="closeModal('familyFileModal')">✕</button></div>
     <div id="family-file-content"></div>
@@ -444,7 +445,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- PERSONAL EXPENSE MODAL -->
-<div class="modal-overlay" id="personalExpModal">
+<div class="modal-overlay modal-top" id="personalExpModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">💳 <span id="pem-title">افزودن خرج</span></div><button class="modal-close" onclick="closeModal('personalExpModal')">✕</button></div>
     <div class="form-group"><label class="form-label" id="pem-amount">مبلغ (QAR)</label><input class="form-control" type="number" id="pe-amount" value="0"></div>
@@ -468,7 +469,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- CUSTOMER HISTORY MODAL -->
-<div class="modal-overlay" id="customerHistoryModal">
+<div class="modal-overlay modal-top" id="customerHistoryModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">📁 <span id="ch-title">تاریخچه مشتری</span></div><button class="modal-close" onclick="closeModal('customerHistoryModal')">✕</button></div>
     <div id="customer-history-content"></div>
@@ -564,7 +565,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- USAGE HISTORY MODAL -->
-<div class="modal-overlay" id="usageHistoryModal">
+<div class="modal-overlay modal-top" id="usageHistoryModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">📋 <span id="uh-title">تاریخچه برداشت</span></div><button class="modal-close" onclick="closeModal('usageHistoryModal')">✕</button></div>
     <div id="usage-history-content"></div>
@@ -622,7 +623,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- START ITEM PRODUCTION MODAL -->
-<div class="modal-overlay" id="startProdModal">
+<div class="modal-overlay modal-top" id="startProdModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">🏭 <span id="sp-title">شروع تولید جنس</span></div><button class="modal-close" onclick="closeModal('startProdModal')">✕</button></div>
     <div id="sp-item-name" style="font-size:14px;font-weight:700;margin-bottom:10px"></div>
@@ -653,7 +654,7 @@ body.en .search-icon{right:auto;left:10px;}
 
 <!-- STAFF FILE MODAL -->
 <!-- JOB TITLES MANAGER MODAL -->
-<div class="modal-overlay" id="jobTitlesModal">
+<div class="modal-overlay modal-top" id="jobTitlesModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">⚙️ <span id="jt-title">مدیریت سمت‌ها</span></div><button class="modal-close" onclick="closeModal('jobTitlesModal')">✕</button></div>
     <div id="job-titles-list" style="margin-bottom:12px"></div>
@@ -665,7 +666,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- APPROVE ROLE MODAL -->
-<div class="modal-overlay" id="approveRoleModal">
+<div class="modal-overlay modal-top" id="approveRoleModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">✅ <span id="ar-title">تعیین سمت و تایید</span></div><button class="modal-close" onclick="closeModal('approveRoleModal')">✕</button></div>
     <div id="ar-name" style="font-size:14px;font-weight:700;margin-bottom:10px"></div>
@@ -727,7 +728,7 @@ body.en .search-icon{right:auto;left:10px;}
 
 <!-- ORDER DETAIL MODAL -->
 <!-- MATERIALS SHOPPING LIST MODAL -->
-<div class="modal-overlay" id="matShopModal">
+<div class="modal-overlay modal-top" id="matShopModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">🧵 <span id="ms-title">لیست خرید پارچه</span></div><button class="modal-close" onclick="closeModal('matShopModal')">✕</button></div>
     <div id="mat-shop-content"></div>
@@ -735,7 +736,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- MATERIAL MODAL -->
-<div class="modal-overlay" id="materialModal">
+<div class="modal-overlay modal-top" id="materialModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">🧵 <span id="mat-modal-title">افزودن ماده</span></div><button class="modal-close" onclick="closeModal('materialModal')">✕</button></div>
     <div class="form-group"><label class="form-label" id="mat-name-lbl">نام / شماره پارچه یا ماده</label><input class="form-control" type="text" id="mat-name" placeholder="مثلا: پارچه کد 123"></div>
@@ -854,7 +855,7 @@ body.en .search-icon{right:auto;left:10px;}
 <button class="fab" id="fab" onclick="openInvoiceModal()">🧾 <span id="fab-text">إنشاء فاتورة</span></button>
 
 <!-- CONTRACT MODAL -->
-<div class="modal-overlay" id="contractModal">
+<div class="modal-overlay modal-top" id="contractModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header">
       <div class="modal-title">📜 <span id="contract-title">عقد / قرارداد</span></div>
@@ -865,7 +866,7 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- INVOICE MODAL -->
-<div class="modal-overlay" id="invoiceModal">
+<div class="modal-overlay modal-top" id="invoiceModal">
   <div class="modal" style="max-height:92vh">
     <div class="modal-header">
       <div class="modal-title">🧾 <span id="inv-modal-title">فاکتور</span></div>
