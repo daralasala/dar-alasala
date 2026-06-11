@@ -3104,7 +3104,15 @@ function renderFinance(){
       }
     }
   }
-  document.getElementById('f-expense').textContent=expense.toLocaleString()+' QAR';
+  if(isPurchasing){
+    // Purchasing sees only their purchases total
+    var purchaseTotal=allTransactions.filter(function(t){return t.type==='purchase';}).reduce(function(s,t){return s+(t.amount||0);},0);
+    document.getElementById('f-expense').textContent=purchaseTotal.toLocaleString()+' QAR';
+    var fle=document.getElementById('fl-expense'); if(fle) fle.textContent=lang==='ar'?'إجمالي المشتريات':lang==='en'?'Total purchases':'کل خریدها';
+  } else {
+    document.getElementById('f-expense').textContent=expense.toLocaleString()+' QAR';
+    var fle2=document.getElementById('fl-expense'); if(fle2) fle2.textContent=T('expense_lbl');
+  }
   // Show outstanding debt card
   var debtCard=document.getElementById('f-debt-card');
   if(debtCard){
@@ -3113,7 +3121,7 @@ function renderFinance(){
   }
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
   // Filter transactions for purchasing - only show expense/purchase
-  var txList=isPurchasing?allTransactions.filter(t=>t.type!=='income'):allTransactions;
+  var txList=isPurchasing?allTransactions.filter(t=>t.type==='purchase'):allTransactions;
   document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
     : txList.slice(0,20).map(t=>{
