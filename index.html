@@ -2791,14 +2791,23 @@ async function markInvoiceDelivered(invId){
     return;
   }
   if(!confirm(lang==='ar'?'تأكيد تسليم الفاتورة كاملة؟':lang==='en'?'Confirm delivery of the whole invoice?':'تحویل کل فاکتور تایید شود؟')) return;
+  // Compute totals on the WHOLE invoice (prepay is recorded once for the invoice)
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var total=inv?(inv.total_price||0):items.reduce(function(s,it){return s+(it.total_price||0);},0);
+  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
+  // Only count items not already delivered (so re-delivery doesn't double-charge)
+  var alreadyDelivered=items.every(function(o){return o.status==='delivered';});
+  // Mark all items delivered
   for(var i=0;i<items.length;i++){
-    var o=items[i];
-    if(o.status==='delivered') continue;
-    var rem=(o.total_price||0)-(o.prepay||0);
-    await api('PATCH','orders',{status:'delivered',progress:100},'?id=eq.'+o.id);
-    if(rem>0){
-      await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+(o.customer_name||''),category:'payment'})});
+    if(items[i].status!=='delivered'){
+      await api('PATCH','orders',{status:'delivered',progress:100},'?id=eq.'+items[i].id);
     }
+  }
+  // Register the remaining balance as a SINGLE income transaction for the whole invoice
+  var rem=total-advance;
+  if(rem>0&&!alreadyDelivered){
+    var custName=inv?inv.customer_name:(items[0].customer_name||'');
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
   }
   closeModal('invoiceFolderModal'); await loadAll();
   showToast(lang==='ar'?'تم تسليم الفاتورة':lang==='en'?'Invoice delivered':'فاکتور تحویل شد','success');
