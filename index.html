@@ -1374,7 +1374,7 @@ function setLang(l){
   if(dashRole&&currentUser) dashRole.textContent=currentUser.role==='manager'?(l==='en'?'Manager':l==='ar'?'مدير':'مدیر'):currentUser.department;
   // Persist chosen language so it survives refresh
   try { localStorage.setItem('app_lang', l); } catch(e){}
-  try { refreshStaticLabels(l); } catch(e){}
+  try { refreshStaticLabels(l); _lastTranslatedLang=l; } catch(e){}
   // Re-render dynamic content so it follows the new language
   try { if(currentUser){ refreshAllViews(); } } catch(e){ console.log('refresh views err',e); }
   } catch(e){ console.log('setLang error:',e); }
@@ -1509,11 +1509,28 @@ function enterApp(){
     // Show only tabs this user is permitted to access
     applyTabPermissions();
     loadAll();
+    startAutoRefresh();
   },380);
+}
+
+// ===== AUTO REFRESH (every 10s, silent, only when no modal is open) =====
+var _autoRefreshTimer=null;
+function startAutoRefresh(){
+  if(_autoRefreshTimer) clearInterval(_autoRefreshTimer);
+  _autoRefreshTimer=setInterval(function(){
+    if(!currentUser) return;
+    // Don't refresh while a modal is open (avoid interrupting the user)
+    var anyModalOpen=document.querySelector('.modal-overlay.open');
+    if(anyModalOpen) return;
+    // Don't refresh if the tab/page is hidden in the background
+    if(document.hidden) return;
+    loadAll();
+  },10000);
 }
 
 function doLogout(){
   try { localStorage.removeItem('dar_user'); } catch(e){}
+  if(_autoRefreshTimer){ clearInterval(_autoRefreshTimer); _autoRefreshTimer=null; }
   currentUser=null; allOrders=[]; allUsers=[]; allTransactions=[];
   document.getElementById('splash').style.opacity='1';
   document.getElementById('splash').style.display='flex';
@@ -5475,10 +5492,17 @@ function removeImg(btn){
 }
 
 // ===== MODAL =====
+var _lastTranslatedLang=null;
 function openModal(id){
   document.getElementById(id).classList.add('open');
-  // Re-apply current language labels so no modal opens with stale text
-  try { if(currentUser&&typeof refreshStaticLabels==='function') refreshStaticLabels(lang); } catch(e){}
+  // Only re-translate labels if the language actually changed since last time
+  // (avoids scanning the whole page's options on every modal open = big speedup)
+  try {
+    if(currentUser&&typeof refreshStaticLabels==='function'&&_lastTranslatedLang!==lang){
+      refreshStaticLabels(lang);
+      _lastTranslatedLang=lang;
+    }
+  } catch(e){}
 }
 function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function openInvoiceModal(){
