@@ -3072,7 +3072,7 @@ async function doStageTransfer(orderId){
   }
   // If sending backward (rework), keep status building
   if(nextIdx>-1&&currIdx2>-1&&nextIdx<currIdx2) status='building';
-  const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs,worker:currentUser.name},'?id=eq.'+orderId);
+  const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs,worker:currentUser.name,work_started:false,assigned_worker:null},'?id=eq.'+orderId);
   await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes:notes,started_at:new Date().toISOString()});
   stageImages=[];
   closeModal('stageModal'); await loadAll();
