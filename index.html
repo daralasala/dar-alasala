@@ -2035,6 +2035,8 @@ async function loadOrderWorkers(orderId){
   if(!box) return;
   var rows=[];
   try { rows=await api('GET','order_stages','','?order_id=eq.'+orderId+'&order=started_at.desc'); } catch(e){ rows=[]; }
+  // Exclude the manager (not a worker) from this list
+  rows=(rows||[]).filter(function(r){ return r.worker_name && r.worker_name!=='Manager' && r.worker_name!=='مدير' && r.worker_name!=='مدیر'; });
   if(!rows||rows.length===0){ box.innerHTML=''; return; }
   var html='<div style="font-size:12px;font-weight:700;color:var(--accent);margin:10px 0 8px">👷 '+L('العمال على هذا الطلب','Workers on this order','کارگرهای این سفارش')+'</div>';
   html+=rows.map(function(r){
