@@ -1548,28 +1548,66 @@ function showTab(tab){
 
 // ===== LOAD =====
 async function loadAll(){
-  const [orders, users, trans, purch, invs] = await Promise.all([
+  var isManager=currentUser&&currentUser.role==='manager';
+  var dep=currentUser?currentUser.department:'';
+  var perms=currentUser?getUserPermissions(currentUser):[];
+  // What this user can actually see
+  var seeFinance=isManager||perms.indexOf('finance')>=0||dep==='حسابدار'||dep==='مسئول خرید';
+  var seeCustomers=isManager||perms.indexOf('customers')>=0||dep==='حسابدار'||dep==='مسئول فروش';
+  var isFamily=currentUser&&(currentUser.role==='family'||currentUser.department==='خانواده');
+
+  // Family members: only need personal expenses, skip everything heavy
+  if(isFamily){
+    await loadPersonalExp();
+    renderPersonal();
+    return;
+  }
+
+  // Core data everyone needs (orders + users + stages + job titles), all in parallel
+  var core=[
     api('GET','orders','','?select=*&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
-    api('GET','transactions','','?select=*&order=created_at.desc&limit=50'),
-    api('GET','purchases','','?select=*&order=created_at.desc&limit=50'),
-    api('GET','invoices','','?select=*&order=created_at.desc')
-  ]);
-  allOrders = orders||[];
-  allUsers = users||[];
-  allTransactions = trans||[];
-  allPurchases = purch||[];
-  allInvoices = invs||[];
-  await loadStages();
-  await loadJobTitles();
+    api('GET','stages','','?select=*&order=order_num.asc'),
+    api('GET','job_titles','','?select=*&order=id.asc'),
+    api('GET','inventory','','?select=*&order=name.asc')
+  ];
+  // Heavy data only for those who can see it
+  var idxTrans=-1, idxPurch=-1, idxInvs=-1, idxCust=-1, idxSup=-1, idxAssets=-1, idxFixed=-1;
+  if(seeFinance){ idxTrans=core.length; core.push(api('GET','transactions','','?select=*&order=created_at.desc&limit=50')); }
+  if(seeFinance){ idxPurch=core.length; core.push(api('GET','purchases','','?select=*&order=created_at.desc&limit=50')); }
+  idxInvs=core.length; core.push(api('GET','invoices','','?select=*&order=created_at.desc'));
+  if(seeCustomers){ idxCust=core.length; core.push(api('GET','customers','','?select=*&order=created_at.desc')); }
+  if(seeFinance){ idxSup=core.length; core.push(api('GET','suppliers','','?select=*')); }
+  if(seeFinance){ idxAssets=core.length; core.push(api('GET','assets','','?select=*&order=created_at.desc')); }
+  if(seeFinance){ idxFixed=core.length; core.push(api('GET','fixed_expenses','','?select=*&order=created_at.desc')); }
+
+  var res=await Promise.all(core);
+
+  allOrders=res[0]||[];
+  allUsers=res[1]||[];
+  // stages
+  var st=res[2]||[];
+  if(st.length>0){ allStages=st.map(function(r){return {id:r.id,name:r.name_fa,name_fa:r.name_fa,name_ar:r.name_ar,name_en:r.name_en,order_num:r.order_num};}); }
+  // job titles
+  var jt=res[3]||[];
+  if(jt.length>0){ allJobTitles=jt.map(function(r){return {id:r.id,name:r.name};}); }
+  allInventory=res[4]||[];
+  allTransactions=idxTrans>=0?(res[idxTrans]||[]):[];
+  allPurchases=idxPurch>=0?(res[idxPurch]||[]):[];
+  allInvoices=idxInvs>=0?(res[idxInvs]||[]):[];
+  allCustomers=idxCust>=0?(res[idxCust]||[]):[];
+  allSuppliers=idxSup>=0?(res[idxSup]||[]):[];
+  allAssets=idxAssets>=0?(res[idxAssets]||[]):[];
+  allFixedExp=idxFixed>=0?(res[idxFixed]||[]):[];
+
+  // Render
   renderDashboard();
   renderOrders();
   renderStages();
-  loadSuppliers();
-  loadInventory();
-  loadAssets();
-  loadFixedExp();
-  loadCustomers();
+  renderInventory();
+  populateSupplierDropdown();
+  if(seeCustomers) renderCustomers();
+  if(seeFinance){ renderFinance(); renderAssets(); renderFixedExp(); }
 }
 
 // ===== DASHBOARD =====
@@ -3586,10 +3624,13 @@ async function savePurchase(){
 async function loadSuppliers(){
   var sup=await api('GET','suppliers','','?select=*&order=name.asc');
   allSuppliers=sup||[];
+  populateSupplierDropdown();
+}
+function populateSupplierDropdown(){
   var sel=document.getElementById('p-supplier');
   if(sel){
     sel.innerHTML='<option value="">-- '+(lang==='ar'?'اختر الشركة':lang==='en'?'Select company':'انتخاب شرکت')+' --</option>'+
-      allSuppliers.map(function(s){return '<option value="'+(s.name||'').replace(/"/g,'&quot;')+'">'+s.name+'</option>';}).join('');
+      (allSuppliers||[]).map(function(s){return '<option value="'+(s.name||'').replace(/"/g,'&quot;')+'">'+s.name+'</option>';}).join('');
   }
 }
 
