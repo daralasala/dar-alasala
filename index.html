@@ -1925,21 +1925,22 @@ async function confirmAssign(){
   var o=allOrders.find(x=>String(x.id)===String(orderId)); if(o){ o.assigned_worker=worker; o.work_started=false; }
   closeModal('assignModal');
   await loadAll();
-  openOrderDetail(parseInt(orderId));
+  if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(parseInt(orderId));
   showToast(T('saved'),'success');
 }
 async function startWork(orderId){
   await api('PATCH','orders',{work_started:true},'?id=eq.'+orderId);
   var o=allOrders.find(x=>x.id===orderId); if(o) o.work_started=true;
   await loadAll();
-  openOrderDetail(orderId);
+  // Refresh whichever view is open
+  if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(orderId);
   showToast(lang==='ar'?'بدأ العمل':lang==='en'?'Work started':'کار شروع شد','success');
 }
 async function stopWork(orderId){
   await api('PATCH','orders',{work_started:false},'?id=eq.'+orderId);
   var o=allOrders.find(x=>x.id===orderId); if(o) o.work_started=false;
   await loadAll();
-  openOrderDetail(orderId);
+  if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(orderId);
   showToast(T('saved'),'success');
 }
 
@@ -3085,8 +3086,11 @@ function renderProduction(){
             <span class="badge badge-blue">${stageLabel(o.current_stage)}</span>
           </div>
           ${o.description?'<div style="font-size:12px;color:var(--text2);margin-bottom:7px">'+o.description+'</div>':''}
+          ${o.assigned_worker?`<div class="row" style="margin-bottom:0"><span class="row-label">👷</span><span class="row-value" style="color:${o.work_started?'var(--green)':'var(--accent)'}">${o.assigned_worker}${o.work_started?(' · ▶️ '+(lang==='ar'?'قيد العمل':lang==='en'?'working':'در حال ساخت')):(' · ⏳ '+(lang==='ar'?'بانتظار':lang==='en'?'waiting':'منتظر'))}</span></div>`:''}
           <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${o.progress||0}%"></div></div>
+          ${(o.assigned_worker===currentUser.name&&!o.work_started)?`<button class="btn btn-green btn-block btn-sm" style="margin-top:8px;background:var(--green);color:#fff" onclick="startWork(${o.id})">▶️ ${lang==='ar'?'بدأت العمل':lang==='en'?'I started':'شروع کردم'}</button>`:''}
+          ${(currentUser.role==='manager'||currentUser.department==='فورمن')?`<button class="btn btn-outline btn-block btn-sm" style="margin-top:8px" onclick="openAssignModal(${o.id})">👷 ${o.assigned_worker?(lang==='ar'?'تغيير العامل':lang==='en'?'Change worker':'تغییر کارگر'):(lang==='ar'?'إسناد لعامل':lang==='en'?'Assign worker':'واگذاری به کارگر')}</button>`:''}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
             <div class="progress-label">${o.progress||0}%</div>
             ${canTransfer?`<button class="btn btn-primary btn-sm" onclick="openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
