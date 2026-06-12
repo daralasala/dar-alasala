@@ -743,6 +743,18 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- ASSIGN WORKER MODAL -->
+<div class="modal-overlay modal-top" id="assignModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">👷 <span id="assign-title">واگذاری به کارگر</span></div><button class="modal-close" onclick="closeModal('assignModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="assign-lbl">انتخاب کارگر</label>
+      <select class="form-control" id="assign-worker"></select>
+    </div>
+    <input type="hidden" id="assign-order-id">
+    <button class="btn btn-primary btn-block" onclick="confirmAssign()">✅ <span id="assign-confirm-lbl">تایید</span></button>
+  </div>
+</div>
+
 <!-- MATERIAL MODAL -->
 <div class="modal-overlay modal-top" id="materialModal">
   <div class="modal">
@@ -959,11 +971,15 @@ function stageLabel(name){
 }
 
 // Shows the stage name once in production, otherwise shows the order status (3-lang)
-// Show worker name tag if order is in production and has a worker
+// Show worker assignment tag if order is in production
 function workerTag(o){
-  if(!o||!o.worker) return '';
+  if(!o) return '';
   if(o.status==='delivered'||o.status==='pending_payment'||o.status==='paid') return '';
-  return ' · 👷 '+o.worker;
+  var name=o.assigned_worker||o.worker;
+  if(!name) return '';
+  if(o.work_started) return ' · ▶️ '+name;
+  if(o.assigned_worker) return ' · 👷 '+name;
+  return ' · 👷 '+name;
 }
 function stageOrStatusLabel(o){
   if(!o) return '-';
@@ -1852,6 +1868,81 @@ async function deleteMaterial(orderId,idx){
   showToast(T('saved'),'success');
 }
 
+// ===== WORKER ASSIGNMENT & WORK START =====
+// Build the assignment box shown in order detail
+function renderAssignment(o){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(o.status==='delivered') return '';
+  var isManager=currentUser&&currentUser.role==='manager';
+  var isForeman=currentUser&&currentUser.department==='فورمن';
+  var canAssign=isManager||isForeman;
+  var assigned=o.assigned_worker||'';
+  var started=!!o.work_started;
+  // Worker viewing their own assigned order can press "start"
+  var isAssignedToMe=currentUser&&assigned&&assigned===currentUser.name;
+  var html='<div class="card" style="margin-bottom:12px;border:1px solid '+(started?'var(--green)':(assigned?'var(--accent)':'var(--border)'))+'">';
+  if(assigned){
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:'+(canAssign||isAssignedToMe?'10px':'0')+'">'+
+      '<div><div style="font-size:13px;font-weight:700">👷 '+assigned+'</div>'+
+      '<div style="font-size:11px;color:'+(started?'var(--green)':'var(--text2)')+';margin-top:2px">'+(started?('▶️ '+L('قيد التنفيذ الآن','In progress now','در حال ساخت')):('⏳ '+L('بانتظار البدء','Awaiting start','منتظر شروع')))+'</div></div>'+
+      '</div>';
+  } else {
+    html+='<div style="font-size:12px;color:var(--text2);margin-bottom:'+(canAssign?'10px':'0')+'">👷 '+L('لم يُسند لأحد بعد','Not assigned yet','هنوز به کسی واگذار نشده')+'</div>';
+  }
+  // Manager/foreman: assign or reassign
+  if(canAssign){
+    html+='<button class="btn btn-outline btn-sm btn-block" onclick="openAssignModal('+o.id+')">👷 '+(assigned?L('تغيير العامل','Change worker','تغییر کارگر'):L('إسناد لعامل','Assign worker','واگذاری به کارگر'))+'</button>';
+  }
+  // Assigned worker: start button (if not started yet)
+  if(isAssignedToMe && !started){
+    html+='<button class="btn btn-green btn-block" style="margin-top:8px;background:var(--green);color:#fff" onclick="startWork('+o.id+')">▶️ '+L('بدأت العمل','I started working','شروع کردم')+'</button>';
+  }
+  // Assigned worker or manager: mark done working (optional toggle off)
+  if((isAssignedToMe||canAssign) && started){
+    html+='<button class="btn btn-outline btn-sm btn-block" style="margin-top:8px" onclick="stopWork('+o.id+')">⏸️ '+L('إيقاف','Stop','توقف')+'</button>';
+  }
+  html+='</div>';
+  return html;
+}
+function openAssignModal(orderId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var o=allOrders.find(x=>x.id===orderId); if(!o) return;
+  document.getElementById('assign-title').textContent=L('إسناد لعامل','Assign worker','واگذاری به کارگر');
+  document.getElementById('assign-lbl').textContent=L('اختر العامل','Choose worker','انتخاب کارگر');
+  document.getElementById('assign-confirm-lbl').textContent=L('تأكيد','Confirm','تایید');
+  document.getElementById('assign-order-id').value=orderId;
+  // Workers = active non-family, non-manager staff
+  var workers=allUsers.filter(function(u){return u.status==='active'&&u.role!=='family'&&u.department!=='خانواده'&&u.role!=='manager';});
+  var sel=document.getElementById('assign-worker');
+  sel.innerHTML='<option value="">— '+L('بدون','None','هیچ‌کس')+' —</option>'+
+    workers.map(function(u){return '<option value="'+(u.name||'').replace(/"/g,'&quot;')+'"'+(o.assigned_worker===u.name?' selected':'')+'>'+u.name+(u.department?(' ('+u.department+')'):'')+'</option>';}).join('');
+  openModal('assignModal');
+}
+async function confirmAssign(){
+  var orderId=document.getElementById('assign-order-id').value;
+  var worker=document.getElementById('assign-worker').value;
+  await api('PATCH','orders',{assigned_worker:worker||null,work_started:false},'?id=eq.'+orderId);
+  var o=allOrders.find(x=>String(x.id)===String(orderId)); if(o){ o.assigned_worker=worker; o.work_started=false; }
+  closeModal('assignModal');
+  await loadAll();
+  openOrderDetail(parseInt(orderId));
+  showToast(T('saved'),'success');
+}
+async function startWork(orderId){
+  await api('PATCH','orders',{work_started:true},'?id=eq.'+orderId);
+  var o=allOrders.find(x=>x.id===orderId); if(o) o.work_started=true;
+  await loadAll();
+  openOrderDetail(orderId);
+  showToast(lang==='ar'?'بدأ العمل':lang==='en'?'Work started':'کار شروع شد','success');
+}
+async function stopWork(orderId){
+  await api('PATCH','orders',{work_started:false},'?id=eq.'+orderId);
+  var o=allOrders.find(x=>x.id===orderId); if(o) o.work_started=false;
+  await loadAll();
+  openOrderDetail(orderId);
+  showToast(T('saved'),'success');
+}
+
 async function openOrderDetail(id){
   const o=allOrders.find(x=>x.id===id); if(!o) return;
   const rem=(o.total_price||0)-(o.prepay||0);
@@ -1898,6 +1989,7 @@ async function openOrderDetail(id){
     ${o.description?`<div class="card" style="margin-bottom:9px;font-size:12px;color:var(--text2)">${o.description}</div>`:''}
     ${renderOrderMaterials(o)}
     <div id="order-workers-section"></div>
+    ${renderAssignment(o)}
     ${imagesHtml}
     ${addPhotoHtml}
     ${(isManager||currentUser.department==='حسابدار')?`
