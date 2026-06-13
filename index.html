@@ -282,6 +282,7 @@ body.en .search-icon{right:auto;left:10px;}
       </div>
       <div class="uname" id="uname"></div>
       <div class="avatar" id="uavatar">م</div>
+      <button class="logout-btn" onclick="openChangePassword()" title="Password" style="margin-left:2px">🔑</button>
       <button class="logout-btn" onclick="doLogout()">⏻</button>
     </div>
   </div>
@@ -752,6 +753,17 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-primary" style="flex:1" onclick="printReceiptFromModal()">🖨️ <span id="rcpt-print">چاپ</span></button>
       <a id="rcpt-wa-link" href="#" target="_blank" rel="noopener" class="btn btn-green" style="flex:1;background:#128C7E;color:#fff;text-align:center;text-decoration:none">💬 WhatsApp</a>
     </div>
+  </div>
+</div>
+
+<!-- CHANGE PASSWORD MODAL -->
+<div class="modal-overlay modal-top" id="changePassModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">🔑 <span id="cp-title">تغییر رمز عبور</span></div><button class="modal-close" onclick="closeModal('changePassModal')">✕</button></div>
+    <div class="form-group"><label class="form-label" id="cp-old-lbl">رمز فعلی</label><input class="form-control" type="password" id="cp-old"></div>
+    <div class="form-group"><label class="form-label" id="cp-new-lbl">رمز جدید</label><input class="form-control" type="password" id="cp-new"></div>
+    <div class="form-group"><label class="form-label" id="cp-new2-lbl">تکرار رمز جدید</label><input class="form-control" type="password" id="cp-new2"></div>
+    <button class="btn btn-primary btn-block" onclick="saveNewPassword()">💾 <span id="cp-save">ذخیره</span></button>
   </div>
 </div>
 
@@ -1538,6 +1550,48 @@ function startAutoRefresh(){
     if(document.hidden) return;
     loadAll();
   },10000);
+}
+
+// ===== CHANGE PASSWORD (any logged-in user) =====
+function openChangePassword(){
+  if(!currentUser){ return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  // Manager logs in with hardcoded credentials, not a users row → can't change here
+  if(currentUser.role==='manager' && (!currentUser.id || currentUser.id===0)){
+    showToast(L('حساب المدير ثابت ولا يمكن تغييره من هنا','Manager account is fixed','حساب مدیر ثابت است و از اینجا قابل تغییر نیست'),'error');
+    return;
+  }
+  document.getElementById('cp-title').textContent=L('تغيير كلمة المرور','Change password','تغییر رمز عبور');
+  document.getElementById('cp-old-lbl').textContent=L('كلمة المرور الحالية','Current password','رمز فعلی');
+  document.getElementById('cp-new-lbl').textContent=L('كلمة المرور الجديدة','New password','رمز جدید');
+  document.getElementById('cp-new2-lbl').textContent=L('تأكيد كلمة المرور الجديدة','Confirm new password','تکرار رمز جدید');
+  document.getElementById('cp-save').textContent=L('حفظ','Save','ذخیره');
+  document.getElementById('cp-old').value='';
+  document.getElementById('cp-new').value='';
+  document.getElementById('cp-new2').value='';
+  openModal('changePassModal');
+}
+async function saveNewPassword(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var oldP=document.getElementById('cp-old').value;
+  var newP=document.getElementById('cp-new').value;
+  var new2=document.getElementById('cp-new2').value;
+  if(!oldP||!newP){ showToast(L('املأ كل الحقول','Fill all fields','همه فیلدها را پر کن'),'error'); return; }
+  if(newP.length<4){ showToast(L('كلمة المرور قصيرة جداً','Password too short','رمز خیلی کوتاه است'),'error'); return; }
+  if(newP!==new2){ showToast(L('كلمتا المرور غير متطابقتين','Passwords do not match','رمزها یکسان نیستند'),'error'); return; }
+  // Verify current password matches what's stored
+  if(String(currentUser.password)!==String(oldP)){
+    showToast(L('كلمة المرور الحالية خاطئة','Current password is wrong','رمز فعلی اشتباه است'),'error'); return;
+  }
+  try {
+    await api('PATCH','users',{password:newP},'?id=eq.'+currentUser.id);
+    currentUser.password=newP;
+    try { localStorage.setItem('dar_user', JSON.stringify(currentUser)); } catch(e){}
+    closeModal('changePassModal');
+    showToast(L('تم تغيير كلمة المرور','Password changed','رمز عبور تغییر کرد'),'success');
+  } catch(e){
+    showToast(L('فشل التغيير','Change failed','تغییر نشد'),'error');
+  }
 }
 
 function doLogout(){
