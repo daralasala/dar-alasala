@@ -1959,7 +1959,8 @@ function renderAssignment(o){
     html+='<button class="btn btn-green btn-block" style="margin-top:8px;background:var(--green);color:#fff" onclick="startWork('+o.id+')">▶️ '+L('بدأت العمل','I started working','شروع کردم')+'</button>';
   }
   // Assigned worker (or manager): mark work done (was working, not done yet)
-  if((isAssignedToMe||canAssign) && started && !done){
+  // Only the assigned worker can mark their own work done (not manager/foreman)
+  if(isAssignedToMe && started && !done){
     html+='<button class="btn btn-blue btn-block" style="margin-top:8px" onclick="finishWork('+o.id+')">✅ '+L('أنهيت العمل','I finished','کارم تمام شد')+'</button>';
   }
   // After done: hint to transfer to next stage
