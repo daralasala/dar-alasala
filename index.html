@@ -2038,7 +2038,7 @@ async function openOrderDetail(id){
   const canManageStage = currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.assigned_worker===currentUser.name||o.worker===currentUser.name);
   // Can transfer only if: work is done, OR not assigned to anyone yet, OR manager/foreman/inspector
   const isBoss = currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
-  const canTransfer = canManageStage && (o.work_done || !o.assigned_worker || isBoss);
+  const canTransfer = isBoss || (canManageStage && o.work_done);
   const isManager = currentUser&&currentUser.role==='manager';
   const canSeeMoney = isManager||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش';
   // Build images html
@@ -3218,7 +3218,7 @@ function renderProduction(){
     : filtered.map(o=>{
         const canManageStage=currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن'||deptStageMatch(currentUser.department).indexOf(o.current_stage)>-1||o.assigned_worker===currentUser.name||o.worker===currentUser.name);
         const isBoss=currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
-        const canTransfer=canManageStage && (o.work_done || !o.assigned_worker || isBoss);
+        const canTransfer=isBoss || (canManageStage && o.work_done);
         const canSeeCust=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
         var firstImg='';
         try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
