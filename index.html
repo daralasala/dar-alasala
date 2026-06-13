@@ -3119,9 +3119,21 @@ async function markInvoiceDelivered(invId){
 }
 
 async function deleteOrder(id){
-  if(!confirm('Delete / Delete?')) return;
-  await api('DELETE','orders',null,`?id=eq.${id}`);
-  closeModal('orderDetailModal'); await loadAll();
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(!confirm(L('حذف هذا الطلب؟','Delete this order?','این سفارش حذف شود؟'))) return;
+  try {
+    // Remove related stage records first (avoids foreign-key blocking the delete)
+    try { await api('DELETE','order_stages',null,'?order_id=eq.'+id); } catch(e){}
+    var res=await api('DELETE','orders',null,'?id=eq.'+id);
+    // Remove from local list immediately so it disappears even before reload
+    allOrders=allOrders.filter(function(o){return String(o.id)!==String(id);});
+    closeModal('orderDetailModal');
+    renderOrders(); renderProduction();
+    await loadAll();
+    showToast(L('تم الحذف','Deleted','حذف شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
+  }
 }
 
 // ===== STAGE TRANSFER =====
