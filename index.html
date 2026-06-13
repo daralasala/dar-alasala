@@ -743,6 +743,18 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- RECEIPT VOUCHER MODAL (fallback when pop-up blocked) -->
+<div class="modal-overlay modal-top" id="receiptModal">
+  <div class="modal" style="max-height:92vh;max-width:760px">
+    <div class="modal-header"><div class="modal-title">🧾 <span id="receipt-modal-title">سند قبض</span></div><button class="modal-close" onclick="closeModal('receiptModal')">✕</button></div>
+    <div id="receipt-modal-body" style="background:#fff;border-radius:10px;overflow:auto"></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" style="flex:1" onclick="printReceiptFromModal()">🖨️ <span id="rcpt-print">چاپ</span></button>
+      <a id="rcpt-wa-link" href="#" target="_blank" rel="noopener" class="btn btn-green" style="flex:1;background:#128C7E;color:#fff;text-align:center;text-decoration:none">💬 WhatsApp</a>
+    </div>
+  </div>
+</div>
+
 <!-- ASSIGN WORKER MODAL -->
 <div class="modal-overlay modal-top" id="assignModal">
   <div class="modal">
@@ -2398,10 +2410,44 @@ function buildReceiptHTML(r, withButtons){
 // Show the receipt voucher in a print window
 function showReceiptVoucher(){
   if(!lastReceipt){ showToast(lang==='ar'?'لا يوجد سند':lang==='en'?'No voucher':'سندی موجود نیست','error'); return; }
-  var w=window.open('','_blank');
-  if(!w){ showToast(lang==='ar'?'فعّل النوافذ المنبثقة':lang==='en'?'Enable pop-ups':'پاپ‌آپ را فعال کنید','error'); return; }
-  w.document.write(buildReceiptHTML(lastReceipt,true));
-  w.document.close();
+  var w=null;
+  try { w=window.open('','_blank'); } catch(e){ w=null; }
+  if(w){
+    w.document.write(buildReceiptHTML(lastReceipt,true));
+    w.document.close();
+    return;
+  }
+  // Pop-up blocked → show receipt inside an in-page modal instead
+  var body=document.getElementById('receipt-modal-body');
+  if(body){
+    body.innerHTML=buildReceiptHTML(lastReceipt,false);
+    // WhatsApp link
+    var rcptPhone=(lastReceipt.phone||'').replace(/[^0-9]/g,'');
+    if(rcptPhone.length===8) rcptPhone='974'+rcptPhone;
+    if(rcptPhone.indexOf('00')===0) rcptPhone=rcptPhone.slice(2);
+    var waMsg='*دار الأصالة للمفروشات*\n*سند قبض رقم: '+lastReceipt.no+'*\n'+
+      'التاريخ: '+lastReceipt.date+'\n\n'+
+      'استلمنا من: *'+lastReceipt.cust+'*\n'+
+      'المبلغ المستلم: *'+lastReceipt.amount.toLocaleString()+' ر.ق*\n'+
+      '('+numToArabicWords(lastReceipt.amount)+' فقط)\n'+
+      'البيان: '+lastReceipt.reason+'\n\n'+
+      'إجمالي الفاتورة: '+lastReceipt.total.toLocaleString()+' ر.ق\n'+
+      'المبلغ المتبقي: *'+lastReceipt.balance.toLocaleString()+' ر.ق*\n\n'+
+      'شكراً لتعاملكم معنا 🙏';
+    var waLink=document.getElementById('rcpt-wa-link');
+    if(waLink) waLink.href='https://wa.me/'+rcptPhone+'?text='+encodeURIComponent(waMsg);
+    var pl=document.getElementById('rcpt-print'); if(pl) pl.textContent=lang==='ar'?'طباعة':lang==='en'?'Print':'چاپ';
+    var rt=document.getElementById('receipt-modal-title'); if(rt) rt.textContent=lang==='ar'?'سند قبض':lang==='en'?'Receipt voucher':'سند قبض';
+    openModal('receiptModal');
+  }
+}
+// Print the receipt shown in the in-page modal
+function printReceiptFromModal(){
+  if(!lastReceipt) return;
+  var w=null;
+  try { w=window.open('','_blank'); } catch(e){ w=null; }
+  if(w){ w.document.write(buildReceiptHTML(lastReceipt,true)); w.document.close(); }
+  else { window.print(); }
 }
 
 // Send the receipt voucher summary to the customer on WhatsApp
