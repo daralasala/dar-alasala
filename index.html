@@ -2977,11 +2977,28 @@ function sendContractWhatsApp(orderId){
 
 async function markDelivered(id){
   const o=allOrders.find(x=>x.id===id);
-  const rem=(o?.total_price||0)-(o?.prepay||0);
+  if(!o) return;
+  if(!confirm(lang==='ar'?'تأكيد التسليم؟':lang==='en'?'Confirm delivery?':'تحویل تایید شود؟')) return;
+  // If this order belongs to an invoice, compute remaining from the invoice (prepay is on the invoice)
+  var inv=o.invoice_id?allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}):null;
+  var total, advance, custName, custPhone, invCode;
+  if(inv){
+    total=inv.total_price||0; advance=inv.prepay||0;
+    custName=inv.customer_name||o.customer_name||''; custPhone=inv.customer_phone||o.customer_phone||''; invCode=inv.inv_code||'';
+  } else {
+    total=o.total_price||0; advance=o.prepay||0;
+    custName=o.customer_name||''; custPhone=o.customer_phone||''; invCode=o.id_code||'';
+  }
+  var rem=total-advance;
   await api('PATCH','orders',{status:'delivered',progress:100},`?id=eq.${id}`);
-  // Register remaining payment as income
   if(rem>0){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+(o?.customer_name||''),category:'payment'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
+    var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-F'+String(new Date().getTime()).slice(-4);
+    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:(lang==='ar'?'الدفعة الأخيرة عند التسليم - فاتورة ':lang==='en'?'Final payment on delivery - invoice ':'پرداخت نهایی هنگام تحویل - فاکتور ')+invCode};
+    closeModal('orderDetailModal'); await loadAll();
+    showToast(lang==='ar'?'تم التسليم · سند القبض جاهز':lang==='en'?'Delivered · Receipt ready':'تحویل شد · سند قبض آماده است','success');
+    showReceiptVoucher();
+    return;
   }
   closeModal('orderDetailModal'); await loadAll(); showToast(T('saved'),'success');
 }
@@ -3013,6 +3030,15 @@ async function markInvoiceDelivered(invId){
   if(rem>0&&!alreadyDelivered){
     var custName=inv?inv.customer_name:(items[0].customer_name||'');
     await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
+    // Build a Receipt Voucher for the FINAL (remaining) payment
+    var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
+    var invCode=inv?inv.inv_code:'';
+    var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-F'+String(new Date().getTime()).slice(-4);
+    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:(lang==='ar'?'الدفعة الأخيرة عند التسليم - فاتورة ':lang==='en'?'Final payment on delivery - invoice ':'پرداخت نهایی هنگام تحویل - فاکتور ')+invCode};
+    closeModal('invoiceFolderModal'); await loadAll();
+    showToast(lang==='ar'?'تم التسليم · سند القبض جاهز':lang==='en'?'Delivered · Receipt ready':'تحویل شد · سند قبض آماده است','success');
+    showReceiptVoucher();
+    return;
   }
   closeModal('invoiceFolderModal'); await loadAll();
   showToast(lang==='ar'?'تم تسليم الفاتورة':lang==='en'?'Invoice delivered':'فاکتور تحویل شد','success');
