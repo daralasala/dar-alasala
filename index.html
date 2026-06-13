@@ -1987,8 +1987,13 @@ function openAssignModal(orderId){
 async function confirmAssign(){
   var orderId=document.getElementById('assign-order-id').value;
   var worker=document.getElementById('assign-worker').value;
-  await api('PATCH','orders',{assigned_worker:worker||null,work_started:false,work_done:false},'?id=eq.'+orderId);
-  var o=allOrders.find(x=>String(x.id)===String(orderId)); if(o){ o.assigned_worker=worker; o.work_started=false; }
+  var o=allOrders.find(x=>String(x.id)===String(orderId));
+  // Remove the newly-assigned worker from passed_by so they can see it again
+  var passedArr=[];
+  try { passedArr=(o&&o.passed_by)?(typeof o.passed_by==='string'?JSON.parse(o.passed_by):o.passed_by):[]; if(!Array.isArray(passedArr)) passedArr=[]; } catch(e){ passedArr=[]; }
+  if(worker){ passedArr=passedArr.filter(function(n){return n!==worker;}); }
+  await api('PATCH','orders',{assigned_worker:worker||null,work_started:false,work_done:false,passed_by:JSON.stringify(passedArr)},'?id=eq.'+orderId);
+  if(o){ o.assigned_worker=worker; o.work_started=false; o.work_done=false; o.passed_by=JSON.stringify(passedArr); }
   closeModal('assignModal');
   await loadAll();
   if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(parseInt(orderId));
@@ -3144,7 +3149,12 @@ async function doStageTransfer(orderId){
   }
   // If sending backward (rework), keep status building
   if(nextIdx>-1&&currIdx2>-1&&nextIdx<currIdx2) status='building';
-  const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs,worker:currentUser.name,work_started:false,assigned_worker:null},'?id=eq.'+orderId);
+  // Add this worker to passed_by so the order disappears from their list (unless a boss reassigns)
+  var passedArr=[];
+  try { passedArr=o.passed_by?(typeof o.passed_by==='string'?JSON.parse(o.passed_by):o.passed_by):[]; if(!Array.isArray(passedArr)) passedArr=[]; } catch(e){ passedArr=[]; }
+  var isBossTransfer=currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
+  if(!isBossTransfer && currentUser && passedArr.indexOf(currentUser.name)===-1){ passedArr.push(currentUser.name); }
+  const r=await api('PATCH','orders',{current_stage:next,status:status,progress:newProgress,images:allImgs,worker:currentUser.name,work_started:false,assigned_worker:null,work_done:false,passed_by:JSON.stringify(passedArr)},'?id=eq.'+orderId);
   await api('POST','order_stages',{order_id:orderId,stage_name:next,worker_name:currentUser.name,status:'active',notes:notes,started_at:new Date().toISOString()});
   stageImages=[];
   closeModal('stageModal'); await loadAll();
@@ -3178,9 +3188,23 @@ function filterByStage(s){
 
 function renderProduction(){
   renderStages();
-  const filtered = currentStageFilter==='all'
+  var isBoss=currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن');
+  // A worker should NOT see orders they already passed to the next stage (unless a boss reassigned them)
+  var notPassedByMe=function(o){
+    if(isBoss) return true; // bosses see everything
+    if(!o.passed_by) return true;
+    try {
+      var arr=typeof o.passed_by==='string'?JSON.parse(o.passed_by):o.passed_by;
+      if(!Array.isArray(arr)) return true;
+      // If reassigned to me again, I should see it (assignment overrides passed_by)
+      if(o.assigned_worker===currentUser.name) return true;
+      return arr.indexOf(currentUser.name)===-1;
+    } catch(e){ return true; }
+  };
+  const filtered = (currentStageFilter==='all'
     ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
-    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid');
+    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
+  ).filter(notPassedByMe);
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
