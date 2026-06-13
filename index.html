@@ -325,7 +325,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-outline btn-sm" onclick="setFilter('paid')" id="f-paid">آماده تولید</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('building')" id="f-building">در حال ساخت</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('ready')" id="f-ready">آماده</button>
-      <button class="btn btn-outline btn-sm" onclick="setFilter('delivered')" id="f-delivered">تحویل</button>
+      <button class="btn btn-outline btn-sm" onclick="setFilter('delivered')" id="f-delivered">📚 تاریخچه</button>
     </div>
     <div id="orders-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -1358,7 +1358,7 @@ function setLang(l){
   var fpaid=document.getElementById('f-paid'); if(fpaid) fpaid.textContent=lang==='ar'?'جاهز للإنتاج':lang==='en'?'Ready to build':'آماده تولید';
   document.getElementById('f-building').textContent=T('status_building');
   document.getElementById('f-ready').textContent=T('status_ready');
-  document.getElementById('f-delivered').textContent=T('status_delivered');
+  document.getElementById('f-delivered').textContent='📚 '+(l==='ar'?'الأرشيف':l==='en'?'History':'تاریخچه');
   document.getElementById('order-search').placeholder=l==='en'?'Search...':'البحث... / جستجو...';
   // Fixed assets button + section titles (were stuck in Persian/Arabic)
   // Fixed assets/expenses labels handled in refreshStaticLabels
@@ -1689,7 +1689,15 @@ function deptStageMatch(dept){
 function renderOrders(){
   const q=(document.getElementById('order-search').value||'').toLowerCase();
   let filtered=allOrders;
-  if(currentFilter!=='all') filtered=filtered.filter(o=>o.status===currentFilter);
+  if(currentFilter==='delivered'){
+    // History view: only delivered orders
+    filtered=filtered.filter(o=>o.status==='delivered');
+  } else if(currentFilter==='all'){
+    // Active list: hide delivered (they live in History now)
+    filtered=filtered.filter(o=>o.status!=='delivered');
+  } else {
+    filtered=filtered.filter(o=>o.status===currentFilter);
+  }
   if(q) filtered=filtered.filter(o=>(o.customer_name+o.product+(o.id_code||'')).toLowerCase().includes(q));
   // Workers see only their orders - but accountant/sales/manager see ALL
   var seesAll = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
