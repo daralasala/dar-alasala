@@ -2283,6 +2283,10 @@ async function startInvoiceProduction(invId){
   var grandTotal=items.reduce(function(s,it){return s+(it.total_price||0);},0);
   var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
   var balance=grandTotal-advance;
+  // Record the prepay (advance) as income NOW — only on payment confirmation
+  if(advance>0){
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:advance,description:'Prepay - '+custName,category:'prepay'})});
+  }
   var rcptNo='RV-'+invCode.replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
   var today=new Date().toISOString().slice(0,10);
   lastReceipt={no:rcptNo,date:today,cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة مقدمة عن الفاتورة ':lang==='en'?'Advance payment for invoice ':'پیش‌پرداخت بابت فاکتور ')+invCode};
@@ -5443,10 +5447,8 @@ async function saveOrder(){
     };
     await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
   }
-  // 3) Register prepay as income
-  if(prepay>0){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:prepay,description:'Prepay - '+cname,category:'prepay'})});
-  }
+  // NOTE: prepay is NOT recorded as income here. It's only the EXPECTED amount.
+  // It becomes income only when the manager confirms payment (startInvoiceProduction).
   closeModal('newOrderModal');
   ['f-cname','f-phone','f-cid','f-prepay','f-desc','f-delivery'].forEach(id=>{var e=document.getElementById(id);if(e)e.value='';});
   orderItems=[];
