@@ -2407,9 +2407,10 @@ function buildReceiptHTML(r, withButtons){
     'المبلغ المتبقي: *'+r.balance.toLocaleString()+' ر.ق*\n\n'+
     'شكراً لتعاملكم معنا 🙏';
   var waUrl='https://wa.me/'+rcptPhone+'?text='+encodeURIComponent(waMsg);
-  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center">'+
+  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'+
     '<button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button>'+
     '<a href="'+waUrl+'" target="_blank" rel="noopener" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;text-decoration:none;display:inline-block">💬 WhatsApp</a>'+
+    '<button onclick="window.close()" style="padding:12px 30px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">✖ Close / إغلاق / بستن</button>'+
     '</div>':'';
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+r.no+'</title>'+
     '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto}'+
@@ -2537,9 +2538,10 @@ function buildPaymentVoucherHTML(p, withButtons){
   if(pvPhone.length===8) pvPhone='974'+pvPhone;
   if(pvPhone.indexOf('00')===0) pvPhone=pvPhone.slice(2);
   var waUrl='https://wa.me/'+pvPhone+'?text='+encodeURIComponent(waMsg);
-  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center">'+
+  var btns=withButtons?'<div class="no-print" style="text-align:center;margin-top:30px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">'+
     '<button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button>'+
     '<a href="'+waUrl+'" target="_blank" rel="noopener" style="padding:12px 30px;background:#128C7E;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;text-decoration:none;display:inline-block">💬 WhatsApp</a>'+
+    '<button onclick="window.close()" style="padding:12px 30px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">✖ Close / إغلاق / بستن</button>'+
     '</div>':'';
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+p.no+'</title>'+
     '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:800px;margin:0 auto}'+
