@@ -3453,7 +3453,7 @@ async function moveStage(idx,dir){
 
 // ===== FINANCE =====
 function renderFinance(){
-  const isPurchasing = currentUser&&currentUser.department==='مسئول خرید'&&currentUser.role!=='manager';
+  const isPurchasing = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
   const income=allTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+(t.amount||0),0);
   // Expense: count everything EXCEPT unpaid credit purchases (money not yet paid)
   const expense=allTransactions.filter(t=>t.type!=='income'&&!(t.is_credit&&!t.paid)).reduce((s,t)=>s+(t.amount||0),0);
