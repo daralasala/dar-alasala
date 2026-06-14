@@ -5260,23 +5260,30 @@ function openStaffFile(id){
 
 // Compute next salary due date based on hire day-of-month
 function salaryDueInfo(u){
-  var now=new Date();
-  var hire=new Date(u.hire_date);
+  var now=new Date(); now.setHours(0,0,0,0);
+  var hire=new Date(u.hire_date); hire.setHours(0,0,0,0);
   var payDay=hire.getDate();
-  // candidate this month
-  var cand=new Date(now.getFullYear(),now.getMonth(),payDay);
-  // if last paid is in this cycle already, move to next month
-  if(u.last_salary_paid){
-    var lp=new Date(u.last_salary_paid);
-    if(lp.getFullYear()===cand.getFullYear()&&lp.getMonth()===cand.getMonth()){
-      cand=new Date(now.getFullYear(),now.getMonth()+1,payDay);
+  var cand;
+  if(!u.last_salary_paid){
+    // Never paid yet → first salary is due ONE month after the hire date
+    cand=new Date(hire.getFullYear(),hire.getMonth()+1,payDay);
+    // If that first pay date is still in the future (or today), that's the answer
+    // If it has passed, keep advancing month by month until we reach a future/overdue-but-current date
+    while(cand<now){
+      // it's overdue once we pass it, but only by at most a cycle — stop at the first one that's >= (now - 31d)
+      var next=new Date(cand.getFullYear(),cand.getMonth()+1,payDay);
+      if(next>now){ break; } // cand is the current (overdue) cycle
+      cand=next;
     }
-  }
-  // if candidate already passed and not paid, it's overdue (keep it)
-  if(cand<now && !(u.last_salary_paid && new Date(u.last_salary_paid)>=cand)){
-    // overdue - keep cand as is
-  } else if(cand<now){
-    cand=new Date(now.getFullYear(),now.getMonth()+1,payDay);
+  } else {
+    var lp=new Date(u.last_salary_paid); lp.setHours(0,0,0,0);
+    // Next salary = one month after the last paid cycle
+    cand=new Date(lp.getFullYear(),lp.getMonth()+1,payDay);
+    while(cand<now){
+      var nx=new Date(cand.getFullYear(),cand.getMonth()+1,payDay);
+      if(nx>now){ break; }
+      cand=nx;
+    }
   }
   var daysLeft=Math.ceil((cand-now)/(1000*60*60*24));
   return {nextDate:cand.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0};
