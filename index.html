@@ -852,8 +852,13 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">توضیحات</label><input class="form-control" type="text" id="e-desc"></div>
     <div class="form-group"><label class="form-label">دسته‌بندی</label>
       <select class="form-control" id="e-cat">
-        <option>مواد اولیه</option><option>حقوق</option><option>اجاره</option><option>برق و آب</option><option>تجهیزات</option><option>سایر</option>
+        <option value="مواد اولیه">مواد اولیه</option><option value="حقوق">حقوق</option><option value="اجاره">اجاره</option><option value="برق و آب">برق و آب</option><option value="بنزین">بنزین</option><option value="حمل‌ونقل">حمل‌ونقل</option><option value="تعمیرات">تعمیرات</option><option value="تجهیزات">تجهیزات</option><option value="سایر">سایر</option>
       </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label" id="em-img-lbl">📸 عکس فاکتور (اختیاری)</label>
+      <div id="e-img-preview" style="margin-bottom:6px"></div>
+      <button type="button" class="btn btn-outline btn-sm" onclick="pickExpenseImage()">📷 <span id="em-img-btn">افزودن عکس فاکتور</span></button>
     </div>
     <button class="btn btn-red btn-block" onclick="saveTransaction('expense')">ثبت هزینه</button>
   </div>
@@ -1204,11 +1209,14 @@ var LABEL_DICT=[
   ['آجل (دين)','Credit (debt)','قرضی'],
   ['پرداخت سفارش','Order payment','پرداخت سفارش'],
   ['پیش‌پرداخت','Down payment','پیش‌پرداخت'],
-  ['مواد اولیه','Raw materials','مواد اولیه'],
-  ['حقوق','Salary','حقوق'],
-  ['اجاره','Rent','اجاره'],
-  ['برق و آب','Utilities','برق و آب'],
-  ['تجهیزات','Equipment','تجهیزات'],
+  ['مواد خام','Raw materials','مواد اولیه'],
+  ['رواتب','Salary','حقوق'],
+  ['إيجار','Rent','اجاره'],
+  ['كهرباء وماء','Utilities','برق و آب'],
+  ['بنزين','Fuel','بنزین'],
+  ['نقل','Transport','حمل‌ونقل'],
+  ['صيانة','Repairs','تعمیرات'],
+  ['معدات','Equipment','تجهیزات'],
   ['طعام','Food','غذا'],
   ['فواتير','Bills','قبوض'],
   ['تسوق','Shopping','خرید'],
@@ -3546,6 +3554,10 @@ function renderFinance(){
           var p=allPurchases.find(x=>x.transaction_id===t.id);
           if(p&&p.invoice_image) invImg='<img src="'+p.invoice_image+'" onclick="showImgFull(\''+t.id+'\')" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
         }
+        // Expense with its own receipt photo
+        if(t.image){
+          invImg='<img src="'+t.image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
+        }
         // Credit (unpaid) badge + pay button
         var creditTag='';
         if(t.is_credit){
@@ -3647,13 +3659,32 @@ function showReqImage(id){
   }
 }
 
+var expenseImage='';
+function pickExpenseImage(){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        expenseImage=await compressImage(input.files[0],0.6,900);
+        var pv=document.getElementById('e-img-preview');
+        if(pv) pv.innerHTML='<img src="'+expenseImage+'" style="width:100px;height:100px;object-fit:cover;border-radius:8px">';
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
 async function saveTransaction(type){
   const modalId=type==='income'?'incomeModal':'expenseModal';
   const amount=parseFloat(document.getElementById(type==='income'?'i-amount':'e-amount').value)||0;
   const desc=document.getElementById(type==='income'?'i-desc':'e-desc').value;
   const cat=document.getElementById(type==='income'?'i-cat':'e-cat').value;
   if(!amount){ showToast(T('err_fill'),'error'); return; }
-  await api('POST','transactions',{type,amount,description:desc,category:cat,user_id:currentUser?.id});
+  var body={type:type,amount:amount,description:desc,category:cat,user_id:currentUser?currentUser.id:null};
+  if(type==='expense'&&expenseImage){ body.image=expenseImage; }
+  await api('POST','transactions',body);
   closeModal(modalId);
   const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
   allTransactions=newTrans||[];
@@ -3661,6 +3692,8 @@ async function saveTransaction(type){
   showToast(T('saved'),'success');
   document.getElementById(type==='income'?'i-amount':'e-amount').value='';
   document.getElementById(type==='income'?'i-desc':'e-desc').value='';
+  expenseImage='';
+  var pv=document.getElementById('e-img-preview'); if(pv) pv.innerHTML='';
 }
 
 // ===== INVOICE AI =====
