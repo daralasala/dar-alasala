@@ -362,6 +362,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
       <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openAssetModal()">➕ <span id="asset-add-label">إضافة أصل / افزودن دارایی</span></button>
@@ -761,6 +762,20 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-primary" style="flex:1" onclick="printReceiptFromModal()">🖨️ <span id="rcpt-print">چاپ</span></button>
       <a id="rcpt-wa-link" href="#" target="_blank" rel="noopener" class="btn btn-green" style="flex:1;background:#128C7E;color:#fff;text-align:center;text-decoration:none">💬 WhatsApp</a>
     </div>
+  </div>
+</div>
+
+<!-- FINANCIAL REPORT MODAL -->
+<div class="modal-overlay modal-top" id="finReportModal">
+  <div class="modal" style="max-width:780px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">📊 <span id="fr-title">صورت‌حساب</span></div><button class="modal-close" onclick="closeModal('finReportModal')">✕</button></div>
+    <div style="display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap">
+      <select class="form-control" id="fr-period" onchange="renderFinReport()" style="flex:1;min-width:120px"></select>
+      <select class="form-control" id="fr-month" onchange="renderFinReport()" style="flex:1;min-width:120px"></select>
+      <select class="form-control" id="fr-year" onchange="renderFinReport()" style="flex:1;min-width:90px"></select>
+    </div>
+    <div id="fr-body"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="printFinReport()">🖨️ <span id="fr-print">چاپ / ذخیره PDF</span></button>
   </div>
 </div>
 
@@ -1303,6 +1318,7 @@ function refreshStaticLabels(l){
   safeSet('em-img-lbl','📸 '+P('صورة الفاتورة (اختياري)','Receipt photo (optional)','عکس فاکتور (اختیاری)'));
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
+  safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('rm-img-btn',P('اختر صورة','Choose photo','انتخاب عکس'));
   safeSet('asset-add-label',P('إضافة أصل','Add asset','افزودن دارایی'));
   safeSet('fe-add-label',P('إضافة مصروف ثابت','Add fixed expense','افزودن هزینه ثابت'));
@@ -3483,6 +3499,131 @@ async function moveStage(idx,dir){
 }
 
 // ===== FINANCE =====
+// ===== FINANCIAL REPORT (monthly / yearly statement) =====
+function trDate(t){
+  // pick the best available date field
+  var d=t.created_at||t.date||t.due_date||null;
+  return d?new Date(d):null;
+}
+async function openFinReport(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  // make sure personal expenses are loaded (they may not be if the personal tab was never opened)
+  try { if((!allPersonalExp||allPersonalExp.length===0)&&typeof loadPersonalExp==='function'){ await loadPersonalExp(); } } catch(e){}
+  document.getElementById('fr-title').textContent=L('كشف الحساب','Statement','صورت‌حساب');
+  document.getElementById('fr-print').textContent=L('طباعة / حفظ PDF','Print / Save PDF','چاپ / ذخیره PDF');
+  // Period selector
+  var per=document.getElementById('fr-period');
+  per.innerHTML='<option value="month">'+L('شهري','Monthly','ماهیانه')+'</option><option value="year">'+L('سنوي','Yearly','سالانه')+'</option>';
+  // Month selector
+  var monthNames=L(['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],
+                   ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+                   ['ژانویه','فوریه','مارس','آوریل','مه','ژوئن','جولای','اوت','سپتامبر','اکتبر','نوامبر','دسامبر']);
+  var now=new Date();
+  var mo=document.getElementById('fr-month');
+  var moHtml='';
+  for(var m=0;m<12;m++){ moHtml+='<option value="'+m+'"'+(m===now.getMonth()?' selected':'')+'>'+monthNames[m]+'</option>'; }
+  mo.innerHTML=moHtml;
+  // Year selector (from earliest data year to current)
+  var years={}; years[now.getFullYear()]=true;
+  (allTransactions||[]).forEach(function(t){ var d=trDate(t); if(d) years[d.getFullYear()]=true; });
+  (allPersonalExp||[]).forEach(function(e){ var d=e.expense_date?new Date(e.expense_date):null; if(d) years[d.getFullYear()]=true; });
+  var yr=document.getElementById('fr-year');
+  var yrHtml='';
+  Object.keys(years).sort().reverse().forEach(function(y){ yrHtml+='<option value="'+y+'"'+(parseInt(y)===now.getFullYear()?' selected':'')+'>'+y+'</option>'; });
+  yr.innerHTML=yrHtml;
+  renderFinReport();
+  openModal('finReportModal');
+}
+function finReportData(){
+  var period=document.getElementById('fr-period').value;
+  var month=parseInt(document.getElementById('fr-month').value);
+  var year=parseInt(document.getElementById('fr-year').value);
+  var inPeriod=function(d){
+    if(!d) return false;
+    if(d.getFullYear()!==year) return false;
+    if(period==='month' && d.getMonth()!==month) return false;
+    return true;
+  };
+  var income=0, expense=0;
+  var incomeByCat={}, expenseByCat={};
+  (allTransactions||[]).forEach(function(t){
+    var d=trDate(t); if(!inPeriod(d)) return;
+    var amt=t.amount||0;
+    if(t.type==='income'){ income+=amt; var c=t.category||'سایر'; incomeByCat[c]=(incomeByCat[c]||0)+amt; }
+    else if(t.type==='expense'||t.type==='purchase'){ expense+=amt; var c2=t.category||(t.type==='purchase'?'خرید':'سایر'); expenseByCat[c2]=(expenseByCat[c2]||0)+amt; }
+  });
+  // Personal expenses (listed separately, NOT in factory profit)
+  var personal=0, personalByCat={};
+  (allPersonalExp||[]).forEach(function(e){
+    var d=e.expense_date?new Date(e.expense_date):null; if(!inPeriod(d)) return;
+    var amt=e.amount||0; personal+=amt;
+    var c=e.category||'سایر'; personalByCat[c]=(personalByCat[c]||0)+amt;
+  });
+  return {period:period,month:month,year:year,income:income,expense:expense,profit:income-expense,
+          incomeByCat:incomeByCat,expenseByCat:expenseByCat,personal:personal,personalByCat:personalByCat};
+}
+function renderFinReport(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var d=finReportData();
+  var fmt=function(n){ return (n||0).toLocaleString()+' '+L('ر.ق','QAR','ریال'); };
+  var catRows=function(obj){
+    var keys=Object.keys(obj);
+    if(keys.length===0) return '<div style="font-size:12px;color:var(--text2);padding:6px">'+L('لا يوجد','None','موردی نیست')+'</div>';
+    return keys.map(function(k){
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;border-bottom:1px solid var(--border)"><span>'+stageLabel(k)+'</span><span>'+fmt(obj[k])+'</span></div>';
+    }).join('');
+  };
+  var profitColor=d.profit>=0?'var(--green)':'var(--red)';
+  var html=''+
+    '<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--green);font-weight:700">'+L('إجمالي الدخل','Total income','کل درآمد')+'</span><span style="color:var(--green);font-weight:700">'+fmt(d.income)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--red);font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:var(--red);font-weight:700">'+fmt(d.expense)+'</span></div>'+
+      '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px"><span style="color:'+profitColor+';font-weight:800">'+L('صافي الربح','Net profit','سود خالص')+'</span><span style="color:'+profitColor+';font-weight:800">'+fmt(d.profit)+'</span></div>'+
+    '</div>'+
+    '<div style="font-size:13px;font-weight:700;color:var(--green);margin:10px 0 4px">⬆️ '+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</div>'+catRows(d.incomeByCat)+
+    '<div style="font-size:13px;font-weight:700;color:var(--red);margin:10px 0 4px">⬇️ '+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</div>'+catRows(d.expenseByCat)+
+    '<div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 4px">👤 '+L('المصاريف الشخصية (منفصلة)','Personal expenses (separate)','مخارج شخصی (جداگانه)')+'</div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;font-weight:700"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
+    catRows(d.personalByCat);
+  document.getElementById('fr-body').innerHTML=html;
+}
+function printFinReport(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var d=finReportData();
+  var monthNames=L(['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'],
+                   ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+                   ['ژانویه','فوریه','مارس','آوریل','مه','ژوئن','جولای','اوت','سپتامبر','اکتبر','نوامبر','دسامبر']);
+  var periodLabel=d.period==='month'?(monthNames[d.month]+' '+d.year):(''+d.year);
+  var fmt=function(n){ return (n||0).toLocaleString()+' '+L('ر.ق','QAR','ریال'); };
+  var catRows=function(obj){
+    var keys=Object.keys(obj);
+    if(keys.length===0) return '<tr><td colspan="2" style="padding:6px;color:#888">'+L('لا يوجد','None','موردی نیست')+'</td></tr>';
+    return keys.map(function(k){ return '<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">'+stageLabel(k)+'</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left">'+fmt(obj[k])+'</td></tr>'; }).join('');
+  };
+  var dir=lang==='en'?'ltr':'rtl';
+  var profitColor=d.profit>=0?'#1a7f37':'#c0392b';
+  var html='<!DOCTYPE html><html dir="'+dir+'"><head><meta charset="UTF-8"><title>'+L('كشف الحساب','Statement','صورت‌حساب')+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;color:#444}table{width:100%;border-collapse:collapse}.box{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px}.row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px}.big{font-weight:800;font-size:16px}@media print{.noprint{display:none}}</style></head><body>'+
+    '<h1>دار الأصالة للمفروشات — '+L('كشف حساب','Financial Statement','صورت‌حساب مالی')+'</h1>'+
+    '<div style="font-size:13px;color:#666;margin-bottom:14px">'+L('الفترة','Period','دوره')+': '+periodLabel+'</div>'+
+    '<div class="box">'+
+      '<div class="row"><span style="color:#1a7f37;font-weight:700">'+L('إجمالي الدخل','Total income','کل درآمد')+'</span><span style="color:#1a7f37;font-weight:700">'+fmt(d.income)+'</span></div>'+
+      '<div class="row"><span style="color:#c0392b;font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:#c0392b;font-weight:700">'+fmt(d.expense)+'</span></div>'+
+      '<div class="row big" style="border-top:2px solid #333;margin-top:6px;padding-top:8px"><span style="color:'+profitColor+'">'+L('صافي الربح','Net profit','سود خالص')+'</span><span style="color:'+profitColor+'">'+fmt(d.profit)+'</span></div>'+
+    '</div>'+
+    '<h2>'+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</h2><table>'+catRows(d.incomeByCat)+'</table>'+
+    '<h2>'+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</h2><table>'+catRows(d.expenseByCat)+'</table>'+
+    '<h2 style="color:#a07830">'+L('المصاريف الشخصية (منفصلة عن المصنع)','Personal expenses (separate from factory)','مخارج شخصی (جدا از کارخانه)')+'</h2>'+
+    '<div class="row big"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
+    '<table>'+catRows(d.personalByCat)+'</table>'+
+    '<div style="margin-top:30px;text-align:center" class="noprint"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Print</button> <button onclick="window.close()" style="padding:12px 30px;background:#c0392b;color:#fff;border:none;border-radius:8px;cursor:pointer">✖ Close</button></div>'+
+    '</body></html>';
+  var w=null;
+  try { w=window.open('','_blank'); } catch(e){ w=null; }
+  if(w){ w.document.write(html); w.document.close(); }
+  else { showToast(L('فعّل النوافذ','Enable pop-ups','پاپ‌آپ را فعال کنید'),'error'); }
+}
+
 function renderFinance(){
   const isPurchasing = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
   const income=allTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+(t.amount||0),0);
