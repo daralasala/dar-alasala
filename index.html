@@ -3609,9 +3609,11 @@ function renderFinReport(){
     '</div>'+
     '<div style="font-size:13px;font-weight:700;color:var(--green);margin:10px 0 4px">⬆️ '+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</div>'+catRows(d.incomeByCat)+
     '<div style="font-size:13px;font-weight:700;color:var(--red);margin:10px 0 4px">⬇️ '+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</div>'+catRows(d.expenseByCat)+
-    '<div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 4px">👤 '+L('المصاريف الشخصية (منفصلة)','Personal expenses (separate)','مخارج شخصی (جداگانه)')+'</div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;font-weight:700"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
-    catRows(d.personalByCat);
+    (currentUser&&currentUser.role==='manager'?(
+      '<div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 4px">👤 '+L('المصاريف الشخصية (منفصلة)','Personal expenses (separate)','مخارج شخصی (جداگانه)')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;font-weight:700"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
+      catRows(d.personalByCat)
+    ):'');
   document.getElementById('fr-body').innerHTML=html;
 }
 function printFinReport(){
@@ -3640,9 +3642,11 @@ function printFinReport(){
     '</div>'+
     '<h2>'+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</h2><table>'+catRows(d.incomeByCat)+'</table>'+
     '<h2>'+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</h2><table>'+catRows(d.expenseByCat)+'</table>'+
-    '<h2 style="color:#a07830">'+L('المصاريف الشخصية (منفصلة عن المصنع)','Personal expenses (separate from factory)','مخارج شخصی (جدا از کارخانه)')+'</h2>'+
-    '<div class="row big"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
-    '<table>'+catRows(d.personalByCat)+'</table>'+
+    (currentUser&&currentUser.role==='manager'?(
+      '<h2 style="color:#a07830">'+L('المصاريف الشخصية (منفصلة عن المصنع)','Personal expenses (separate from factory)','مخارج شخصی (جدا از کارخانه)')+'</h2>'+
+      '<div class="row big"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
+      '<table>'+catRows(d.personalByCat)+'</table>'
+    ):'')+
     '<div style="margin-top:30px;text-align:center" class="noprint"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;cursor:pointer">🖨️ Print</button> <button onclick="window.close()" style="padding:12px 30px;background:#c0392b;color:#fff;border:none;border-radius:8px;cursor:pointer">✖ Close</button></div>'+
     '</body></html>';
   var w=null;
