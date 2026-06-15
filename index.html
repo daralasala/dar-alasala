@@ -3499,6 +3499,33 @@ async function moveStage(idx,dir){
 }
 
 // ===== FINANCE =====
+// Translate finance/personal categories to current language
+function catLabel(c){
+  if(!c) return c;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var map={
+    'prepay':L('دفعة مقدمة','Prepay','پیش‌پرداخت'),
+    'payment':L('دفعة','Payment','پرداخت'),
+    'خرید':L('شراء','Purchase','خرید'),
+    'مواد اولیه':L('مواد خام','Raw materials','مواد اولیه'),
+    'حقوق':L('رواتب','Salary','حقوق'),
+    'salary':L('رواتب','Salary','حقوق'),
+    'اجاره':L('إيجار','Rent','اجاره'),
+    'برق و آب':L('كهرباء وماء','Utilities','برق و آب'),
+    'بنزین':L('بنزين','Fuel','بنزین'),'بنزين':L('بنزين','Fuel','بنزین'),
+    'حمل‌ونقل':L('نقل','Transport','حمل‌ونقل'),
+    'تعمیرات':L('صيانة','Repairs','تعمیرات'),'تعميرات':L('صيانة','Repairs','تعمیرات'),
+    'تجهیزات':L('معدات','Equipment','تجهیزات'),
+    'سایر':L('أخرى','Other','سایر'),'ساير':L('أخرى','Other','سایر'),
+    'غذا':L('طعام','Food','غذا'),
+    'قبوض':L('فواتير','Bills','قبوض'),
+    'خرید ':L('تسوق','Shopping','خرید'),
+    'سلامت':L('صحة','Health','سلامت'),
+    'آموزش':L('تعليم','Education','آموزش'),
+    'سرگرمی':L('ترفيه','Entertainment','سرگرمی')
+  };
+  return map[c]||c;
+}
 // ===== FINANCIAL REPORT (monthly / yearly statement) =====
 function trDate(t){
   // pick the best available date field
@@ -3570,7 +3597,7 @@ function renderFinReport(){
     var keys=Object.keys(obj);
     if(keys.length===0) return '<div style="font-size:12px;color:var(--text2);padding:6px">'+L('لا يوجد','None','موردی نیست')+'</div>';
     return keys.map(function(k){
-      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;border-bottom:1px solid var(--border)"><span>'+stageLabel(k)+'</span><span>'+fmt(obj[k])+'</span></div>';
+      return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;border-bottom:1px solid var(--border)"><span>'+catLabel(k)+'</span><span>'+fmt(obj[k])+'</span></div>';
     }).join('');
   };
   var profitColor=d.profit>=0?'var(--green)':'var(--red)';
@@ -3598,7 +3625,7 @@ function printFinReport(){
   var catRows=function(obj){
     var keys=Object.keys(obj);
     if(keys.length===0) return '<tr><td colspan="2" style="padding:6px;color:#888">'+L('لا يوجد','None','موردی نیست')+'</td></tr>';
-    return keys.map(function(k){ return '<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">'+stageLabel(k)+'</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left">'+fmt(obj[k])+'</td></tr>'; }).join('');
+    return keys.map(function(k){ return '<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">'+catLabel(k)+'</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left">'+fmt(obj[k])+'</td></tr>'; }).join('');
   };
   var dir=lang==='en'?'ltr':'rtl';
   var profitColor=d.profit>=0?'#1a7f37':'#c0392b';
