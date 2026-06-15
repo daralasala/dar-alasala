@@ -4842,11 +4842,18 @@ async function saveCustomer(){
 }
 
 async function deleteCustomer(id){
-  if(!confirm(lang==='ar'?'حذف هذا العميل؟':lang==='en'?'Delete this customer?':'این مشتری حذف شود؟')) return;
-  await api('DELETE','customers',null,'?id=eq.'+id);
-  allCustomers=allCustomers.filter(c=>c.id!==id);
-  renderCustomers();
-  showToast(T('saved'),'success');
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(!confirm(L('حذف هذا العميل؟','Delete this customer?','این مشتری حذف شود؟'))) return;
+  try {
+    await api('DELETE','customers',null,'?id=eq.'+id);
+    // Reload customers straight from the database to confirm it's really gone
+    var fresh=await api('GET','customers','','?select=*&order=created_at.desc');
+    allCustomers=fresh||[];
+    renderCustomers();
+    showToast(L('تم الحذف','Deleted','حذف شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
+  }
 }
 
 // Import customers from existing orders/invoices (dedupe by phone+name)
