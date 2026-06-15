@@ -2411,7 +2411,7 @@ async function startInvoiceProduction(invId){
   }
   var rcptNo='RV-'+invCode.replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
   var today=new Date().toISOString().slice(0,10);
-  lastReceipt={no:rcptNo,date:today,cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة مقدمة عن الفاتورة ':lang==='en'?'Advance payment for invoice ':'پیش‌پرداخت بابت فاکتور ')+invCode};
+  lastReceipt={no:rcptNo,date:today,cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:'دفعة مقدمة عن الفاتورة '+invCode};
   closeModal('orderDetailModal');
   await loadAll();
   showToast(lang==='ar'?'تم تأكيد الدفع · سند القبض جاهز':lang==='en'?'Payment confirmed · Receipt ready':'پرداخت تأیید شد · سند قبض آماده است','success');
@@ -2641,7 +2641,7 @@ function receiptForOrder(orderId){
   var advance=inv?(inv.prepay||0):(o.prepay||0);
   var balance=grandTotal-advance;
   var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
-  lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:(lang==='ar'?'دفعة عن الفاتورة ':lang==='en'?'Payment for invoice ':'پرداخت بابت فاکتور ')+invCode};
+  lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:advance,total:grandTotal,balance:balance,reason:'دفعة عن الفاتورة '+invCode};
   showReceiptVoucher();
 }
 
@@ -3152,7 +3152,7 @@ async function markDelivered(id){
   if(rem>0){
     await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
     var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-F'+String(new Date().getTime()).slice(-4);
-    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:(lang==='ar'?'الدفعة الأخيرة عند التسليم - فاتورة ':lang==='en'?'Final payment on delivery - invoice ':'پرداخت نهایی هنگام تحویل - فاکتور ')+invCode};
+    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:'الدفعة الأخيرة عند التسليم - فاتورة '+invCode};
     closeModal('orderDetailModal'); await loadAll();
     showToast(lang==='ar'?'تم التسليم · سند القبض جاهز':lang==='en'?'Delivered · Receipt ready':'تحویل شد · سند قبض آماده است','success');
     showReceiptVoucher();
@@ -3192,7 +3192,7 @@ async function markInvoiceDelivered(invId){
     var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
     var invCode=inv?inv.inv_code:'';
     var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-F'+String(new Date().getTime()).slice(-4);
-    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:(lang==='ar'?'الدفعة الأخيرة عند التسليم - فاتورة ':lang==='en'?'Final payment on delivery - invoice ':'پرداخت نهایی هنگام تحویل - فاکتور ')+invCode};
+    lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:'الدفعة الأخيرة عند التسليم - فاتورة '+invCode};
     closeModal('invoiceFolderModal'); await loadAll();
     showToast(lang==='ar'?'تم التسليم · سند القبض جاهز':lang==='en'?'Delivered · Receipt ready':'تحویل شد · سند قبض آماده است','success');
     showReceiptVoucher();
