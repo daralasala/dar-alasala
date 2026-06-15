@@ -765,6 +765,24 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- MOVE INVENTORY ITEM TO EXPENSE MODAL -->
+<div class="modal-overlay modal-top" id="moveExpModal">
+  <div class="modal">
+    <div class="modal-header"><div class="modal-title">➡️ <span id="mte-title">انتقال به هزینه</span></div><button class="modal-close" onclick="closeModal('moveExpModal')">✕</button></div>
+    <div id="mte-info" style="font-size:13px;color:var(--text2);margin-bottom:10px"></div>
+    <input type="hidden" id="mte-item-id">
+    <div class="form-group"><label class="form-label" id="mte-cat-lbl">دسته‌بندی هزینه</label>
+      <select class="form-control" id="mte-cat">
+        <option value="بنزین">بنزین</option><option value="غذا">غذا</option><option value="حمل‌ونقل">حمل‌ونقل</option><option value="تعمیرات">تعمیرات</option><option value="مواد اولیه">مواد اولیه</option><option value="تجهیزات">تجهیزات</option><option value="سایر">سایر</option>
+      </select>
+    </div>
+    <div class="form-group"><label class="form-label" id="mte-amount-lbl">مبلغ هزینه (QAR)</label><input class="form-control" type="number" id="mte-amount" value="0"></div>
+    <div class="form-group"><label class="form-label" id="mte-desc-lbl">توضیحات</label><input class="form-control" type="text" id="mte-desc"></div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px" id="mte-note">⚠️ این جنس از انبار حذف می‌شود و به‌عنوان هزینه ثبت می‌شود.</div>
+    <button class="btn btn-primary btn-block" onclick="confirmMoveToExpense()">💾 <span id="mte-save">تأیید و ثبت هزینه</span></button>
+  </div>
+</div>
+
 <!-- FINANCIAL REPORT MODAL -->
 <div class="modal-overlay modal-top" id="finReportModal">
   <div class="modal" style="max-width:780px;max-height:92vh">
@@ -4268,10 +4286,59 @@ function renderInventory(){
       (canSeeUsage?'<button class="btn btn-outline btn-sm" onclick="openItemUsageHistory('+it.id+')">📋 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>':'')+
       (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
+      ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-sm" onclick="openMoveToExpense('+it.id+')" style="border-color:var(--orange);color:var(--orange)">➡️ '+(lang==='ar'?'تحويل لمصروف':lang==='en'?'To expense':'انتقال به هزینه')+'</button>':'')+
       ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" onclick="deleteInventory('+it.id+')">🗑️</button>':'')+
       '</div>'+
     '</div>';
   }).join('');
+}
+
+// ===== MOVE INVENTORY ITEM TO EXPENSE (manager only) =====
+function openMoveToExpense(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var it=allInventory.find(function(x){return x.id===id;});
+  if(!it) return;
+  document.getElementById('mte-title').textContent=L('تحويل إلى مصروف','Move to expense','انتقال به هزینه');
+  document.getElementById('mte-cat-lbl').textContent=L('تصنيف المصروف','Expense category','دسته‌بندی هزینه');
+  document.getElementById('mte-amount-lbl').textContent=L('مبلغ المصروف (QAR)','Expense amount (QAR)','مبلغ هزینه (QAR)');
+  document.getElementById('mte-desc-lbl').textContent=L('الوصف','Description','توضیحات');
+  document.getElementById('mte-save').textContent=L('تأكيد وتسجيل المصروف','Confirm & add expense','تأیید و ثبت هزینه');
+  document.getElementById('mte-note').textContent=L('⚠️ سيُحذف هذا الصنف من المخزون ويُسجل كمصروف.','⚠️ This item will be removed from inventory and logged as an expense.','⚠️ این جنس از انبار حذف می‌شود و به‌عنوان هزینه ثبت می‌شود.');
+  document.getElementById('mte-info').textContent=it.name+' — '+(it.quantity||0)+' '+it.unit+' × '+(it.unit_price||0).toLocaleString()+' QAR';
+  document.getElementById('mte-item-id').value=it.id;
+  // default amount = total value of this item in stock
+  var total=(it.quantity||0)*(it.unit_price||0);
+  document.getElementById('mte-amount').value=total>0?total:(it.unit_price||0);
+  document.getElementById('mte-desc').value=it.name;
+  openModal('moveExpModal');
+}
+async function confirmMoveToExpense(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var id=document.getElementById('mte-item-id').value;
+  var it=allInventory.find(function(x){return String(x.id)===String(id);});
+  if(!it) return;
+  var cat=document.getElementById('mte-cat').value;
+  var amount=parseFloat(document.getElementById('mte-amount').value)||0;
+  var desc=document.getElementById('mte-desc').value.trim()||it.name;
+  if(amount<=0){ showToast(L('أدخل مبلغاً','Enter amount','مبلغ را وارد کن'),'error'); return; }
+  if(!confirm(L('تأكيد التحويل إلى مصروف؟','Confirm move to expense?','انتقال به هزینه تایید شود؟'))) return;
+  try {
+    // 1) record the expense
+    await api('POST','transactions',{type:'expense',amount:amount,description:desc,category:cat,user_id:currentUser?currentUser.id:null});
+    // 2) remove the item from inventory
+    await api('DELETE','inventory',null,'?id=eq.'+id);
+    // refresh
+    var freshInv=await api('GET','inventory','','?select=*&order=name.asc');
+    allInventory=freshInv||[];
+    var newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
+    allTransactions=newTrans||[];
+    closeModal('moveExpModal');
+    renderInventory();
+    if(typeof renderFinance==='function') renderFinance();
+    showToast(L('تم التحويل إلى مصروف','Moved to expense','به هزینه منتقل شد'),'success');
+  } catch(e){
+    showToast(L('فشل: ','Failed: ','خطا: ')+(e.message||''),'error');
+  }
 }
 
 async function deleteInventory(id){
