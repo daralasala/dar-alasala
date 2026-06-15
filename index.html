@@ -851,9 +851,9 @@ body.en .search-icon{right:auto;left:10px;}
 <div class="modal-overlay" id="expenseModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">❤️ <span id="em-title">ثبت هزینه</span></div><button class="modal-close" onclick="closeModal('expenseModal')">✕</button></div>
-    <div class="form-group"><label class="form-label">مبلغ (QAR)</label><input class="form-control" type="number" id="e-amount"></div>
-    <div class="form-group"><label class="form-label">توضیحات</label><input class="form-control" type="text" id="e-desc"></div>
-    <div class="form-group"><label class="form-label">دسته‌بندی</label>
+    <div class="form-group"><label class="form-label" id="em-amount">مبلغ (QAR)</label><input class="form-control" type="number" id="e-amount"></div>
+    <div class="form-group"><label class="form-label" id="em-desc">توضیحات</label><input class="form-control" type="text" id="e-desc"></div>
+    <div class="form-group"><label class="form-label" id="em-cat">دسته‌بندی</label>
       <select class="form-control" id="e-cat">
         <option value="مواد اولیه">مواد اولیه</option><option value="حقوق">حقوق</option><option value="اجاره">اجاره</option><option value="برق و آب">برق و آب</option><option value="بنزین">بنزین</option><option value="حمل‌ونقل">حمل‌ونقل</option><option value="تعمیرات">تعمیرات</option><option value="تجهیزات">تجهیزات</option><option value="سایر">سایر</option>
       </select>
@@ -863,7 +863,7 @@ body.en .search-icon{right:auto;left:10px;}
       <div id="e-img-preview" style="margin-bottom:6px"></div>
       <button type="button" class="btn btn-outline btn-sm" onclick="pickExpenseImage()">📷 <span id="em-img-btn">افزودن عکس فاکتور</span></button>
     </div>
-    <button class="btn btn-red btn-block" onclick="saveTransaction('expense')">ثبت هزینه</button>
+    <button class="btn btn-red btn-block" onclick="saveTransaction('expense')"><span id="em-save">ثبت هزینه</span></button>
   </div>
 </div>
 
@@ -1295,6 +1295,14 @@ function refreshStaticLabels(l){
   safeSet('rm-qty',P('الكمية','Quantity','مقدار / تعداد'));
   safeSet('rm-notes',P('ملاحظات','Notes','توضیحات'));
   safeSet('rm-save',P('إرسال الطلب','Submit Request','ثبت درخواست'));
+  // Expense modal labels (trilingual)
+  safeSet('em-title',P('تسجيل مصروف','Add expense','ثبت هزینه'));
+  safeSet('em-amount',P('المبلغ (QAR)','Amount (QAR)','مبلغ (QAR)'));
+  safeSet('em-desc',P('الوصف','Description','توضیحات'));
+  safeSet('em-cat',P('التصنيف','Category','دسته‌بندی'));
+  safeSet('em-img-lbl','📸 '+P('صورة الفاتورة (اختياري)','Receipt photo (optional)','عکس فاکتور (اختیاری)'));
+  safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
+  safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
   safeSet('rm-img-btn',P('اختر صورة','Choose photo','انتخاب عکس'));
   safeSet('asset-add-label',P('إضافة أصل','Add asset','افزودن دارایی'));
   safeSet('fe-add-label',P('إضافة مصروف ثابت','Add fixed expense','افزودن هزینه ثابت'));
