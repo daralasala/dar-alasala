@@ -3727,7 +3727,7 @@ function renderFinance(){
   }
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
   // Filter transactions for purchasing - only show expense/purchase
-  var txList=isPurchasing?allTransactions.filter(t=>t.type==='purchase'):allTransactions;
+  var txList=isPurchasing?allTransactions.filter(t=>t.type==='purchase'||t.type==='expense'):allTransactions;
   document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
     : txList.slice(0,20).map(t=>{
