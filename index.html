@@ -6145,7 +6145,27 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function openInvoiceModal(){
   orderItems=[{product:'',qty:1,price:0,images:[]}];
   renderOrderItems();
-  var inv=document.getElementById('f-invno'); if(inv) inv.value='';
+  // Suggest the next invoice number (highest numeric inv_code + 1)
+  var inv=document.getElementById('f-invno');
+  if(inv){
+    var maxNum=0, prefix='', hasNumeric=false;
+    (allInvoices||[]).forEach(function(v){
+      var code=(v.inv_code||'').trim();
+      // extract trailing number, keep any prefix (e.g. "INV-")
+      var m=code.match(/^(.*?)(\d+)\s*$/);
+      if(m){
+        var n=parseInt(m[2],10);
+        if(!isNaN(n)&&n>maxNum){ maxNum=n; prefix=m[1]; hasNumeric=true; }
+      }
+    });
+    if(hasNumeric){
+      var nextStr=String(maxNum+1);
+      // keep leading zeros length if the previous number had them
+      inv.value=prefix+nextStr;
+    } else {
+      inv.value='';
+    }
+  }
   openModal('newOrderModal');
 }
 
