@@ -959,7 +959,7 @@ body.en .search-icon{right:auto;left:10px;}
       <div class="form-group"><label class="form-label" id="pm-supplier">الشركة / فروشنده</label>
         <div style="display:flex;gap:6px">
           <select class="form-control" id="p-supplier" onchange="onSupplierChange()"><option value="">-- اختر / انتخاب --</option></select>
-          <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
+          <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" id="sup-new-btn" style="white-space:nowrap">+ جدید</button>
           <button class="btn btn-outline btn-sm" onclick="editSupplierPhone()" style="white-space:nowrap" title="ویرایش شماره">✏️</button>
           <button class="btn btn-red btn-sm" onclick="deleteSupplier()" style="white-space:nowrap" title="حذف فروشنده">🗑️</button>
           <button class="btn btn-outline btn-sm" onclick="openSupplierManage()" style="white-space:nowrap" title="مدیریت فروشنده‌ها">📋</button>
@@ -1409,6 +1409,7 @@ function refreshStaticLabels(l){
   safeSet('mat-shop-label',P('قائمة أقمشة الطلبات','Orders fabric list','لیست پارچه سفارشات'));
   var rhBtn=document.getElementById('req-history-btn'); if(rhBtn&&!reqHistoryMode) rhBtn.textContent='📚 '+P('سجل المشتريات','Purchase history','تاریخچه خریدها');
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
+  var supNew=document.getElementById('sup-new-btn'); if(supNew) supNew.textContent='+ '+P('جديد','New','جدید');
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   var invS=document.getElementById('inv-search'); if(invS) invS.placeholder=P('🔍 بحث في المخزون','🔍 Search inventory','🔍 جستجو در انبار');
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
