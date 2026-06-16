@@ -362,6 +362,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
@@ -415,6 +416,7 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px;display:none">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
     <button class="btn btn-outline btn-block" onclick="openUsageHistory()" id="usage-history-btn" style="margin-bottom:12px;display:none">📋 <span id="usage-history-label">سجل السحب / تاریخچه برداشت‌ها</span></button>
+    <input class="form-control" id="inv-search" placeholder="🔍 جستجو در انبار" oninput="renderInventory()" style="margin-bottom:12px">
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
 
@@ -767,6 +769,15 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- PURCHASE INVOICES MODAL -->
+<div class="modal-overlay modal-top" id="purchInvoicesModal">
+  <div class="modal" style="max-width:680px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">🛒 <span id="pi-title">فاکتورهای خرید</span></div><button class="modal-close" onclick="closeModal('purchInvoicesModal')">✕</button></div>
+    <input class="form-control" id="pi-search" placeholder="🔍" oninput="renderPurchaseInvoices()" style="margin-bottom:10px">
+    <div id="pi-list"></div>
+  </div>
+</div>
+
 <!-- ALL INVOICES LIST MODAL -->
 <div class="modal-overlay modal-top" id="allInvoicesModal">
   <div class="modal" style="max-width:680px;max-height:92vh">
@@ -982,7 +993,8 @@ body.en .search-icon{right:auto;left:10px;}
 
 <!-- LIGHTBOX -->
 <div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;flex-direction:column;overflow:hidden" onclick="closeLightbox()">
-  <img id="lightbox-img" onclick="event.stopPropagation();toggleZoom(event)" style="max-width:95%;max-height:85%;object-fit:contain;border-radius:8px;cursor:zoom-in;transition:transform .15s;transform:scale(1);touch-action:pinch-zoom">
+  <img id="lightbox-img" onclick="event.stopPropagation()" style="max-width:95%;max-height:85%;object-fit:contain;border-radius:8px;cursor:zoom-in;transition:transform .1s;transform:scale(1);touch-action:none">
+  <div style="position:absolute;top:20px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.6)" onclick="event.stopPropagation()" id="lb-hint">+ / − برای زوم · بکش برای جابجایی</div>
   <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px" onclick="event.stopPropagation()">
     <button onclick="zoomLightbox(-1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;cursor:pointer">−</button>
     <button onclick="zoomLightbox(0)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:46px;height:46px;border-radius:50%;font-size:16px;cursor:pointer">1:1</button>
@@ -1352,6 +1364,7 @@ function refreshStaticLabels(l){
   safeSet('em-img-lbl','📸 '+P('صورة الفاتورة (اختياري)','Receipt photo (optional)','عکس فاکتور (اختیاری)'));
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
+  safeSet('fb-purchinv-lbl',P('فواتير الشراء','Purchase invoices','فاکتورهای خرید'));
   safeSet('fb-allinv-lbl',P('كل الفواتير','All invoices','همه فاکتورها'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
@@ -1370,6 +1383,7 @@ function refreshStaticLabels(l){
   safeSet('mat-shop-label',P('قائمة أقمشة الطلبات','Orders fabric list','لیست پارچه سفارشات'));
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
+  var invS=document.getElementById('inv-search'); if(invS) invS.placeholder=P('🔍 بحث في المخزون','🔍 Search inventory','🔍 جستجو در انبار');
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
   safeSet('cust-broadcast-label',P('إرسال إعلان للجميع','Send announcement to all','ارسال تبلیغ به همه'));
@@ -3572,6 +3586,35 @@ function trDate(t){
   return d?new Date(d):null;
 }
 // ===== ALL INVOICES LIST =====
+// ===== PURCHASE INVOICES LIST =====
+function openPurchaseInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('pi-title').textContent=L('فواتير الشراء','Purchase invoices','فاکتورهای خرید');
+  document.getElementById('pi-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
+  renderPurchaseInvoices();
+  openModal('purchInvoicesModal');
+}
+function renderPurchaseInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var q=(document.getElementById('pi-search').value||'').toLowerCase();
+  var list=(allPurchases||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  if(q) list=list.filter(function(p){ return ((p.supplier||'')+(p.item_name||'')).toLowerCase().indexOf(q)>=0; });
+  var box=document.getElementById('pi-list');
+  if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🛒</div><div>'+T('no_data')+'</div></div>'; return; }
+  box.innerHTML=list.map(function(p){
+    var img=p.invoice_image?'<img src="'+p.invoice_image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">':'';
+    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-weight:700;font-size:14px">'+(p.supplier||L('بدون مورد','No supplier','بدون تأمین‌کننده'))+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">'+(p.invoice_date||'')+'</div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(p.item_name||'')+'</div>'+
+      '<div style="font-size:13px;margin-top:4px;color:var(--accent);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
+      img+
+    '</div>';
+  }).join('');
+}
+
 function openAllInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   document.getElementById('ai-title').textContent=L('كل الفواتير','All invoices','همه فاکتورها');
@@ -3908,6 +3951,26 @@ function showImgFull(transId){
   }
 }
 
+function setInvItemImage(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        var img=await compressImage(input.files[0],0.6,900);
+        await api('PATCH','inventory',{image:img},'?id=eq.'+id);
+        var it=allInventory.find(function(x){return String(x.id)===String(id);});
+        if(it) it.image=img;
+        renderInventory();
+        showToast(L('تم حفظ الصورة','Photo saved','عکس ذخیره شد'),'success');
+      } catch(e){ showToast(L('فشل','Error','خطا'),'error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
 function showInvImage(id){
   var it=allInventory.find(x=>x.id===id);
   if(it&&it.image){
@@ -4336,7 +4399,16 @@ function renderInventory(){
     return;
   }
   var canManage=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول خرید');
-  box.innerHTML=allInventory.map(function(it){
+  var q=(document.getElementById('inv-search')?document.getElementById('inv-search').value:'').toLowerCase().trim();
+  var invList=allInventory.filter(function(it){
+    if(!q) return true;
+    return ((it.name||'')+' '+(it.unit||'')).toLowerCase().indexOf(q)>=0;
+  });
+  if(invList.length===0){
+    box.innerHTML='<div class="empty-state"><div class="empty-icon">🔍</div><div>'+T('no_data')+'</div></div>';
+    return;
+  }
+  box.innerHTML=invList.map(function(it){
     var low=(it.quantity||0)<=(it.min_quantity||0);
     var thumb=it.image
       ? '<img src="'+it.image+'" onclick="showInvImage('+it.id+')" style="width:46px;height:46px;object-fit:cover;border-radius:8px;cursor:pointer;flex-shrink:0">'
@@ -4350,6 +4422,7 @@ function renderInventory(){
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':lang==='en'?'Withdraw':'برداشت')+'</button>'+
+      ((currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن'))?'<button class="btn btn-outline btn-sm" onclick="setInvItemImage('+it.id+')">📷 '+(lang==='ar'?'صورة':lang==='en'?'Photo':'عکس')+'</button>':'')+
       (canSeeUsage?'<button class="btn btn-outline btn-sm" onclick="openItemUsageHistory('+it.id+')">📋 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>':'')+
       (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>'+
       '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
@@ -6178,21 +6251,51 @@ function showLightbox(orderId,idx){
     document.getElementById('lightbox').style.display='flex';
   }
 }
-var _lbZoom=1;
-function closeLightbox(){ document.getElementById('lightbox').style.display='none'; _lbZoom=1; var im=document.getElementById('lightbox-img'); if(im){ im.style.transform='scale(1)'; im.style.cursor='zoom-in'; } }
-function zoomLightbox(dir){
+var _lbZoom=1, _lbX=0, _lbY=0, _lbDrag=false, _lbStartX=0, _lbStartY=0;
+function _lbApply(){
   var im=document.getElementById('lightbox-img'); if(!im) return;
-  if(dir===0){ _lbZoom=1; }
-  else { _lbZoom=Math.max(1,Math.min(5,_lbZoom+(dir*0.5))); }
-  im.style.transform='scale('+_lbZoom+')';
-  im.style.cursor=_lbZoom>1?'zoom-out':'zoom-in';
+  im.style.transform='translate('+_lbX+'px,'+_lbY+'px) scale('+_lbZoom+')';
+  im.style.cursor=_lbZoom>1?'grab':'zoom-in';
+}
+function closeLightbox(){ document.getElementById('lightbox').style.display='none'; _lbZoom=1; _lbX=0; _lbY=0; _lbApply(); }
+function zoomLightbox(dir){
+  if(dir===0){ _lbZoom=1; _lbX=0; _lbY=0; }
+  else { _lbZoom=Math.max(1,Math.min(5,_lbZoom+(dir*0.5))); if(_lbZoom===1){ _lbX=0; _lbY=0; } }
+  _lbApply();
 }
 function toggleZoom(e){
-  var im=document.getElementById('lightbox-img'); if(!im) return;
-  _lbZoom=_lbZoom>1?1:2;
-  im.style.transform='scale('+_lbZoom+')';
-  im.style.cursor=_lbZoom>1?'zoom-out':'zoom-in';
+  if(_lbZoom>1){ _lbZoom=1; _lbX=0; _lbY=0; }
+  else { _lbZoom=2; }
+  _lbApply();
 }
+// Drag-to-pan when zoomed in
+function _lbDown(e){
+  if(_lbZoom<=1) return;
+  _lbDrag=true;
+  var p=e.touches?e.touches[0]:e;
+  _lbStartX=p.clientX-_lbX; _lbStartY=p.clientY-_lbY;
+  e.preventDefault();
+}
+function _lbMove(e){
+  if(!_lbDrag||_lbZoom<=1) return;
+  var p=e.touches?e.touches[0]:e;
+  _lbX=p.clientX-_lbStartX; _lbY=p.clientY-_lbStartY;
+  _lbApply();
+  e.preventDefault();
+}
+function _lbUp(){ _lbDrag=false; }
+// attach listeners once DOM is ready
+setTimeout(function(){
+  var im=document.getElementById('lightbox-img');
+  if(im){
+    im.addEventListener('mousedown',_lbDown);
+    im.addEventListener('touchstart',_lbDown,{passive:false});
+    window.addEventListener('mousemove',_lbMove);
+    window.addEventListener('touchmove',_lbMove,{passive:false});
+    window.addEventListener('mouseup',_lbUp);
+    window.addEventListener('touchend',_lbUp);
+  }
+},800);
 
 // ===== TOAST =====
 function showToast(msg,type){
