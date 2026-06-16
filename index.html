@@ -2819,7 +2819,9 @@ function createInvoice(orderId){
 
 function renderInvoiceEditor(o){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  var invNo=o.id_code?o.id_code.replace('ORD-','INV-'):'INV-'+String(Date.now()).slice(-5);
+  // Prefer the real invoice code (inv_code) from the invoices table
+  var invObj=o.invoice_id?allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}):null;
+  var invNo=invObj&&invObj.inv_code?invObj.inv_code:(o.id_code?o.id_code.replace('ORD-','INV-'):'INV-'+String(Date.now()).slice(-5));
   var today=new Date().toISOString().slice(0,10);
   var itemsRows=invoiceItems.map(function(it,i){
     return '<div style="display:flex;gap:5px;margin-bottom:6px">'+
