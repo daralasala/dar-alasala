@@ -775,6 +775,15 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- SUPPLIER MANAGEMENT MODAL -->
+<div class="modal-overlay modal-top" id="supplierManageModal">
+  <div class="modal" style="max-width:560px;max-height:90vh">
+    <div class="modal-header"><div class="modal-title">📋 <span id="sm-title">مدیریت فروشنده‌ها</span></div><button class="modal-close" onclick="closeModal('supplierManageModal')">✕</button></div>
+    <input class="form-control" id="sm-search" placeholder="🔍" oninput="renderSupplierManage()" style="margin-bottom:10px">
+    <div id="sm-list"></div>
+  </div>
+</div>
+
 <!-- PURCHASE INVOICES MODAL -->
 <div class="modal-overlay modal-top" id="purchInvoicesModal">
   <div class="modal" style="max-width:680px;max-height:92vh">
@@ -952,6 +961,7 @@ body.en .search-icon{right:auto;left:10px;}
           <button class="btn btn-outline btn-sm" onclick="addNewSupplier()" style="white-space:nowrap">+ جدید</button>
           <button class="btn btn-outline btn-sm" onclick="editSupplierPhone()" style="white-space:nowrap" title="ویرایش شماره">✏️</button>
           <button class="btn btn-red btn-sm" onclick="deleteSupplier()" style="white-space:nowrap" title="حذف فروشنده">🗑️</button>
+          <button class="btn btn-outline btn-sm" onclick="openSupplierManage()" style="white-space:nowrap" title="مدیریت فروشنده‌ها">📋</button>
         </div>
         <div id="supplier-phone-line" style="font-size:12px;color:var(--text2);margin-top:5px;display:none">📱 <span id="supplier-phone-val"></span></div>
       </div>
@@ -4252,6 +4262,66 @@ async function addNewSupplier(){
 }
 
 // Delete the currently selected supplier
+// ===== SUPPLIER MANAGEMENT (list / edit / delete, find duplicates) =====
+function openSupplierManage(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('sm-title').textContent=L('إدارة الموردين','Manage suppliers','مدیریت فروشنده‌ها');
+  document.getElementById('sm-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
+  renderSupplierManage();
+  openModal('supplierManageModal');
+}
+function renderSupplierManage(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var q=(document.getElementById('sm-search').value||'').toLowerCase();
+  var list=(allSuppliers||[]).slice().sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+  if(q) list=list.filter(function(s){ return ((s.name||'')+(s.phone||'')).toLowerCase().indexOf(q)>=0; });
+  // detect duplicate names
+  var counts={};
+  (allSuppliers||[]).forEach(function(s){ var n=(s.name||'').trim().toLowerCase(); counts[n]=(counts[n]||0)+1; });
+  var box=document.getElementById('sm-list');
+  if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🏢</div><div>'+T('no_data')+'</div></div>'; return; }
+  box.innerHTML=list.map(function(s){
+    var isDup=counts[(s.name||'').trim().toLowerCase()]>1;
+    return '<div style="display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:10px;padding:10px;margin-bottom:7px">'+
+      '<div style="flex:1">'+
+        '<div style="font-size:14px;font-weight:600">'+(s.name||'-')+(isDup?' <span class="badge badge-red" style="font-size:9px">'+L('مكرر','Duplicate','تکراری')+'</span>':'')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">'+(s.phone||L('بدون رقم','No number','بدون شماره'))+'</div>'+
+      '</div>'+
+      '<button class="btn btn-outline btn-sm" onclick="editSupplierRow('+s.id+')">✏️</button>'+
+      '<button class="btn btn-red btn-sm" onclick="deleteSupplierRow('+s.id+')">🗑️</button>'+
+    '</div>';
+  }).join('');
+}
+async function editSupplierRow(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var s=(allSuppliers||[]).find(function(x){return String(x.id)===String(id);});
+  if(!s) return;
+  var newName=prompt(L('اسم المورد:','Supplier name:','نام فروشنده:'),s.name||'');
+  if(newName===null) return;
+  newName=newName.trim();
+  if(!newName){ showToast(L('الاسم فارغ','Name empty','نام خالی است'),'error'); return; }
+  var newPhone=prompt(L('رقم الهاتف (واتساب):','Phone (WhatsApp):','شماره تلفن (واتساپ):'),s.phone||'');
+  if(newPhone===null) newPhone=s.phone||'';
+  try {
+    await api('PATCH','suppliers',{name:newName,phone:newPhone.trim()},'?id=eq.'+id);
+    await loadSuppliers();
+    renderSupplierManage();
+    showToast(L('تم التعديل','Updated','ویرایش شد'),'success');
+  } catch(e){ showToast(L('فشل','Error','خطا'),'error'); }
+}
+async function deleteSupplierRow(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var s=(allSuppliers||[]).find(function(x){return String(x.id)===String(id);});
+  if(!s) return;
+  if(!confirm((L('حذف المورد؟ ','Delete supplier? ','حذف فروشنده؟ '))+(s.name||''))) return;
+  try {
+    await api('DELETE','suppliers',null,'?id=eq.'+id);
+    await loadSuppliers();
+    renderSupplierManage();
+    showToast(L('تم الحذف','Deleted','حذف شد'),'success');
+  } catch(e){ showToast(L('فشل الحذف','Delete failed','حذف نشد'),'error'); }
+}
+
 async function deleteSupplier(){
   var sel=document.getElementById('p-supplier');
   var name=sel?sel.value:'';
