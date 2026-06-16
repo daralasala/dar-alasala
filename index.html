@@ -4177,7 +4177,7 @@ function renderPurchaseItems(){
       '<div style="display:flex;gap:5px">'+
         '<input class="form-control" id="pi-qty-'+i+'" type="number" style="flex:1" placeholder="'+L('كمية','Qty','تعداد')+'" value="'+(it.qty||'')+'" oninput="purchaseItems['+i+'].qty=parseFloat(this.value)||0;updatePurchaseTotal()">'+
         '<select class="form-control" id="pi-unit-'+i+'" style="flex:1" onchange="purchaseItems['+i+'].unit=this.value">'+
-          ['عدد','متر','کیلو','لیتر','بسته','متر مربع'].map(function(u){return '<option'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
+          ['عدد','متر','کیلو','لیتر','بسته','متر مربع'].map(function(u){return '<option value="'+u+'"'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
         '</select>'+
         '<input class="form-control" id="pi-price-'+i+'" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
       '</div>'+
@@ -4185,6 +4185,8 @@ function renderPurchaseItems(){
     '</div>';
   }).join('');
   updatePurchaseTotal();
+  // Re-translate the dynamically-built unit dropdowns to the current language
+  try { if(typeof autoTranslateLabels==='function') autoTranslateLabels(lang); } catch(e){}
 }
 
 async function savePurchase(){
