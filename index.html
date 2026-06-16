@@ -362,6 +362,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
@@ -412,7 +413,7 @@ body.en .search-icon{right:auto;left:10px;}
 
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
-    <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
+    <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px;display:none">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
     <button class="btn btn-outline btn-block" onclick="openUsageHistory()" id="usage-history-btn" style="margin-bottom:12px;display:none">📋 <span id="usage-history-label">سجل السحب / تاریخچه برداشت‌ها</span></button>
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -766,6 +767,15 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<!-- ALL INVOICES LIST MODAL -->
+<div class="modal-overlay modal-top" id="allInvoicesModal">
+  <div class="modal" style="max-width:680px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">📄 <span id="ai-title">همه فاکتورها</span></div><button class="modal-close" onclick="closeModal('allInvoicesModal')">✕</button></div>
+    <input class="form-control" id="ai-search" placeholder="🔍" oninput="renderAllInvoices()" style="margin-bottom:10px">
+    <div id="ai-list"></div>
+  </div>
+</div>
+
 <!-- MOVE INVENTORY ITEM TO EXPENSE MODAL -->
 <div class="modal-overlay modal-top" id="moveExpModal">
   <div class="modal">
@@ -971,9 +981,14 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;flex-direction:column" onclick="closeLightbox()">
-  <img id="lightbox-img" style="max-width:95%;max-height:85%;object-fit:contain;border-radius:8px">
-  <button style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.2);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer">✕</button>
+<div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;flex-direction:column;overflow:hidden" onclick="closeLightbox()">
+  <img id="lightbox-img" onclick="event.stopPropagation();toggleZoom(event)" style="max-width:95%;max-height:85%;object-fit:contain;border-radius:8px;cursor:zoom-in;transition:transform .15s;transform:scale(1);touch-action:pinch-zoom">
+  <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px" onclick="event.stopPropagation()">
+    <button onclick="zoomLightbox(-1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;cursor:pointer">−</button>
+    <button onclick="zoomLightbox(0)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:46px;height:46px;border-radius:50%;font-size:16px;cursor:pointer">1:1</button>
+    <button onclick="zoomLightbox(1)" style="background:rgba(255,255,255,.2);border:none;color:#fff;width:46px;height:46px;border-radius:50%;font-size:22px;cursor:pointer">+</button>
+  </div>
+  <button onclick="closeLightbox()" style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,.2);border:none;color:#fff;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer">✕</button>
 </div>
 
 <script>
@@ -1337,6 +1352,7 @@ function refreshStaticLabels(l){
   safeSet('em-img-lbl','📸 '+P('صورة الفاتورة (اختياري)','Receipt photo (optional)','عکس فاکتور (اختیاری)'));
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
+  safeSet('fb-allinv-lbl',P('كل الفواتير','All invoices','همه فاکتورها'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
   safeSet('ml-invno-hint',P('(فارغ = تلقائي)','(empty = auto)','(خالی = خودکار)'));
@@ -3553,6 +3569,41 @@ function trDate(t){
   var d=t.created_at||t.date||t.due_date||null;
   return d?new Date(d):null;
 }
+// ===== ALL INVOICES LIST =====
+function openAllInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('ai-title').textContent=L('كل الفواتير','All invoices','همه فاکتورها');
+  document.getElementById('ai-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
+  renderAllInvoices();
+  openModal('allInvoicesModal');
+}
+function renderAllInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var q=(document.getElementById('ai-search').value||'').toLowerCase();
+  var list=(allInvoices||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  if(q) list=list.filter(function(inv){ return ((inv.inv_code||'')+(inv.customer_name||'')+(inv.customer_phone||'')).toLowerCase().indexOf(q)>=0; });
+  var box=document.getElementById('ai-list');
+  if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">📄</div><div>'+T('no_data')+'</div></div>'; return; }
+  var stLabel=function(s){
+    return s==='delivered'?L('تم التسليم','Delivered','تحویل شده'):
+           s==='paid'?L('مدفوع','Paid','پرداخت شده'):
+           s==='pending_payment'?L('بانتظار الدفع','Pending payment','در انتظار پرداخت'):
+           (s||'');
+  };
+  box.innerHTML=list.map(function(inv){
+    var paid=inv.prepay||0, total=inv.total_price||0;
+    return '<div onclick="closeModal(\'allInvoicesModal\');openInvoiceFolder(\''+inv.id+'\')" style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;cursor:pointer">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-weight:700;font-size:14px">'+(inv.inv_code||'-')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">'+stLabel(inv.status)+'</div>'+
+      '</div>'+
+      '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(inv.customer_name||'')+(inv.customer_phone?(' · '+inv.customer_phone):'')+'</div>'+
+      '<div style="font-size:12px;margin-top:4px"><span style="color:var(--accent);font-weight:700">'+total.toLocaleString()+' QAR</span>'+
+      (paid>0?(' · <span style="color:var(--green)">'+L('مقدم','Prepaid','پیش‌پرداخت')+': '+paid.toLocaleString()+'</span>'):'')+'</div>'+
+    '</div>';
+  }).join('');
+}
+
 async function openFinReport(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   // make sure personal expenses are loaded (they may not be if the personal tab was never opened)
@@ -3794,13 +3845,21 @@ function renderFinance(){
 }
 
 async function deleteTransaction(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var t=allTransactions.find(x=>x.id===id);
   var amt=t?(t.amount||0).toLocaleString():'';
   var desc=t?(t.description||t.category||''):'';
-  if(!confirm((lang==='ar'?'حذف هذه المعاملة؟ ':lang==='en'?'Delete this transaction? ':'این تراکنش حذف شود؟ ')+desc+' · '+amt+' QAR\n'+(lang==='ar'?'سيتأثر الرصيد.':lang==='en'?'Balance will be affected.':'موجودی تغییر می‌کند.'))) return;
-  await api('DELETE','transactions',null,'?id=eq.'+id);
-  await loadAll();
-  showToast(T('saved'),'success');
+  if(!confirm((L('حذف هذه المعاملة؟ ','Delete this transaction? ','این تراکنش حذف شود؟ '))+desc+' · '+amt+' QAR\n'+(L('سيتأثر الرصيد.','Balance will be affected.','موجودی تغییر می‌کند.')))) return;
+  try {
+    try { await api('DELETE','purchases',null,'?transaction_id=eq.'+id); } catch(e){}
+    await api('DELETE','transactions',null,'?id=eq.'+id);
+    allTransactions=allTransactions.filter(function(x){return String(x.id)!==String(id);});
+    renderFinance();
+    await loadAll();
+    showToast(L('تم الحذف','Deleted','حذف شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
+  }
 }
 
 async function markCreditPaid(transId){
@@ -4261,6 +4320,9 @@ async function loadInventory(){
 }
 
 function renderInventory(){
+  // Add-to-inventory button is for the manager only
+  var addBtn=document.getElementById('inv-add-btn');
+  if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'block':'none';
   var box=document.getElementById('inventory-list');
   if(!box) return;
   // Usage-history button: manager & accountant only
@@ -6094,7 +6156,21 @@ function showLightbox(orderId,idx){
     document.getElementById('lightbox').style.display='flex';
   }
 }
-function closeLightbox(){ document.getElementById('lightbox').style.display='none'; }
+var _lbZoom=1;
+function closeLightbox(){ document.getElementById('lightbox').style.display='none'; _lbZoom=1; var im=document.getElementById('lightbox-img'); if(im){ im.style.transform='scale(1)'; im.style.cursor='zoom-in'; } }
+function zoomLightbox(dir){
+  var im=document.getElementById('lightbox-img'); if(!im) return;
+  if(dir===0){ _lbZoom=1; }
+  else { _lbZoom=Math.max(1,Math.min(5,_lbZoom+(dir*0.5))); }
+  im.style.transform='scale('+_lbZoom+')';
+  im.style.cursor=_lbZoom>1?'zoom-out':'zoom-in';
+}
+function toggleZoom(e){
+  var im=document.getElementById('lightbox-img'); if(!im) return;
+  _lbZoom=_lbZoom>1?1:2;
+  im.style.transform='scale('+_lbZoom+')';
+  im.style.cursor=_lbZoom>1?'zoom-out':'zoom-in';
+}
 
 // ===== TOAST =====
 function showToast(msg,type){
