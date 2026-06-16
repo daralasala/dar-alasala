@@ -1099,6 +1099,15 @@ function daysLeftLabel(dateStr){
   if(days===0) return '<span style="color:var(--red)"> · ⏳ '+L('اليوم!','Today!','امروز!')+'</span>';
   return '<span style="color:var(--red)"> · ⚠️ '+Math.abs(days)+' '+L('يوم تأخير','days late','روز گذشته')+'</span>';
 }
+// Get the best display code for an order: prefer the real invoice number, fall back to id_code
+function orderDisplayCode(o){
+  if(!o) return '';
+  if(o.invoice_id){
+    var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);});
+    if(inv&&inv.inv_code) return inv.inv_code;
+  }
+  return o.id_code||'';
+}
 function workerTag(o){
   if(!o) return '';
   if(o.status==='delivered'||o.status==='pending_payment'||o.status==='paid') return '';
@@ -1956,7 +1965,7 @@ function renderOrders(){
     // Orders without invoice (legacy)
     noInv.forEach(function(o){
       html+='<div class="card" onclick="openOrderDetail('+o.id+')" style="cursor:pointer;margin-bottom:12px">'+
-        '<div class="card-header"><div><div class="card-title">'+o.product+'</div><div class="card-sub">'+(canSeeCust?o.customer_name+' · ':'')+(o.id_code||'')+'</div></div>'+
+        '<div class="card-header"><div><div class="card-title">'+o.product+'</div><div class="card-sub">'+(canSeeCust?o.customer_name+' · ':'')+orderDisplayCode(o)+'</div></div>'+
         '<span class="badge '+(sm[o.status]||'badge-blue')+'">'+T('status_'+(o.status||'building'))+'</span></div>'+
         '<div class="row" style="margin-bottom:0"><span class="row-label">🏭</span><span class="row-value">'+stageOrStatusLabel(o)+workerTag(o)+'</span></div>'+
         (o.progress>0?'<div class="progress-bar"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
@@ -1980,7 +1989,7 @@ function renderOrders(){
       <div class="card" onclick="openOrderDetail(${o.id})" style="cursor:pointer">
         ${thumb}
         <div class="card-header">
-          <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${o.id_code||''}</div></div>
+          <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${orderDisplayCode(o)}</div></div>
           <span class="badge ${sm[o.status]||'badge-blue'}">${T('status_'+(o.status||'building'))}</span>
         </div>
         <div class="row"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}${daysLeftLabel(o.delivery_date)}</span></div>
@@ -2017,7 +2026,7 @@ function openMaterialsShoppingList(){
       '</div>';
     }).join('');
     return '<div class="card" style="margin-bottom:10px;padding:11px">'+
-      '<div style="font-size:13px;font-weight:700;margin-bottom:7px">📦 '+o.product+' <span style="font-size:11px;color:var(--text2)">· '+(o.id_code||'')+' · '+(o.customer_name||'')+'</span></div>'+
+      '<div style="font-size:13px;font-weight:700;margin-bottom:7px">📦 '+o.product+' <span style="font-size:11px;color:var(--text2)">· '+orderDisplayCode(o)+' · '+(o.customer_name||'')+'</span></div>'+
       rows+
     '</div>';
   }).join('');
@@ -3465,7 +3474,7 @@ function renderProduction(){
         return `<div class="card" style="cursor:pointer">
           ${thumb}
           <div class="card-header">
-            <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${o.id_code||''}</div></div>
+            <div><div class="card-title">${o.product}</div><div class="card-sub">${canSeeCust?o.customer_name+' · ':''}${orderDisplayCode(o)}</div></div>
             <span class="badge badge-blue">${stageLabel(o.current_stage)}</span>
           </div>
           ${o.description?'<div style="font-size:12px;color:var(--text2);margin-bottom:7px">'+o.description+'</div>':''}
