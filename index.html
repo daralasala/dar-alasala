@@ -727,6 +727,7 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="modal" style="max-height:92vh">
     <div class="modal-header"><div class="modal-title">🧾 <span id="mo-new-order">إنشاء فاتورة / ساخت فاکتور</span></div><button class="modal-close" onclick="closeModal('newOrderModal')">✕</button></div>
     <div class="form-group"><label class="form-label" id="ml-cname">نام مشتری / اسم العميل</label><input class="form-control" type="text" id="f-cname"></div>
+    <div class="form-group"><label class="form-label" id="ml-invno">شماره فاکتور / رقم الفاتورة <span style="font-size:11px;color:var(--text3)" id="ml-invno-hint">(خالی = خودکار)</span></label><input class="form-control" type="text" id="f-invno" placeholder="INV-..."></div>
     <div class="form-group"><label class="form-label" id="ml-phone">تلفن / هاتف</label><input class="form-control" type="tel" id="f-phone"></div>
     <div class="form-group"><label class="form-label">الرقم الشخصي / شماره شخصی</label><input class="form-control" type="text" id="f-cid"></div>
     <div class="form-group"><label class="form-label" id="ml-delivery">تاریخ تحویل / تاريخ التسليم</label><input class="form-control" type="date" id="f-delivery"></div>
@@ -1337,6 +1338,8 @@ function refreshStaticLabels(l){
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
+  safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
+  safeSet('ml-invno-hint',P('(فارغ = تلقائي)','(empty = auto)','(خالی = خودکار)'));
   safeSet('rm-img-btn',P('اختر صورة','Choose photo','انتخاب عکس'));
   safeSet('asset-add-label',P('إضافة أصل','Add asset','افزودن دارایی'));
   safeSet('fe-add-label',P('إضافة مصروف ثابت','Add fixed expense','افزودن هزینه ثابت'));
@@ -5995,7 +5998,9 @@ async function saveOrder(){
   const prepay=parseFloat(document.getElementById('f-prepay').value)||0;
   const desc=document.getElementById('f-desc').value;
   const total=validItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
-  const invCode='INV-'+String(Date.now()).slice(-5);
+  // Use the manually-entered invoice number if provided, otherwise auto-generate
+  var manualInv=(document.getElementById('f-invno').value||'').trim();
+  const invCode=manualInv?manualInv:('INV-'+String(Date.now()).slice(-5));
   // 1) Create invoice header
   const invRes=await fetch(SB_URL+'/rest/v1/invoices',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({inv_code:invCode,customer_name:cname,customer_phone:phone,customer_id:cid,total_price:total,prepay:prepay,status:'pending_payment',notes:desc})});
   if(!invRes.ok){ showToast(await invRes.text(),'error'); return; }
@@ -6076,6 +6081,7 @@ function closeModal(id){ document.getElementById(id).classList.remove('open'); }
 function openInvoiceModal(){
   orderItems=[{product:'',qty:1,price:0,images:[]}];
   renderOrderItems();
+  var inv=document.getElementById('f-invno'); if(inv) inv.value='';
   openModal('newOrderModal');
 }
 
