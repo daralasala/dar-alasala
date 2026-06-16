@@ -395,6 +395,7 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="page" id="page-requests">
     <button class="btn btn-primary btn-block" onclick="openReqModal()" style="margin-bottom:8px">➕ <span id="req-new-btn">درخواست خرید جدید</span></button>
     <button class="btn btn-outline btn-block" onclick="openMaterialsShoppingList()" id="mat-shop-btn" style="margin-bottom:12px;display:none">🧵 <span id="mat-shop-label">قائمة أقمشة الطلبات / لیست پارچه سفارشات</span></button>
+    <button class="btn btn-outline btn-block" onclick="toggleReqHistory()" id="req-history-btn" style="margin-bottom:12px">📚 تاریخچه خریدها</button>
     <div class="section-title" id="req-list-title">درخواست‌های خرید</div>
     <div id="requests-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -1397,6 +1398,7 @@ function refreshStaticLabels(l){
   safeSet('pe-add-label',P('إضافة مصروف','Add expense','افزودن خرج'));
   safeSet('family-info-label',P('معلومات العائلة','Family info','مشخصات خانواده'));
   safeSet('mat-shop-label',P('قائمة أقمشة الطلبات','Orders fabric list','لیست پارچه سفارشات'));
+  var rhBtn=document.getElementById('req-history-btn'); if(rhBtn&&!reqHistoryMode) rhBtn.textContent='📚 '+P('سجل المشتريات','Purchase history','تاریخچه خریدها');
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
   var invS=document.getElementById('inv-search'); if(invS) invS.placeholder=P('🔍 بحث في المخزون','🔍 Search inventory','🔍 جستجو در انبار');
@@ -5831,6 +5833,14 @@ async function toggleStaffPause(id){
 // ===== NOTIFICATIONS =====
 // ===== PURCHASE REQUESTS =====
 let allRequests=[];
+var reqHistoryMode=false;
+function toggleReqHistory(){
+  reqHistoryMode=!reqHistoryMode;
+  var btn=document.getElementById('req-history-btn');
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(btn) btn.textContent=reqHistoryMode?('🛒 '+L('الطلبات النشطة','Active requests','درخواست‌های فعال')):('📚 '+L('سجل المشتريات','Purchase history','تاریخچه خریدها'));
+  renderRequests();
+}
 async function renderRequests(){
   const reqs=await api('GET','purchase_requests','','?select=*&order=created_at.desc');
   allRequests=reqs||[];
@@ -5839,6 +5849,12 @@ async function renderRequests(){
   if(msBtn) msBtn.style.display=(isManagerOrBuyer||(currentUser&&currentUser.department==='حسابدار'))?'':'none';
   // Workers see only their own requests; manager/buyer see all
   var list=isManagerOrBuyer?allRequests:allRequests.filter(r=>r.worker_name&&r.worker_name.indexOf(currentUser.name)>-1);
+  // Bought requests move to History — hide them from the active list (unless history mode is on)
+  if(reqHistoryMode){
+    list=list.filter(function(r){return r.status==='bought';});
+  } else {
+    list=list.filter(function(r){return r.status!=='bought';});
+  }
   const stColors={pending:'badge-orange',approved:'badge-green',bought:'badge-blue',rejected:'badge-red'};
   const stText={pending:lang==='ar'?'قيد الانتظار':lang==='en'?'Pending':'در انتظار',approved:lang==='ar'?'موافق':lang==='en'?'Approved':'تایید شده',bought:lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریداری شد',rejected:lang==='ar'?'مرفوض':lang==='en'?'Rejected':'رد شده'};
   document.getElementById('requests-list').innerHTML = list.length===0
