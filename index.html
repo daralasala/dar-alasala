@@ -622,6 +622,12 @@ body.en .search-icon{right:auto;left:10px;}
     </div>
     <div class="form-group"><label class="form-label" id="r2i-price-label">قیمت واحد (QAR)</label><input class="form-control" type="number" id="r2i-price" value="0"></div>
     <div class="form-group"><label class="form-label" id="r2i-min-label">حداقل موجودی (هشدار)</label><input class="form-control" type="number" id="r2i-min" value="0"></div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:4px">
+      <label class="form-label" id="r2i-finv-label">🧾 عکس فاکتور خرید (اختیاری)</label>
+      <div id="r2i-finv-preview" style="margin-bottom:6px"></div>
+      <button class="btn btn-outline btn-sm" onclick="pickR2IInvoiceImage()">📷 <span id="r2i-finv-btn">افزودن عکس فاکتور</span></button>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px" id="r2i-finv-note">مبلغ کل (مقدار × قیمت) به‌عنوان خرید در مالی ثبت می‌شود.</div>
+    </div>
     <input type="hidden" id="r2i-req-id">
     <input type="hidden" id="r2i-existing-id">
     <button class="btn btn-primary btn-block" onclick="confirmReqToInv()">📦 <span id="r2i-confirm">افزودن به انبار</span></button>
@@ -5893,10 +5899,14 @@ function openReqToInv(reqId){
     r2iImageData=r.image;
     document.getElementById('r2i-img-preview').innerHTML='<img src="'+r.image+'" style="width:80px;height:80px;object-fit:cover;border-radius:8px">';
   }
+  r2iInvoiceImage='';
+  var fpv=document.getElementById('r2i-finv-preview'); if(fpv) fpv.innerHTML='';
+  var L2=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var fl=document.getElementById('r2i-finv-label'); if(fl) fl.textContent='🧾 '+L2('صورة فاتورة الشراء (اختياري)','Purchase invoice photo (optional)','عکس فاکتور خرید (اختیاری)');
+  var fb=document.getElementById('r2i-finv-btn'); if(fb) fb.textContent=L2('إضافة صورة الفاتورة','Add invoice photo','افزودن عکس فاکتور');
+  var fn=document.getElementById('r2i-finv-note'); if(fn) fn.textContent=L2('سيُسجل المبلغ الكلي (الكمية × السعر) كشراء في المالية.','Total (qty × price) will be recorded as a purchase in finance.','مبلغ کل (مقدار × قیمت) به‌عنوان خرید در مالی ثبت می‌شود.');
   openModal('reqToInvModal');
 }
-
-// When catalog selection changes, fill name/unit/price/image accordingly
 function onR2ICatalogChange(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var val=document.getElementById('r2i-catalog').value;
@@ -5928,6 +5938,22 @@ function onR2ICatalogChange(){
 }
 
 // Pick/replace the item image
+var r2iInvoiceImage='';
+function pickR2IInvoiceImage(){
+  var input=document.createElement('input');
+  input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        r2iInvoiceImage=await compressImage(input.files[0],0.6,900);
+        document.getElementById('r2i-finv-preview').innerHTML='<img src="'+r2iInvoiceImage+'" style="width:100px;height:100px;object-fit:cover;border-radius:8px">';
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
 function pickR2IImage(){
   var input=document.createElement('input');
   input.type='file'; input.accept='image/*'; input.style.display='none';
@@ -5969,7 +5995,18 @@ async function confirmReqToInv(){
   }
   // Mark request as bought
   await api('PATCH','purchase_requests',{status:'bought'},'?id=eq.'+reqId);
-  r2iImageData='';
+  // Record the purchase in finance (transaction + purchases row with invoice photo)
+  var totalCost=qty*price;
+  if(totalCost>0){
+    try {
+      var tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:totalCost,description:(name||r.item_name||'')+' ('+qty+' '+unit+')',category:'purchase',paid:true})});
+      if(tRes.ok){
+        var trans=(await tRes.json())[0];
+        await api('POST','purchases',{transaction_id:trans.id,supplier:r.worker_name||'',total_price:totalCost,item_name:(name||r.item_name||''),invoice_date:new Date().toISOString().slice(0,10),invoice_image:r2iInvoiceImage||null});
+      }
+    } catch(e){}
+  }
+  r2iImageData=''; r2iInvoiceImage='';
   closeModal('reqToInvModal');
   await loadAll();
   renderRequests();
