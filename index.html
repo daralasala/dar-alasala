@@ -3462,10 +3462,18 @@ function renderProduction(){
       return arr.indexOf(currentUser.name)===-1;
     } catch(e){ return true; }
   };
+  // A worker should only see orders assigned to them (or not yet assigned to anyone).
+  // Orders assigned to a DIFFERENT worker are hidden from them.
+  var assignedToMeOrFree=function(o){
+    if(isBoss) return true; // bosses see everything
+    var asg=(o.assigned_worker||'').trim();
+    if(!asg) return true;                       // unassigned → visible to all workers
+    return asg===currentUser.name;              // assigned → only that worker
+  };
   const filtered = (currentStageFilter==='all'
     ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
     : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
-  ).filter(notPassedByMe);
+  ).filter(notPassedByMe).filter(assignedToMeOrFree);
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
