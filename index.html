@@ -2427,19 +2427,28 @@ function openInvoiceFolder(invId){
 
 // Delete an entire invoice: all its orders + the invoice record
 async function deleteInvoiceAll(invId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
   var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
   var name=inv?inv.customer_name:(items[0]?items[0].customer_name:'');
-  if(!confirm((lang==='ar'?'حذف الفاتورة بالكامل مع كل أصنافها؟ ':lang==='en'?'Delete the whole invoice and all its items? ':'کل فاکتور و همه اجناسش حذف شود؟ ')+name+' ('+items.length+')')) return;
-  // Delete all orders of this invoice
-  for(var i=0;i<items.length;i++){
-    await api('DELETE','orders',null,'?id=eq.'+items[i].id);
+  if(!confirm((L('حذف الفاتورة بالكامل مع كل أصنافها؟ ','Delete the whole invoice and all its items? ','کل فاکتور و همه اجناسش حذف شود؟ '))+name+' ('+items.length+')')) return;
+  try {
+    // Delete each order's related stage records first (foreign key), then the order
+    for(var i=0;i<items.length;i++){
+      try { await api('DELETE','order_stages',null,'?order_id=eq.'+items[i].id); } catch(e){}
+      await api('DELETE','orders',null,'?id=eq.'+items[i].id);
+    }
+    // Delete the invoice record itself
+    if(inv){ await api('DELETE','invoices',null,'?id=eq.'+inv.id); }
+    // Remove from local lists immediately
+    allOrders=allOrders.filter(function(o){return String(o.invoice_id)!==String(invId);});
+    allInvoices=allInvoices.filter(function(x){return String(x.id)!==String(invId);});
+    closeModal('invoiceFolderModal');
+    await loadAll();
+    showToast(L('تم حذف الفاتورة','Invoice deleted','فاکتور حذف شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
   }
-  // Delete the invoice record itself
-  if(inv){ await api('DELETE','invoices',null,'?id=eq.'+inv.id); }
-  closeModal('invoiceFolderModal');
-  await loadAll();
-  showToast(lang==='ar'?'تم حذف الفاتورة':lang==='en'?'Invoice deleted':'فاکتور حذف شد','success');
 }
 
 async function updateProgress(id,val){
