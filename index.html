@@ -6155,6 +6155,28 @@ async function confirmReqToInv(){
   showToast(lang==='ar'?'تمت الإضافة للمخزون':lang==='en'?'Added to inventory':'به انبار اضافه شد','success');
 }
 
+// Renew a worker's QID by one year from its current expiry (or from today if already expired)
+async function renewQid(userId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var u=allUsers.find(function(x){return String(x.id)===String(userId);});
+  if(!u) return;
+  // base date = current expiry if in the future, else today
+  var base=u.qid_expiry?new Date(u.qid_expiry):new Date();
+  var now=new Date();
+  if(base<now) base=now;
+  var newDate=new Date(base);
+  newDate.setFullYear(newDate.getFullYear()+1);
+  var newStr=newDate.toISOString().slice(0,10);
+  if(!confirm(L('تجديد البطاقة حتى ','Renew QID until ','تمدید QID تا ')+newStr+' ?')) return;
+  try {
+    await api('PATCH','users',{qid_expiry:newStr},'?id=eq.'+userId);
+    u.qid_expiry=newStr;
+    renderNotifications();
+    showToast(L('تم التجديد','Renewed','تمدید شد'),'success');
+  } catch(e){
+    showToast(L('فشل','Error','خطا'),'error');
+  }
+}
 function renderNotifications(){
   const now=new Date();
   let html='';
@@ -6192,7 +6214,7 @@ function renderNotifications(){
         var qtxt=days<0
           ? (lang==='ar'?'انتهت البطاقة!':lang==='en'?'QID expired!':'QID منقضی شده!')
           : (lang==='ar'?('انتهاء البطاقة خلال '+days+' يوم'):lang==='en'?('QID expires in '+days+'d'):('انقضای QID تا '+days+' روز'));
-        html+='<div class="notif-item unread" style="border-right:3px solid var(--red)" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">🪪</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--red)">'+qtxt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+u.qid_expiry+'</div></div></div>';
+        html+='<div class="notif-item unread" style="border-right:3px solid var(--red)"><div style="font-size:18px">🪪</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--red)">'+qtxt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+u.qid_expiry+'</div><div style="margin-top:6px;display:flex;gap:6px"><button class="btn btn-primary btn-sm" onclick="event.stopPropagation();renewQid('+u.id+')">🔄 '+(lang==='ar'?'تجديد سنة':lang==='en'?'Renew 1yr':'تمدید یک سال')+'</button><button class="btn btn-outline btn-sm" onclick="event.stopPropagation();openStaffFile('+u.id+')">📂 '+(lang==='ar'?'الملف':lang==='en'?'File':'پرونده')+'</button></div></div></div>';
       }
     });
     // Fixed expense due alerts (5 days before)
