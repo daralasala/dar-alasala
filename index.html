@@ -5318,8 +5318,10 @@ async function deleteCustomer(id){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   if(!confirm(L('حذف هذا العميل؟','Delete this customer?','این مشتری حذف شود؟'))) return;
   try {
+    var c=allCustomers.find(function(x){return String(x.id)===String(id);});
+    // Remember this customer as deleted so sync won't re-create them
+    if(c){ try { await api('POST','deleted_customers',{name:c.name||'',phone:c.phone||''}); } catch(e){} }
     await api('DELETE','customers',null,'?id=eq.'+id);
-    // Reload customers straight from the database to confirm it's really gone
     var fresh=await api('GET','customers','','?select=*&order=created_at.desc');
     allCustomers=fresh||[];
     renderCustomers();
@@ -5332,6 +5334,12 @@ async function deleteCustomer(id){
 // Import customers from existing orders/invoices (dedupe by phone+name)
 async function syncCustomersFromOrders(){
   showToast(lang==='ar'?'جاري الاستيراد...':lang==='en'?'Importing...':'در حال همگام‌سازی...','success');
+  // Load the list of deleted customers so we don't re-create them
+  var deletedSet={};
+  try {
+    var del=await api('GET','deleted_customers','','?select=*');
+    (del||[]).forEach(function(d){ deletedSet[((d.name||'')+'|'+(d.phone||'')).trim()]=true; deletedSet[(d.name||'').trim()]=true; });
+  } catch(e){}
   // Build a set of existing (name+phone)
   var existing={};
   allCustomers.forEach(function(c){ existing[((c.name||'')+'|'+(c.phone||'')).trim()]=true; });
@@ -5343,6 +5351,8 @@ async function syncCustomersFromOrders(){
     if(!nm) return;
     var key=nm+'|'+ph;
     if(seen[key]||existing[key]) return;
+    // skip if this customer was deliberately deleted
+    if(deletedSet[key]||deletedSet[nm]) return;
     seen[key]=true;
     toAdd.push({name:nm,phone:ph});
   });
