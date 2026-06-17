@@ -1009,12 +1009,10 @@ body.en .search-icon{right:auto;left:10px;}
 </div>
 
 <!-- LIGHTBOX -->
-<div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pinch-zoom" onclick="if(event.target.id==='lightbox')closeLightbox()">
-  <div style="min-height:100%;display:flex;align-items:center;justify-content:center;padding:10px">
-    <img id="lightbox-img" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px">
-  </div>
+<div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;overflow:hidden;touch-action:none" onclick="if(event.target.id==='lightbox')closeLightbox()">
+  <img id="lightbox-img" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;transform-origin:center center;transform:translate(0px,0px) scale(1);transition:transform .05s;will-change:transform">
   <button onclick="closeLightbox()" style="position:fixed;top:20px;right:20px;background:rgba(255,255,255,.25);border:none;color:#fff;width:44px;height:44px;border-radius:50%;font-size:22px;cursor:pointer;z-index:401">✕</button>
-  <div style="position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.6);z-index:401" id="lb-hint">با دو انگشت زوم کنید</div>
+  <div style="position:fixed;bottom:18px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.6);z-index:401" id="lb-hint">با دو انگشت زوم کنید · بکشید برای جابجایی</div>
 </div>
 
 <script>
@@ -2836,7 +2834,7 @@ function showDocFull(orderId,docType){
   var img=docType==='contract'?o.contract_image:o.invoice_image;
   if(img){
     document.getElementById('lightbox-img').src=img;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -3973,7 +3971,7 @@ function showImgFull(transId){
   var p=allPurchases.find(x=>String(x.transaction_id)===String(transId));
   if(p&&p.invoice_image){
     document.getElementById('lightbox-img').src=p.invoice_image;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -4001,7 +3999,7 @@ function showInvImage(id){
   var it=allInventory.find(x=>x.id===id);
   if(it&&it.image){
     document.getElementById('lightbox-img').src=it.image;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -4009,7 +4007,7 @@ function showReqImage(id){
   var r=allRequests.find(x=>x.id===id);
   if(r&&r.image){
     document.getElementById('lightbox-img').src=r.image;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -4765,7 +4763,7 @@ function viewPersonalExpImage(id){
   var e=allPersonalExp.find(x=>x.id===id);
   if(e&&e.image){
     document.getElementById('lightbox-img').src=e.image;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 var personalExpImage='';
@@ -5090,7 +5088,7 @@ function showFixedExpImage(id){
   var fe=allFixedExp.find(x=>x.id===id);
   if(fe&&fe.invoice_image){
     document.getElementById('lightbox-img').src=fe.invoice_image;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -5686,7 +5684,7 @@ function showStaffPhoto(id){
   var u=allUsers.find(x=>x.id===id);
   if(u&&u.photo){
     document.getElementById('lightbox-img').src=u.photo;
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
 
@@ -6381,13 +6379,80 @@ function showLightbox(orderId,idx){
   var imgs=[]; try{ imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; }catch(e){}
   if(imgs[idx]){
     document.getElementById('lightbox-img').src=imgs[idx];
-    document.getElementById('lightbox').style.display='block';
+    document.getElementById('lightbox').style.display='flex';
   }
 }
-function closeLightbox(){ var lb=document.getElementById('lightbox'); if(lb){ lb.style.display='none'; lb.scrollTop=0; lb.scrollLeft=0; } }
-// (zoom is handled natively by the browser via touch-action:pinch-zoom)
-function zoomLightbox(){}
-function toggleZoom(){}
+// ===== LIGHTBOX ZOOM (pinch in/out + pan, holds zoom level) =====
+var _z=1, _tx=0, _ty=0;
+var _pinchDist=0, _pinchZoom=1;
+var _panActive=false, _panSX=0, _panSY=0, _panTX=0, _panTY=0;
+function _zApply(){
+  var im=document.getElementById('lightbox-img'); if(!im) return;
+  im.style.transform='translate('+_tx+'px,'+_ty+'px) scale('+_z+')';
+}
+function closeLightbox(){
+  var lb=document.getElementById('lightbox'); if(lb) lb.style.display='none';
+  _z=1; _tx=0; _ty=0; _zApply();
+}
+function _dist2(t){ var dx=t[0].clientX-t[1].clientX, dy=t[0].clientY-t[1].clientY; return Math.sqrt(dx*dx+dy*dy); }
+function _lbTouchStart(e){
+  if(e.touches.length===2){
+    _pinchDist=_dist2(e.touches);
+    _pinchZoom=_z;
+    _panActive=false;
+    e.preventDefault();
+  } else if(e.touches.length===1 && _z>1){
+    _panActive=true;
+    _panSX=e.touches[0].clientX; _panSY=e.touches[0].clientY;
+    _panTX=_tx; _panTY=_ty;
+    e.preventDefault();
+  }
+}
+function _lbTouchMove(e){
+  if(e.touches.length===2 && _pinchDist>0){
+    var d=_dist2(e.touches);
+    _z=Math.max(1,Math.min(6, _pinchZoom*(d/_pinchDist)));
+    if(_z===1){ _tx=0; _ty=0; }
+    _zApply();
+    e.preventDefault();
+  } else if(_panActive && e.touches.length===1 && _z>1){
+    _tx=_panTX+(e.touches[0].clientX-_panSX);
+    _ty=_panTY+(e.touches[0].clientY-_panSY);
+    _zApply();
+    e.preventDefault();
+  }
+}
+function _lbTouchEnd(e){
+  if(e.touches.length<2) _pinchDist=0;
+  if(e.touches.length===0) _panActive=false;
+}
+// Double-tap to toggle zoom
+var _lastTapT=0;
+function _lbDblTap(e){
+  var now=Date.now();
+  if(now-_lastTapT<300){
+    if(_z>1){ _z=1; _tx=0; _ty=0; } else { _z=2.5; }
+    _zApply();
+    e.preventDefault();
+  }
+  _lastTapT=now;
+}
+setTimeout(function(){
+  var im=document.getElementById('lightbox-img');
+  if(im){
+    im.addEventListener('touchstart',_lbTouchStart,{passive:false});
+    im.addEventListener('touchmove',_lbTouchMove,{passive:false});
+    im.addEventListener('touchend',_lbTouchEnd,{passive:false});
+    im.addEventListener('touchend',_lbDblTap,{passive:false});
+  }
+},800);
+// kept for compatibility (unused buttons)
+function zoomLightbox(dir){
+  if(dir===0){ _z=1; _tx=0; _ty=0; }
+  else { _z=Math.max(1,Math.min(6,_z+(dir*0.5))); if(_z===1){ _tx=0; _ty=0; } }
+  _zApply();
+}
+function toggleZoom(){ if(_z>1){_z=1;_tx=0;_ty=0;}else{_z=2.5;} _zApply(); }
 
 // ===== TOAST =====
 function showToast(msg,type){
