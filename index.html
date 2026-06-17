@@ -974,6 +974,7 @@ body.en .search-icon{right:auto;left:10px;}
       </div>
       <div class="form-group" id="due-date-wrap" style="display:none"><label class="form-label">تاريخ الاستحقاق / تاریخ سررسید</label><input class="form-control" type="date" id="p-due"></div>
       <div class="form-group"><label class="form-label" id="pm-date">تاریخ فاکتور</label><input class="form-control" type="date" id="p-date"></div>
+      <div class="form-group"><label class="form-label" id="pm-invno">شماره فاکتور خرید *</label><input class="form-control" type="text" id="p-invno" placeholder="..."></div>
       <div class="form-label" id="pm-items-title" style="margin-top:6px">🛒 اقلام خرید</div>
       <div id="p-items-container"></div>
       <button class="btn btn-outline btn-sm btn-block" style="margin-bottom:10px" onclick="addPurchaseItem()">+ <span id="pm-add-item">افزودن قلم</span></button>
@@ -1498,6 +1499,7 @@ function setLang(l){
   document.getElementById('pm-ai').textContent=T('ai_proc');
   document.getElementById('pm-supplier').textContent=T('supplier');
   document.getElementById('pm-date').textContent=T('inv_date');
+  var pmInv=document.getElementById('pm-invno'); if(pmInv) pmInv.textContent=(lang==='ar'?'رقم فاتورة الشراء *':lang==='en'?'Purchase invoice number *':'شماره فاکتور خرید *');
   var pmTitle=document.getElementById('pm-items-title'); if(pmTitle) pmTitle.textContent='🛒 '+(l==='ar'?'أصناف الشراء':l==='en'?'Purchase items':'اقلام خرید');
   var pmAdd=document.getElementById('pm-add-item'); if(pmAdd) pmAdd.textContent=l==='ar'?'إضافة صنف':l==='en'?'Add item':'افزودن قلم';
   var pmTot=document.getElementById('pm-total-lbl'); if(pmTot) pmTot.textContent=T('total');
@@ -4090,6 +4092,7 @@ async function openPurchaseModal(){
     }
   } catch(e){}
   resetPurchaseItems();
+  var pinv=document.getElementById('p-invno'); if(pinv) pinv.value='';
   openModal('purchaseModal');
 }
 function resetPurchaseItems(){
@@ -4209,6 +4212,11 @@ async function savePurchase(){
   });
   if(validItems.length===0){ showToast(L('أضف صنفاً واحداً على الأقل','Add at least one item','حداقل یک قلم اضافه کن'),'error'); return; }
   if(!supplier){ showToast(lang==='ar'?'اختر الشركة':lang==='en'?'Select company':'شرکت را انتخاب کنید','error'); return; }
+  // Invoice number is REQUIRED and must be unique (prevents entering the same invoice twice)
+  var invNo=(document.getElementById('p-invno').value||'').trim();
+  if(!invNo){ showToast(L('أدخل رقم فاتورة الشراء','Enter purchase invoice number','شماره فاکتور خرید را وارد کنید'),'error'); return; }
+  var dup=(allPurchases||[]).some(function(p){ return p.invoice_no && String(p.invoice_no).trim().toLowerCase()===invNo.toLowerCase(); });
+  if(dup){ showToast(L('رقم الفاتورة مُدخل مسبقاً!','Invoice number already entered!','این شماره فاکتور قبلاً ثبت شده!'),'error'); return; }
   const total=validItems.reduce(function(s,it){return s+((it.qty||0)*(it.price||0));},0);
   if(!total){ showToast(T('err_fill'),'error'); return; }
   // Build a readable item summary for the purchase record
@@ -4218,7 +4226,7 @@ async function savePurchase(){
   const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
   const trans=tRes.ok?await tRes.json():null;
   if(trans&&trans[0]){
-    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:'')});
+    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
   }
   // 2) Add each item to inventory (existing -> add qty; new -> create)
   for(var i=0;i<validItems.length;i++){
