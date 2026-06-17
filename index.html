@@ -4093,6 +4093,7 @@ async function openPurchaseModal(){
   } catch(e){}
   resetPurchaseItems();
   var pinv=document.getElementById('p-invno'); if(pinv) pinv.value='';
+  _pendingReqId=null;
   openModal('purchaseModal');
 }
 function resetPurchaseItems(){
@@ -4252,9 +4253,15 @@ async function savePurchase(){
     }
   }
   invoiceImage=null;
+  // If this purchase came from a request, mark that request as bought
+  if(_pendingReqId){
+    try { await api('PATCH','purchase_requests',{status:'bought'},'?id=eq.'+_pendingReqId); } catch(e){}
+    _pendingReqId=null;
+  }
   closeModal('purchaseModal');
   await loadAll();
   renderFinance();
+  if(typeof renderRequests==='function') renderRequests();
   showToast(L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
   // reset
   resetPurchaseItems();
@@ -5991,14 +5998,28 @@ async function savePurchaseRequest(){
 }
 
 async function updateRequest(id,status){
-  // When marking as purchased, open the transfer-to-inventory flow first
+  // When marking as purchased, open the FULL purchase modal (multi-item) pre-filled with this request
   if(status==='bought'){
-    openReqToInv(id);
+    openPurchaseForRequest(id);
     return;
   }
   await api('PATCH','purchase_requests',{status:status},'?id=eq.'+id);
   renderRequests();
   showToast(T('saved'),'success');
+}
+
+// Open the full Purchase modal pre-filled with a request's item; remember the request so it's marked bought on save
+var _pendingReqId=null;
+async function openPurchaseForRequest(reqId){
+  var r=allRequests.find(x=>x.id===reqId); if(!r) return;
+  await openPurchaseModal();
+  // set AFTER opening (openPurchaseModal clears it) so it survives until save
+  _pendingReqId=reqId;
+  // Pre-fill the first item with the request's item name and quantity
+  try {
+    purchaseItems=[{invId:'__new__',name:r.item_name||'',qty:r.quantity||1,price:0,unit:'عدد',image:r.image||''}];
+    renderPurchaseItems();
+  } catch(e){}
 }
 
 // Open modal to transfer a purchased request into inventory
@@ -6228,8 +6249,13 @@ function renderNotifications(){
       }
     });
   }
-  // Low stock alerts
-  allInventory.filter(it=>(it.quantity||0)<=(it.min_quantity||0)).forEach(it=>{
+  // Low stock alerts: trigger when stock <= min (if a min is set), or when stock is nearly empty (<=1) even if no min set
+  allInventory.filter(function(it){
+    var qty=it.quantity||0;
+    var min=it.min_quantity||0;
+    if(min>0) return qty<=min;
+    return qty<=1; // no min set → warn only when almost out
+  }).forEach(it=>{
     html+=`<div class="notif-item unread"><div style="font-size:18px">📦</div><div><div style="font-size:13px;font-weight:700">${lang==='ar'?'مخزون منخفض':lang==='en'?'Low stock':'موجودی کم'}: ${it.name}</div><div style="font-size:12px;color:var(--red)">${lang==='ar'?'المتبقي':lang==='en'?'Remaining':'باقیمانده'}: ${it.quantity||0} ${it.unit}</div></div></div>`;
   });
   // Family date reminders (5 days before) — MANAGER ONLY
