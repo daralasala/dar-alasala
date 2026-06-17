@@ -5250,7 +5250,28 @@ function openCustomerHistory(custId){
   }
   // Totals
   var totalValue=orders.reduce(function(s,o){return s+(o.total_price||0);},0);
-  var totalPaid=orders.reduce(function(s,o){return s+(o.prepay||0)+(o.status==='delivered'?((o.total_price||0)-(o.prepay||0)):0);},0);
+  // Paid is calculated PER INVOICE (prepay lives on the invoice, not the order):
+  //  - fully delivered invoice  → full total is paid
+  //  - payment confirmed (not pending) → the prepay amount is paid
+  var totalPaid=0;
+  var invSeen={};
+  orders.forEach(function(o){
+    if(o.invoice_id){
+      if(invSeen[o.invoice_id]) return;
+      invSeen[o.invoice_id]=true;
+      var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);});
+      var invTotal=inv?(inv.total_price||0):0;
+      var invPrepay=inv?(inv.prepay||0):0;
+      var invOrders=orders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);});
+      var allDelivered=invOrders.length>0&&invOrders.every(function(x){return x.status==='delivered';});
+      var anyConfirmed=invOrders.some(function(x){return x.status!=='pending_payment';});
+      if(allDelivered){ totalPaid+=invTotal; }
+      else if(anyConfirmed){ totalPaid+=invPrepay; }
+    } else {
+      if(o.status==='delivered'){ totalPaid+=(o.total_price||0); }
+      else if(o.status!=='pending_payment'){ totalPaid+=(o.prepay||0); }
+    }
+  });
   var delivered=orders.filter(function(o){return o.status==='delivered';}).length;
   var statusBadge={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple'};
   // Summary card
