@@ -5780,6 +5780,7 @@ function openStaffFile(id){
   document.getElementById('staff-file-content').innerHTML=
     photoHtml+
     dueInfo+
+    '<div class="form-group"><label class="form-label">📧 '+L('البريد (لتسجيل الدخول)','Email (for login)','ایمیل (برای ورود)')+'</label><input class="form-control" type="text" id="sf-email" value="'+(u.email||'').replace(/"/g,'&quot;')+'"></div>'+
     fld('sf-phone',L('الهاتف','Phone','تلفن'),u.phone,'text')+
     fld('sf-qid',L('الرقم الشخصي QID','QID number','شماره QID'),u.qid,'text')+
     '<div style="display:flex;gap:6px">'+
@@ -5799,6 +5800,7 @@ function openStaffFile(id){
     '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveStaffFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
     (u.salary>0?'<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="payStaffSalary('+u.id+')">💰 '+L('دفع الراتب (يُخصم من المالية)','Pay salary (deduct from finance)','پرداخت حقوق (از مالی کم می‌شود)')+'</button>':'')+
     '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="toggleStaffPause('+u.id+')">'+(u.is_paused?'▶️ '+L('استئناف (عاد من السفر)','Resume (back from travel)','ادامه (برگشت از سفر)'):'⏸️ '+L('إيقاف مؤقت (سفر)','Pause (travel)','توقف موقت (سفر)'))+'</button>'+
+    ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="resetStaffPassword('+u.id+')">🔑 '+L('تعيين كلمة مرور جديدة','Set new password','تعیین رمز جدید')+'</button>':'')+
     '<button class="btn btn-red btn-block" onclick="removeUser('+u.id+');closeModal(\'staffModal\')">🗑️ '+L('حذف الموظف','Remove employee','حذف کارگر')+'</button>';
   openModal('staffModal');
 }
@@ -5839,6 +5841,7 @@ function salaryDueInfo(u){
 async function saveStaffFile(){
   var id=document.getElementById('sf-id').value;
   var body={
+    email:(document.getElementById('sf-email')?document.getElementById('sf-email').value.trim():'')||null,
     phone:document.getElementById('sf-phone').value.trim()||null,
     qid:document.getElementById('sf-qid').value.trim()||null,
     qid_issue:document.getElementById('sf-qid-issue').value||null,
@@ -5864,6 +5867,24 @@ async function saveStaffFile(){
   showToast(T('saved'),'success');
 }
 
+// Manager sets a NEW password for a worker who forgot theirs (can't view the old one — that's by design)
+async function resetStaffPassword(id){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(!(currentUser&&currentUser.role==='manager')){ return; }
+  var u=allUsers.find(x=>String(x.id)===String(id));
+  if(!u) return;
+  var np=prompt(L('كلمة المرور الجديدة لـ ','New password for ','رمز جدید برای ')+u.name+':','');
+  if(np===null) return;
+  np=np.trim();
+  if(np.length<4){ showToast(L('4 أحرف على الأقل','At least 4 characters','حداقل ۴ کاراکتر'),'error'); return; }
+  try {
+    await api('PATCH','users',{password:np},'?id=eq.'+id);
+    u.password=np;
+    showToast(L('تم تغيير كلمة المرور','Password changed','رمز عوض شد')+' · '+u.email,'success');
+  } catch(e){
+    showToast(L('فشل','Error','خطا'),'error');
+  }
+}
 async function payStaffSalary(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   var salary=u.salary||0;
