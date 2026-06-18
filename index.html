@@ -3879,7 +3879,7 @@ function renderFinance(){
   }
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
   // Filter transactions for purchasing - only show expense/purchase
-  var txList=isPurchasing?allTransactions.filter(t=>t.type==='purchase'||t.type==='expense'):allTransactions;
+  var txList=isPurchasing?allTransactions.filter(t=>(t.type==='purchase'||t.type==='expense')&&t.category!=='fixed'):allTransactions;
   document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
     : txList.slice(0,20).map(t=>{
@@ -5095,7 +5095,7 @@ async function payFixedExp(id){
   var amount=fe.amount||0;
   if(amount<=0){ showToast(T('err_fill'),'error'); return; }
   if(!confirm((lang==='ar'?'دفع ':lang==='en'?'Pay ':'پرداخت ')+fe.name+' · '+amount.toLocaleString()+' QAR؟')) return;
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'مصروف ثابت: ':lang==='en'?'Fixed expense: ':'هزینه ثابت: ')+fe.name,category:fe.category||'fixed'})});
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'مصروف ثابت: ':lang==='en'?'Fixed expense: ':'هزینه ثابت: ')+fe.name,category:'fixed'})});
   var today=new Date().toISOString().slice(0,10);
   await api('PATCH','fixed_expenses',{last_paid:today},'?id=eq.'+id);
   fe.last_paid=today;
