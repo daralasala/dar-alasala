@@ -241,20 +241,7 @@ body.en .search-icon{right:auto;left:10px;}
       <input class="form-input" type="text" id="r-name" placeholder="الاسم الكامل">
       <input class="form-input" type="email" id="r-email" placeholder="البريد الإلكتروني">
       <input class="form-input" type="password" id="r-pass" placeholder="كلمة المرور">
-      <select class="form-select" id="r-dept">
-        <option value="نجار">🪵 نجار / Carpenter</option>
-        <option value="جوشکار">🔧 جوشکار / Welder</option>
-        <option value="رنگ‌کار">🎨 رنگ‌کار / Painter</option>
-        <option value="روکش‌کار">🛋️ روکش‌کار / Upholsterer</option>
-        <option value="بازرس">🔍 بازرس / Inspector</option>
-        <option value="فورمن">👷 فورمن / Foreman</option>
-        <option value="راننده">🚚 راننده / Driver</option>
-        <option value="حسابدار">💼 حسابدار / Accountant</option>
-        <option value="مسئول فروش">📊 مسئول فروش / Sales</option>
-        <option value="مسئول خرید">🛒 مسئول خرید / Purchasing</option>
-        <option value="برق‌کار">⚡ برق‌کار / Electrician</option>
-        <option value="کمک‌کارگر">🙋 کمک‌کارگر / Helper</option>
-      </select>
+      <select class="form-select" id="r-dept"></select>
       <div class="auth-err" id="r-err"></div>
       <div class="auth-msg" id="r-msg"></div>
       <button class="btn-auth" onclick="doRegister()" id="r-btn">ثبت‌نام</button>
@@ -1372,6 +1359,7 @@ function autoTranslateLabels(l){
 function refreshStaticLabels(l){
   l=l||lang;
   try { autoTranslateLabels(l); } catch(e){ console.log('autoTranslate err',e); }
+  try { populateDeptDropdown(); } catch(e){}
   var P=function(ar,en,fa){return l==='en'?en:l==='ar'?ar:fa;};
   safeSet('rm-title',P('طلب شراء مواد','Request Material','درخواست خرید جنس'));
   safeSet('rm-item',P('اسم الصنف','Item Name','نام جنس / کالا'));
@@ -1424,6 +1412,28 @@ function refreshStaticLabels(l){
   var cs=document.getElementById('cust-search'); if(cs) cs.placeholder=P('🔍 بحث...','🔍 Search...','🔍 جستجو...');
 }
 function safePH(id,val){var el=document.getElementById(id);if(el)el.placeholder=val;}
+// Populate the signup job/department dropdown in the current language
+function populateDeptDropdown(){
+  var sel=document.getElementById('r-dept'); if(!sel) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var jobs=[
+    ['نجار','🪵',L('نجار','Carpenter','نجار')],
+    ['جوشکار','🔧',L('لحام','Welder','جوشکار')],
+    ['رنگ‌کار','🎨',L('دهان','Painter','رنگ‌کار')],
+    ['روکش‌کار','🛋️',L('منجد','Upholsterer','روکش‌کار')],
+    ['بازرس','🔍',L('مفتش','Inspector','بازرس')],
+    ['فورمن','👷',L('مشرف','Foreman','فورمن')],
+    ['راننده','🚚',L('سائق','Driver','راننده')],
+    ['حسابدار','💼',L('محاسب','Accountant','حسابدار')],
+    ['مسئول فروش','📊',L('مسؤول مبيعات','Sales','مسئول فروش')],
+    ['مسئول خرید','🛒',L('مسؤول مشتريات','Purchasing','مسئول خرید')],
+    ['برق‌کار','⚡',L('كهربائي','Electrician','برق‌کار')],
+    ['کمک‌کارگر','🙋',L('مساعد','Helper','کمک‌کارگر')]
+  ];
+  var cur=sel.value;
+  sel.innerHTML=jobs.map(function(j){return '<option value="'+j[0]+'">'+j[1]+' '+j[2]+'</option>';}).join('');
+  if(cur) sel.value=cur;
+}
 function setLang(l){
   try {
   lang=l;
