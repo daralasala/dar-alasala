@@ -6279,11 +6279,12 @@ async function checkNewChatMessages(){
   if(!currentUser) return;
   var me=currentUser.name;
   try {
-    var rows=await api('GET','chat_messages','','?select=id,chat_id,sender&order=id.desc&limit=200');
+    var rows=await api('GET','chat_messages','','?select=id,chat_id,sender&order=id.desc&limit=300');
     if(!rows) return;
     var totalUnread=0, perChat={};
     rows.forEach(function(m){
-      if(m.sender===me) return;            // my own messages don't count
+      if(m.sender===me) return;                 // my own messages never count
+      if(m.chat_id===chatCurrentId) return;      // the chat I'm currently viewing is "read"
       var seen=_chatLastSeen[m.chat_id]||0;
       if(m.id>seen){
         perChat[m.chat_id]=(perChat[m.chat_id]||0)+1;
@@ -6292,17 +6293,17 @@ async function checkNewChatMessages(){
     });
     var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
     _chatUnread=perChat;
+    // sound only when NEW unread arrives (not on the very first check after load)
     if(_chatSeededOnce && totalUnread>prevTotal){
       playChatBeep();
       if(navigator.vibrate){ try{navigator.vibrate(200);}catch(e){} }
     }
     _chatSeededOnce=true;
     updateChatBadge(totalUnread);
-    // refresh people list badges if it's open
     var pageChat=document.getElementById('page-chat');
     var lv=document.getElementById('chat-list-view');
     if(pageChat&&pageChat.classList.contains('active')&&lv&&lv.style.display!=='none'){ openChatList(); }
-  } catch(e){}
+  } catch(e){ console.log('checkNewChatMessages err',e); }
 }
 
 function updateChatBadge(n){
@@ -6412,7 +6413,9 @@ async function openPrivateChat(otherName){
   // mark as seen: remember the latest message id in this chat
   if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs[allChatMsgs.length-1].id; }
   _chatUnread[chatCurrentId]=0;
-  checkNewChatMessages();
+  // update the tab badge silently (no sound) right away
+  var t=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
+  updateChatBadge(t);
   startChatPoll();
 }
 
