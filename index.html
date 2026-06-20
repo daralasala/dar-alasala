@@ -283,6 +283,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
+    <button class="tab" onclick="showTab('chat')" id="tab-chat">💬 <span id="t-chat">گفتگو</span></button>
     <button class="tab" onclick="showTab('personal')" id="tab-personal" style="display:none">💳 <span id="t-personal">مخارج شخصی</span></button>
   </div>
 
@@ -390,6 +391,25 @@ body.en .search-icon{right:auto;left:10px;}
   <!-- NOTIFICATIONS -->
   <div class="page" id="page-notify">
     <div id="notif-list"><div class="loading"><div class="spinner"></div></div></div>
+  </div>
+
+  <!-- CHAT -->
+  <div class="page" id="page-chat">
+    <div id="chat-list-view">
+      <div style="font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px" id="chat-people-title">گفتگوها</div>
+      <div id="chat-people"><div class="loading"><div class="spinner"></div></div></div>
+    </div>
+    <div id="chat-conv-view" style="display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;position:sticky;top:0;background:var(--bg);padding:6px 0;z-index:5">
+        <button class="btn btn-outline btn-sm" onclick="closeChatConv()">←</button>
+        <div style="font-weight:700;font-size:15px" id="chat-conv-name"></div>
+      </div>
+      <div id="chat-messages" style="min-height:55vh;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding:6px 2px"></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
+        <input class="form-control" id="chat-input" placeholder="پیام..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage()">
+        <button class="btn btn-primary btn-sm" onclick="sendChatMessage()" style="white-space:nowrap">➤</button>
+      </div>
+    </div>
   </div>
 
   <!-- PERSONAL EXPENSES -->
@@ -1460,6 +1480,7 @@ function setLang(l){
   document.getElementById('t-fin').textContent=T('fin');
   document.getElementById('t-staff').textContent=T('staff');
   document.getElementById('t-notify').textContent=T('notify');
+  var tChat=document.getElementById('t-chat'); if(tChat) tChat.textContent=(lang==='ar'?'الدردشة':lang==='en'?'Chat':'گفتگو');
   safeSet('t-requests',l==='en'?'Requests':l==='ar'?'طلبات الشراء':'درخواست خرید');
   safeSet('t-inventory',l==='en'?'Inventory':l==='ar'?'المخزن':'انبار');
   safeSet('t-customers',l==='en'?'Customers':l==='ar'?'العملاء':'مشتری‌ها');
@@ -1749,8 +1770,8 @@ function doLogout(){
 
 // ===== TABS =====
 function showTab(tab){
-  // Block access to tabs the user isn't permitted to see
-  if(currentUser && getUserPermissions(currentUser).indexOf(tab)<0){
+  // Chat is available to everyone (no special permission needed)
+  if(tab!=='chat' && currentUser && getUserPermissions(currentUser).indexOf(tab)<0){
     showToast(lang==='ar'?'لا تملك صلاحية':lang==='en'?'No permission':'دسترسی ندارید','error');
     return;
   }
@@ -1766,6 +1787,7 @@ function showTab(tab){
   if(tab==='inventory') loadInventory();
   if(tab==='customers') loadCustomers();
   if(tab==='notify') renderNotifications();
+  if(tab==='chat') openChatList();
   if(tab==='personal'){ loadPersonalExp().then(renderPersonal); }
 }
 
@@ -6233,6 +6255,116 @@ async function renewQid(userId){
     showToast(L('فشل','Error','خطا'),'error');
   }
 }
+// ===== CHAT (stage 1: private text chat) =====
+var chatCurrentId=null, chatCurrentName='', chatPollTimer=null, allChatMsgs=[];
+
+async function openChatList(){
+  document.getElementById('chat-conv-view').style.display='none';
+  document.getElementById('chat-list-view').style.display='block';
+  stopChatPoll();
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('chat-people-title').textContent=L('المحادثات','Conversations','گفتگوها');
+  var box=document.getElementById('chat-people');
+  // Show every active user except myself
+  var me=currentUser?currentUser.name:'';
+  var people=(allUsers||[]).filter(function(u){ return u.status==='active' && u.name && u.name!==me; });
+  // include the manager (admin) as a contact for workers
+  if(me!=='Manager' && !people.some(function(p){return p.name==='Manager';})){
+    people.unshift({name:'Manager',department:'مدیر'});
+  }
+  if(people.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">💬</div><div>'+T('no_data')+'</div></div>'; return; }
+  box.innerHTML=people.map(function(u){
+    var initial=(u.name||'?').charAt(0).toUpperCase();
+    return '<div onclick="openPrivateChat(\''+(u.name||'').replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:11px;background:var(--surface2);border-radius:12px;padding:11px;margin-bottom:8px;cursor:pointer">'+
+      '<div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">'+initial+'</div>'+
+      '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+u.name+'</div>'+(u.department?('<div style="font-size:11px;color:var(--text2)">'+u.department+'</div>'):'')+'</div>'+
+      '<div style="font-size:18px">💬</div>'+
+    '</div>';
+  }).join('');
+}
+
+// A private chat id is a stable key from the two names (sorted)
+function privateChatKey(a,b){ return [a,b].sort().join('|'); }
+
+async function openPrivateChat(otherName){
+  var me=currentUser?currentUser.name:'';
+  chatCurrentName=otherName;
+  // find or create the chat row for this pair
+  var key=privateChatKey(me,otherName);
+  var existing=null;
+  try {
+    var rows=await api('GET','chats','','?select=*&is_group=eq.false&name=eq.'+encodeURIComponent(key));
+    existing=(rows&&rows[0])?rows[0]:null;
+  } catch(e){}
+  if(!existing){
+    try {
+      var created=await fetch(SB_URL+'/rest/v1/chats',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({name:key,is_group:false,created_by:me})});
+      existing=(await created.json())[0];
+    } catch(e){}
+  }
+  if(!existing) return;
+  chatCurrentId=existing.id;
+  document.getElementById('chat-list-view').style.display='none';
+  document.getElementById('chat-conv-view').style.display='block';
+  document.getElementById('chat-conv-name').textContent=otherName;
+  document.getElementById('chat-input').value='';
+  await loadChatMessages();
+  startChatPoll();
+}
+
+function closeChatConv(){
+  stopChatPoll();
+  chatCurrentId=null;
+  openChatList();
+}
+
+async function loadChatMessages(){
+  if(!chatCurrentId) return;
+  try {
+    var msgs=await api('GET','chat_messages','','?select=*&chat_id=eq.'+chatCurrentId+'&order=created_at.asc');
+    allChatMsgs=msgs||[];
+    renderChatMessages();
+  } catch(e){}
+}
+
+function renderChatMessages(){
+  var me=currentUser?currentUser.name:'';
+  var box=document.getElementById('chat-messages');
+  if(!box) return;
+  var atBottom=box.scrollHeight-box.scrollTop-box.clientHeight<60;
+  box.innerHTML=allChatMsgs.map(function(m){
+    var mine=m.sender===me;
+    var t=m.created_at?new Date(m.created_at):null;
+    var time=t?(('0'+t.getHours()).slice(-2)+':'+('0'+t.getMinutes()).slice(-2)):'';
+    var bubbleStyle=mine
+      ? 'align-self:flex-end;background:var(--accent);color:#fff;border-radius:14px 14px 4px 14px'
+      : 'align-self:flex-start;background:var(--surface2);color:var(--text);border-radius:14px 14px 14px 4px';
+    var body=(m.body||'').replace(/</g,'&lt;');
+    return '<div style="max-width:78%;padding:8px 11px;'+bubbleStyle+'">'+
+      (!mine?'<div style="font-size:10px;color:var(--text3);margin-bottom:2px">'+(m.sender||'')+'</div>':'')+
+      '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+body+'</div>'+
+      '<div style="font-size:9px;opacity:.6;text-align:left;margin-top:3px">'+time+'</div>'+
+    '</div>';
+  }).join('');
+  if(atBottom) box.scrollTop=box.scrollHeight;
+}
+
+async function sendChatMessage(){
+  var inp=document.getElementById('chat-input');
+  var text=(inp.value||'').trim();
+  if(!text||!chatCurrentId) return;
+  var me=currentUser?currentUser.name:'';
+  inp.value='';
+  try {
+    await api('POST','chat_messages',{chat_id:chatCurrentId,sender:me,body:text,type:'text'});
+    await loadChatMessages();
+    var box=document.getElementById('chat-messages'); if(box) box.scrollTop=box.scrollHeight;
+  } catch(e){ showToast(lang==='ar'?'فشل الإرسال':lang==='en'?'Send failed':'ارسال نشد','error'); }
+}
+
+function startChatPoll(){ stopChatPoll(); chatPollTimer=setInterval(function(){ if(chatCurrentId&&!document.hidden) loadChatMessages(); },4000); }
+function stopChatPoll(){ if(chatPollTimer){ clearInterval(chatPollTimer); chatPollTimer=null; } }
+
 function renderNotifications(){
   const now=new Date();
   let html='';
