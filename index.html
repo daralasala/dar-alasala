@@ -6629,12 +6629,11 @@ function chatSendLocation(){
   }
   function failMsg(err){
     var code = err&&typeof err.code!=='undefined' ? err.code : '?';
-    var msg  = err&&err.message ? err.message : '';
-    var base = code===1 ? (lang==='ar'?'تم رفض إذن الموقع':lang==='en'?'Location permission denied':'اجازه‌ی موقعیت رد شد')
-            : code===2 ? (lang==='ar'?'الموقع غير متاح':lang==='en'?'Position unavailable':'موقعیت در دسترس نیست')
-            : code===3 ? (lang==='ar'?'انتهت المهلة':lang==='en'?'Timed out':'زمان تمام شد')
+    if(code===1){ showLocationHelp(); return; } // permission denied -> show how-to guide
+    var base = code===2 ? (lang==='ar'?'الموقع غير متاح، حاول في الخارج':lang==='en'?'Position unavailable, try outdoors':'موقعیت در دسترس نیست، بیرون امتحان کن')
+            : code===3 ? (lang==='ar'?'انتهت المهلة، حاول مرة أخرى':lang==='en'?'Timed out, try again':'زمان تمام شد، دوباره امتحان کن')
             : (lang==='ar'?'تعذر تحديد الموقع':lang==='en'?'Could not get location':'موقعیت پیدا نشد');
-    showToast(base+' [code='+code+(msg?' '+msg:'')+']','error');
+    showToast(base,'error');
   }
   // first try high accuracy (GPS); if it fails, retry with low accuracy (wifi/IP)
   navigator.geolocation.getCurrentPosition(ok, function(err1){
@@ -6645,6 +6644,64 @@ function chatSendLocation(){
       failMsg(err2);
     }, {enableHighAccuracy:false,timeout:20000,maximumAge:600000});
   }, {enableHighAccuracy:true,timeout:12000,maximumAge:0});
+}
+
+// when location permission is blocked, guide the user + offer manual pin
+function showLocationHelp(){
+  var title = lang==='ar'?'تعذّر الوصول للموقع':lang==='en'?'Location is blocked':'دسترسی به موقعیت بسته است';
+  var steps, manualBtn, manualHint, retryBtn, closeBtn;
+  if(lang==='ar'){
+    steps='لتفعيل الموقع على الآيفون:<br>1) الإعدادات ← الخصوصية والأمان ← خدمات الموقع (شغّلها)<br>2) ابحث عن <b>Safari</b> ← اختر «أثناء استخدام التطبيق»<br>3) أعد فتح الصفحة وحاول مرة أخرى.<br><br>أو أرسل موقعك يدوياً من الخريطة:';
+    manualBtn='📍 اختر الموقع على الخريطة'; manualHint='افتح الخريطة، حدّد موقعك، انسخ الإحداثيات والصقها هنا:';
+    retryBtn='🔄 حاول مرة أخرى'; closeBtn='إغلاق';
+  } else if(lang==='en'){
+    steps='To enable location on iPhone:<br>1) Settings → Privacy & Security → Location Services (turn ON)<br>2) Find <b>Safari</b> → set to “While Using the App”<br>3) Reopen the page and try again.<br><br>Or send your location manually from the map:';
+    manualBtn='📍 Pick location on map'; manualHint='Open the map, find your spot, copy the coordinates and paste here:';
+    retryBtn='🔄 Try again'; closeBtn='Close';
+  } else {
+    steps='برای روشن‌کردن موقعیت روی آیفون:<br>۱) تنظیمات ← حریم خصوصی و امنیت ← Location Services (روشن کن)<br>۲) دنبال <b>Safari</b> بگرد ← روی «While Using the App» بذار<br>۳) صفحه را دوباره باز کن و امتحان کن.<br><br>یا موقعیت را دستی از روی نقشه بفرست:';
+    manualBtn='📍 انتخاب موقعیت روی نقشه'; manualHint='نقشه را باز کن، محلت را پیدا کن، مختصات را کپی کن و اینجا بچسبان:';
+    retryBtn='🔄 دوباره امتحان کن'; closeBtn='بستن';
+  }
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px';
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--surface);color:var(--text);border-radius:16px;max-width:420px;width:100%;max-height:88vh;overflow:auto;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  box.innerHTML=
+    '<div style="font-weight:700;font-size:16px;margin-bottom:10px">'+title+'</div>'+
+    '<div style="font-size:13px;line-height:1.7;opacity:.9">'+steps+'</div>'+
+    '<button id="loc-manual-btn" class="btn btn-primary" style="width:100%;margin-top:12px;padding:11px;font-size:14px">'+manualBtn+'</button>'+
+    '<div id="loc-manual-wrap" style="display:none;margin-top:10px">'+
+      '<div style="font-size:12px;opacity:.8;margin-bottom:6px">'+manualHint+'</div>'+
+      '<input id="loc-manual-input" class="form-control" placeholder="25.2854, 51.5310" style="width:100%">'+
+    '</div>'+
+    '<div style="display:flex;gap:8px;margin-top:14px">'+
+      '<button id="loc-retry-btn" class="btn" style="flex:1;background:var(--surface2);color:var(--text);padding:10px">'+retryBtn+'</button>'+
+      '<button id="loc-close-btn" class="btn" style="flex:1;background:var(--surface2);color:var(--text);padding:10px">'+closeBtn+'</button>'+
+    '</div>';
+  ov.appendChild(box);
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  document.body.appendChild(ov);
+
+  box.querySelector('#loc-close-btn').onclick=function(){ ov.remove(); };
+  box.querySelector('#loc-retry-btn').onclick=function(){ ov.remove(); chatSendLocation(); };
+  box.querySelector('#loc-manual-btn').onclick=function(){
+    // open Google Maps so they can find their spot, and reveal the paste box
+    window.open('https://www.google.com/maps','_blank','noopener');
+    box.querySelector('#loc-manual-wrap').style.display='block';
+  };
+  // when they paste "lat,lng", send it
+  box.querySelector('#loc-manual-input').addEventListener('change',function(){
+    var v=(this.value||'').trim().replace(/\s/g,'');
+    var p=v.split(',');
+    var lat=parseFloat(p[0]), lng=parseFloat(p[1]);
+    if(isFinite(lat)&&isFinite(lng)&&Math.abs(lat)<=90&&Math.abs(lng)<=180){
+      ov.remove();
+      sendChatMedia('location', lat.toFixed(6)+','+lng.toFixed(6));
+    } else {
+      showToast(lang==='ar'?'إحداثيات غير صحيحة':lang==='en'?'Invalid coordinates':'مختصات نادرست','error');
+    }
+  });
 }
 
 // fullscreen image viewer
