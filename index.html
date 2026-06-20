@@ -405,11 +405,22 @@ body.en .search-icon{right:auto;left:10px;}
         <div style="font-weight:700;font-size:15px" id="chat-conv-name"></div>
       </div>
       <div id="chat-messages" style="min-height:55vh;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding:6px 2px"></div>
-      <div style="display:flex;gap:6px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
+      <div id="chat-inputbar" style="display:flex;gap:6px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
         <button class="btn btn-sm" id="chat-plus-btn" onclick="toggleChatPlus(event)" style="background:var(--surface2);color:var(--text);font-size:20px;line-height:1;padding:6px 11px;border-radius:50%">+</button>
         <input type="file" id="chat-file-input" accept="image/*" style="display:none" onchange="chatUploadImage(this)">
         <input class="form-control" id="chat-input" placeholder="پیام..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage()">
+        <button class="btn btn-sm" id="chat-mic-btn" onclick="toggleVoiceRecord()" title="صدا" style="background:var(--surface2);color:var(--text);font-size:18px;line-height:1;padding:6px 10px;border-radius:50%">🎤</button>
         <button class="btn btn-primary btn-sm" onclick="sendChatMessage()" style="white-space:nowrap">➤</button>
+      </div>
+      <!-- recording bar (replaces input row while recording) -->
+      <div id="chat-record-bar" style="display:none;gap:8px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
+        <button class="btn btn-sm" onclick="cancelVoiceRecord()" style="background:var(--surface2);color:var(--text);padding:6px 11px;border-radius:50%;font-size:16px">✕</button>
+        <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--surface2);border-radius:20px;padding:8px 14px">
+          <span style="width:10px;height:10px;border-radius:50%;background:#e0245e;animation:recBlink 1s infinite"></span>
+          <span id="chat-record-time" style="font-size:14px;font-variant-numeric:tabular-nums">0:00</span>
+          <span style="font-size:12px;opacity:.7" id="chat-record-hint">در حال ضبط...</span>
+        </div>
+        <button class="btn btn-primary btn-sm" onclick="stopVoiceRecord()" style="padding:8px 13px;border-radius:50%;font-size:16px">➤</button>
       </div>
       <!-- attach popup (fixed, always visible on mobile) -->
       <div id="chat-plus-backdrop" onclick="closeChatPlus()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998"></div>
@@ -419,6 +430,7 @@ body.en .search-icon{right:auto;left:10px;}
         <button class="btn" onclick="chatSendLocation()" style="display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-top:1px solid var(--border);padding:15px 18px;font-size:16px">📍 <span data-i18n-chatloc>لوکیشن</span></button>
       </div>
     </div>
+    <style>@keyframes recBlink{0%,100%{opacity:1}50%{opacity:.25}}</style>
   </div>
 
   <!-- PERSONAL EXPENSES -->
@@ -6454,6 +6466,7 @@ async function openPrivateChat(otherName){
   if(!existing){ showToast(lang==='ar'?'فشل فتح المحادثة':lang==='en'?'Cannot open chat':'چت باز نشد','error'); return; }
   _myChatIds=null; // a chat may have just been created — refresh membership next check
   chatCurrentId=existing.id;
+  _chatMsgsSig='';
   document.getElementById('chat-list-view').style.display='none';
   document.getElementById('chat-conv-view').style.display='block';
   document.getElementById('chat-conv-name').textContent=otherName;
@@ -6470,6 +6483,7 @@ async function openPrivateChat(otherName){
 
 function closeChatConv(){
   closeChatPlus();
+  if(typeof cancelVoiceRecord==='function') cancelVoiceRecord();
   stopChatPoll();
   chatCurrentId=null;
   openChatList();
@@ -6479,12 +6493,17 @@ async function loadChatMessages(){
   if(!chatCurrentId) return;
   try {
     var msgs=await api('GET','chat_messages','','?select=*&chat_id=eq.'+chatCurrentId+'&order=created_at.asc');
-    allChatMsgs=msgs||[];
+    msgs=msgs||[];
+    // build a lightweight signature; if nothing changed, skip re-render (keeps audio playing)
+    var sig=msgs.length+'|'+(msgs.length?(msgs[msgs.length-1].id+'|'+msgs[msgs.length-1].content):'');
+    var changed=(sig!==_chatMsgsSig);
+    allChatMsgs=msgs;
     // while this chat is open, everything in it is considered seen (persist newest message time)
     if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){var t=m.created_at?new Date(m.created_at).getTime():0;return t>mx?t:mx;},0); _chatUnread[chatCurrentId]=0; saveChatLastSeen(); }
-    renderChatMessages();
+    if(changed){ _chatMsgsSig=sig; renderChatMessages(); }
   } catch(e){}
 }
+var _chatMsgsSig='';
 
 function renderChatMessages(){
   var me=currentUser?currentUser.name:'';
@@ -6514,6 +6533,9 @@ function renderChatMessages(){
             '<span style="font-size:26px">📍</span>'+
             '<span style="font-size:13px;line-height:1.4">'+(lang==='ar'?'الموقع':lang==='en'?'Location':'موقعیت مکانی')+
             '<br><span style="font-size:11px;opacity:.75;text-decoration:underline">'+(lang==='ar'?'افتح في الخريطة':lang==='en'?'Open in maps':'باز کردن در نقشه')+'</span></span></a>';
+    } else if(m.type==='voice'){
+      var vUrl=raw.replace(/"/g,'&quot;');
+      inner='<audio controls preload="none" src="'+vUrl+'" style="max-width:230px;height:40px"></audio>';
     } else {
       inner='<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+raw.replace(/</g,'&lt;')+'</div>';
     }
@@ -6614,6 +6636,89 @@ async function chatUploadImage(input){
     await sendChatMedia('image', publicUrl);
   } catch(e){ console.log('upload exception:',e); showToast('خطا: '+(e.message||e),'error'); }
   finally { input.value=''; }
+}
+
+// ===== CHAT: voice messages (tap to start, tap to stop) =====
+var _voiceRec=null, _voiceChunks=[], _voiceStream=null, _voiceTimer=null, _voiceStart=0, _voiceMime='';
+function _voiceFmtTime(s){ var m=Math.floor(s/60), ss=('0'+Math.floor(s%60)).slice(-2); return m+':'+ss; }
+function _setRecordBar(on){
+  var bar=document.getElementById('chat-record-bar');
+  var ib=document.getElementById('chat-inputbar');
+  if(bar) bar.style.display = on ? 'flex' : 'none';
+  if(ib) ib.style.display = on ? 'none' : 'flex';
+}
+
+async function toggleVoiceRecord(){
+  if(_voiceRec && _voiceRec.state==='recording'){ stopVoiceRecord(); return; }
+  if(!chatCurrentId){ showToast('chatCurrentId is empty','error'); return; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder==='undefined'){
+    showToast(lang==='ar'?'التسجيل غير مدعوم':lang==='en'?'Recording not supported':'ضبط صدا پشتیبانی نمی‌شود','error'); return;
+  }
+  try {
+    _voiceStream=await navigator.mediaDevices.getUserMedia({audio:true});
+  } catch(e){
+    console.log('mic error:',e&&e.name,e&&e.message);
+    showToast(lang==='ar'?'تم رفض إذن الميكروفون':lang==='en'?'Microphone permission denied':'اجازه‌ی میکروفون رد شد','error');
+    return;
+  }
+  // pick a mime type the browser supports (Safari prefers mp4, others webm)
+  _voiceMime='';
+  var cands=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/aac','audio/ogg'];
+  for(var i=0;i<cands.length;i++){ if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i])){ _voiceMime=cands[i]; break; } }
+  try { _voiceRec = _voiceMime ? new MediaRecorder(_voiceStream,{mimeType:_voiceMime}) : new MediaRecorder(_voiceStream); }
+  catch(e){ _voiceRec=new MediaRecorder(_voiceStream); }
+  _voiceChunks=[];
+  _voiceRec.ondataavailable=function(ev){ if(ev.data && ev.data.size>0) _voiceChunks.push(ev.data); };
+  _voiceRec.onstop=function(){ _finishVoice(); };
+  _voiceRec.start();
+  _voiceStart=Date.now();
+  _setRecordBar(true);
+  var tEl=document.getElementById('chat-record-time'); if(tEl) tEl.textContent='0:00';
+  _voiceTimer=setInterval(function(){
+    var secs=(Date.now()-_voiceStart)/1000;
+    var tEl=document.getElementById('chat-record-time'); if(tEl) tEl.textContent=_voiceFmtTime(secs);
+    if(secs>=120){ stopVoiceRecord(); } // safety cap at 2 minutes
+  },250);
+}
+
+function _stopStreamTracks(){
+  if(_voiceStream){ try{ _voiceStream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} _voiceStream=null; }
+  if(_voiceTimer){ clearInterval(_voiceTimer); _voiceTimer=null; }
+}
+
+function stopVoiceRecord(){
+  if(_voiceRec && _voiceRec.state==='recording'){ try{ _voiceRec.stop(); }catch(e){ _finishVoice(); } }
+  _setRecordBar(false);
+}
+
+function cancelVoiceRecord(){
+  if(_voiceRec){ _voiceRec.onstop=null; try{ if(_voiceRec.state==='recording') _voiceRec.stop(); }catch(e){} }
+  _voiceRec=null; _voiceChunks=[];
+  _stopStreamTracks();
+  _setRecordBar(false);
+}
+
+async function _finishVoice(){
+  _stopStreamTracks();
+  var chunks=_voiceChunks; _voiceChunks=[];
+  var rec=_voiceRec; _voiceRec=null;
+  if(!chunks.length){ return; }
+  var type=(rec&&rec.mimeType)||_voiceMime||'audio/webm';
+  var blob=new Blob(chunks,{type:type});
+  if(blob.size<500){ showToast(lang==='ar'?'التسجيل قصير جداً':lang==='en'?'Recording too short':'ضبط خیلی کوتاه بود','error'); return; }
+  showToast(lang==='ar'?'جاري رفع الصوت...':lang==='en'?'Uploading voice...':'در حال آپلود صدا...','info');
+  try {
+    var ext = type.indexOf('mp4')>-1||type.indexOf('aac')>-1 ? 'm4a' : type.indexOf('ogg')>-1 ? 'ogg' : 'webm';
+    var path='chat/'+chatCurrentId+'/voice_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.'+ext;
+    var up=await fetch(SB_URL+'/storage/v1/object/'+CHAT_BUCKET+'/'+path,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':type,'x-upsert':'true'},
+      body:blob
+    });
+    if(!up.ok){ var t=await up.text(); console.log('voice upload error:',t); showToast(lang==='ar'?'فشل رفع الصوت':lang==='en'?'Voice upload failed':'آپلود صدا ناموفق بود','error'); return; }
+    var publicUrl=SB_URL+'/storage/v1/object/public/'+CHAT_BUCKET+'/'+path;
+    await sendChatMedia('voice', publicUrl);
+  } catch(e){ console.log('voice exception:',e); showToast('خطا: '+(e.message||e),'error'); }
 }
 
 function chatSendLocation(){
