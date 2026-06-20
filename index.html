@@ -6269,7 +6269,7 @@ var _chatSeededOnce=false;
 var _myChatIds=null;    // set of chat ids I'm a member of (cached)
 
 // --- persist "last seen" per-user so the unread badge survives refresh (WhatsApp-style) ---
-function _chatSeenKey(){ return 'chatLastSeen_'+((currentUser&&currentUser.name)||'anon'); }
+function _chatSeenKey(){ return 'chatLastSeenV2_'+((currentUser&&currentUser.name)||'anon'); }
 function loadChatLastSeen(){
   try { var raw=localStorage.getItem(_chatSeenKey()); _chatLastSeen=raw?JSON.parse(raw):{}; }
   catch(e){ _chatLastSeen={}; }
@@ -6312,7 +6312,7 @@ async function checkNewChatMessages(){
   if(!_chatSeededOnce){ loadChatLastSeen(); }
   if(_myChatIds===null){ await refreshMyChatIds(); }
   try {
-    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender&order=id.desc&limit=300',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender,created_at&order=created_at.desc&limit=300',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
     if(!res.ok){ console.log('chat check HTTP', res.status); return; }
     var rows=await res.json();
     var totalUnread=0, perChat={};
@@ -6320,10 +6320,11 @@ async function checkNewChatMessages(){
       if(m.sender===me) return;                       // my own messages never count
       if(m.chat_id===chatCurrentId) return;           // the chat I'm currently viewing is "read"
       if(_myChatIds && !_myChatIds[m.chat_id]) return;// only count chats I'm a member of
-      var seen=_chatLastSeen[m.chat_id]||0;
-      if(m.id>seen){ perChat[m.chat_id]=(perChat[m.chat_id]||0)+1; totalUnread++; }
+      var t=m.created_at?new Date(m.created_at).getTime():0;
+      var seen=_chatLastSeen[m.chat_id]||0;           // stored as a timestamp (ms)
+      if(t>seen){ perChat[m.chat_id]=(perChat[m.chat_id]||0)+1; totalUnread++; }
     });
-    console.log('chat check me=['+me+'] msgs='+rows.length+' unread='+totalUnread);
+    console.log('chat check me=['+me+'] msgs='+rows.length+' unread='+totalUnread+' myChats='+(_myChatIds?Object.keys(_myChatIds).length:'?'));
     var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
     _chatUnread=perChat;
     // play sound/vibrate only when a genuinely new message arrives after the first check
@@ -6449,8 +6450,8 @@ async function openPrivateChat(otherName){
   document.getElementById('chat-conv-name').textContent=otherName;
   document.getElementById('chat-input').value='';
   await loadChatMessages();
-  // mark as seen: remember the highest message id in this chat (and persist it)
-  if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){return m.id>mx?m.id:mx;},0); saveChatLastSeen(); }
+  // mark as seen: remember the newest message TIME in this chat (works for numeric or UUID ids)
+  if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){var t=m.created_at?new Date(m.created_at).getTime():0;return t>mx?t:mx;},0); saveChatLastSeen(); }
   _chatUnread[chatCurrentId]=0;
   // update the tab badge silently (no sound) right away
   var t=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
@@ -6469,8 +6470,8 @@ async function loadChatMessages(){
   try {
     var msgs=await api('GET','chat_messages','','?select=*&chat_id=eq.'+chatCurrentId+'&order=created_at.asc');
     allChatMsgs=msgs||[];
-    // while this chat is open, everything in it is considered seen (persist so it survives refresh)
-    if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){return m.id>mx?m.id:mx;},0); _chatUnread[chatCurrentId]=0; saveChatLastSeen(); }
+    // while this chat is open, everything in it is considered seen (persist newest message time)
+    if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){var t=m.created_at?new Date(m.created_at).getTime():0;return t>mx?t:mx;},0); _chatUnread[chatCurrentId]=0; saveChatLastSeen(); }
     renderChatMessages();
   } catch(e){}
 }
