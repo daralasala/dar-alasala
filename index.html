@@ -406,16 +406,17 @@ body.en .search-icon{right:auto;left:10px;}
       </div>
       <div id="chat-messages" style="min-height:55vh;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding:6px 2px"></div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
-        <div style="position:relative">
-          <button class="btn btn-sm" id="chat-plus-btn" onclick="toggleChatPlus(event)" style="background:var(--surface2);color:var(--text);font-size:20px;line-height:1;padding:6px 11px;border-radius:50%">+</button>
-          <div id="chat-plus-menu" style="display:none;position:absolute;bottom:46px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);overflow:hidden;z-index:50;min-width:150px">
-            <button class="btn" onclick="chatPickImage()" style="display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-radius:0;padding:11px 14px;font-size:14px">📷 <span data-i18n-chatimg>عکس</span></button>
-            <button class="btn" onclick="chatSendLocation()" style="display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-radius:0;padding:11px 14px;font-size:14px;border-top:1px solid var(--border)">📍 <span data-i18n-chatloc>لوکیشن</span></button>
-          </div>
-        </div>
+        <button class="btn btn-sm" id="chat-plus-btn" onclick="toggleChatPlus(event)" style="background:var(--surface2);color:var(--text);font-size:20px;line-height:1;padding:6px 11px;border-radius:50%">+</button>
         <input type="file" id="chat-file-input" accept="image/*" style="display:none" onchange="chatUploadImage(this)">
         <input class="form-control" id="chat-input" placeholder="پیام..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage()">
         <button class="btn btn-primary btn-sm" onclick="sendChatMessage()" style="white-space:nowrap">➤</button>
+      </div>
+      <!-- attach popup (fixed, always visible on mobile) -->
+      <div id="chat-plus-backdrop" onclick="closeChatPlus()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:9998"></div>
+      <div id="chat-plus-menu" style="display:none;position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top-left-radius:16px;border-top-right-radius:16px;box-shadow:0 -4px 20px rgba(0,0,0,.3);overflow:hidden;z-index:9999;padding:8px 8px calc(8px + env(safe-area-inset-bottom))">
+        <div style="width:38px;height:4px;background:var(--border);border-radius:2px;margin:4px auto 10px"></div>
+        <button class="btn" onclick="chatPickImage()" style="display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;padding:15px 18px;font-size:16px">📷 <span data-i18n-chatimg>عکس</span></button>
+        <button class="btn" onclick="chatSendLocation()" style="display:flex;align-items:center;gap:12px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-top:1px solid var(--border);padding:15px 18px;font-size:16px">📍 <span data-i18n-chatloc>لوکیشن</span></button>
       </div>
     </div>
   </div>
@@ -6468,6 +6469,7 @@ async function openPrivateChat(otherName){
 }
 
 function closeChatConv(){
+  closeChatPlus();
   stopChatPoll();
   chatCurrentId=null;
   openChatList();
@@ -6559,16 +6561,16 @@ var CHAT_BUCKET='chat-images';
 function toggleChatPlus(ev){
   if(ev){ ev.stopPropagation(); }
   var menu=document.getElementById('chat-plus-menu');
+  var bd=document.getElementById('chat-plus-backdrop');
   if(!menu) return;
-  menu.style.display = (menu.style.display==='none'||!menu.style.display) ? 'block' : 'none';
+  var show = (menu.style.display==='none'||!menu.style.display);
+  menu.style.display = show ? 'block' : 'none';
+  if(bd) bd.style.display = show ? 'block' : 'none';
 }
-function closeChatPlus(){ var menu=document.getElementById('chat-plus-menu'); if(menu) menu.style.display='none'; }
-// close the menu when tapping anywhere else
-document.addEventListener('click',function(e){
-  var menu=document.getElementById('chat-plus-menu');
-  var btn=document.getElementById('chat-plus-btn');
-  if(menu&&menu.style.display==='block'&&!menu.contains(e.target)&&e.target!==btn){ menu.style.display='none'; }
-});
+function closeChatPlus(){
+  var menu=document.getElementById('chat-plus-menu'); if(menu) menu.style.display='none';
+  var bd=document.getElementById('chat-plus-backdrop'); if(bd) bd.style.display='none';
+}
 
 function chatPickImage(){
   closeChatPlus();
