@@ -6354,14 +6354,30 @@ function renderChatMessages(){
 async function sendChatMessage(){
   var inp=document.getElementById('chat-input');
   var text=(inp.value||'').trim();
-  if(!text||!chatCurrentId) return;
+  if(!text){ return; }
+  if(!chatCurrentId){ showToast('chatCurrentId is empty','error'); return; }
   var me=currentUser?currentUser.name:'';
   inp.value='';
   try {
-    await api('POST','chat_messages',{chat_id:chatCurrentId,sender:me,body:text,type:'text'});
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages',{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify({chat_id:chatCurrentId,sender:me,body:text,type:'text'})
+    });
+    if(!res.ok){
+      var errTxt=await res.text();
+      console.log('send msg error:',errTxt);
+      showToast('خطا: '+errTxt,'error');
+      inp.value=text; // restore so user doesn't lose it
+      return;
+    }
     await loadChatMessages();
     var box=document.getElementById('chat-messages'); if(box) box.scrollTop=box.scrollHeight;
-  } catch(e){ showToast(lang==='ar'?'فشل الإرسال':lang==='en'?'Send failed':'ارسال نشد','error'); }
+  } catch(e){
+    console.log('send msg exception:',e);
+    showToast('خطا: '+(e.message||e),'error');
+    inp.value=text;
+  }
 }
 
 function startChatPoll(){ stopChatPoll(); chatPollTimer=setInterval(function(){ if(chatCurrentId&&!document.hidden) loadChatMessages(); },4000); }
