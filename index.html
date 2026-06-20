@@ -6550,7 +6550,7 @@ function renderChatMessages(){
     var inner;
     if(m.type==='image'){
       var safeUrl=raw.replace(/"/g,'&quot;');
-      inner='<img src="'+safeUrl+'" onclick="openChatImage(\''+safeUrl+'\')" '+
+      inner='<img src="'+safeUrl+'" loading="lazy" decoding="async" onclick="openChatImage(\''+safeUrl+'\')" '+
             'style="max-width:200px;max-height:240px;border-radius:8px;cursor:pointer;display:block" '+
             'onerror="this.replaceWith(document.createTextNode(\'🖼️ تصویر باز نشد\'))">';
     } else if(m.type==='location'){
@@ -6564,7 +6564,7 @@ function renderChatMessages(){
             '<br><span style="font-size:11px;opacity:.75;text-decoration:underline">'+(lang==='ar'?'افتح في الخريطة':lang==='en'?'Open in maps':'باز کردن در نقشه')+'</span></span></a>';
     } else if(m.type==='voice'){
       var vUrl=raw.replace(/"/g,'&quot;');
-      inner='<audio controls preload="none" src="'+vUrl+'" style="max-width:230px;height:40px"></audio>';
+      inner='<audio controls preload="metadata" src="'+vUrl+'" style="max-width:230px;height:40px"></audio>';
     } else {
       inner='<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+raw.replace(/</g,'&lt;')+'</div>';
     }
@@ -6694,8 +6694,11 @@ async function toggleVoiceRecord(){
   _voiceMime='';
   var cands=['audio/webm;codecs=opus','audio/webm','audio/mp4','audio/aac','audio/ogg'];
   for(var i=0;i<cands.length;i++){ if(MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(cands[i])){ _voiceMime=cands[i]; break; } }
-  try { _voiceRec = _voiceMime ? new MediaRecorder(_voiceStream,{mimeType:_voiceMime}) : new MediaRecorder(_voiceStream); }
-  catch(e){ _voiceRec=new MediaRecorder(_voiceStream); }
+  // low bitrate = much smaller files (voice doesn't need high quality) -> faster upload & load
+  var recOpts={audioBitsPerSecond:24000};
+  if(_voiceMime) recOpts.mimeType=_voiceMime;
+  try { _voiceRec = new MediaRecorder(_voiceStream, recOpts); }
+  catch(e){ try{ _voiceRec=new MediaRecorder(_voiceStream,{mimeType:_voiceMime}); }catch(e2){ _voiceRec=new MediaRecorder(_voiceStream); } }
   _voiceChunks=[];
   _voiceRec.ondataavailable=function(ev){ if(ev.data && ev.data.size>0) _voiceChunks.push(ev.data); };
   _voiceRec.onstop=function(){ _finishVoice(); };
