@@ -406,6 +406,14 @@ body.en .search-icon{right:auto;left:10px;}
       </div>
       <div id="chat-messages" style="min-height:55vh;max-height:62vh;overflow-y:auto;display:flex;flex-direction:column;gap:7px;padding:6px 2px"></div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:8px;position:sticky;bottom:0;background:var(--bg);padding:6px 0">
+        <div style="position:relative">
+          <button class="btn btn-sm" id="chat-plus-btn" onclick="toggleChatPlus(event)" style="background:var(--surface2);color:var(--text);font-size:20px;line-height:1;padding:6px 11px;border-radius:50%">+</button>
+          <div id="chat-plus-menu" style="display:none;position:absolute;bottom:46px;right:0;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.25);overflow:hidden;z-index:50;min-width:150px">
+            <button class="btn" onclick="chatPickImage()" style="display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-radius:0;padding:11px 14px;font-size:14px">📷 <span data-i18n-chatimg>عکس</span></button>
+            <button class="btn" onclick="chatSendLocation()" style="display:flex;align-items:center;gap:8px;width:100%;justify-content:flex-start;background:transparent;color:var(--text);border:none;border-radius:0;padding:11px 14px;font-size:14px;border-top:1px solid var(--border)">📍 <span data-i18n-chatloc>لوکیشن</span></button>
+          </div>
+        </div>
+        <input type="file" id="chat-file-input" accept="image/*" style="display:none" onchange="chatUploadImage(this)">
         <input class="form-control" id="chat-input" placeholder="پیام..." style="flex:1" onkeydown="if(event.key==='Enter')sendChatMessage()">
         <button class="btn btn-primary btn-sm" onclick="sendChatMessage()" style="white-space:nowrap">➤</button>
       </div>
@@ -6488,10 +6496,28 @@ function renderChatMessages(){
     var bubbleStyle=mine
       ? 'align-self:flex-end;background:var(--accent);color:#fff;border-radius:14px 14px 4px 14px'
       : 'align-self:flex-start;background:var(--surface2);color:var(--text);border-radius:14px 14px 14px 4px';
-    var body=(m.content||m.body||'').replace(/</g,'&lt;');
+    var raw=(m.content||m.body||'');
+    var inner;
+    if(m.type==='image'){
+      var safeUrl=raw.replace(/"/g,'&quot;');
+      inner='<img src="'+safeUrl+'" onclick="openChatImage(\''+safeUrl+'\')" '+
+            'style="max-width:200px;max-height:240px;border-radius:8px;cursor:pointer;display:block" '+
+            'onerror="this.replaceWith(document.createTextNode(\'🖼️ تصویر باز نشد\'))">';
+    } else if(m.type==='location'){
+      var parts=raw.split(',');
+      var lat=parseFloat(parts[0]), lng=parseFloat(parts[1]);
+      var mapUrl='https://www.google.com/maps?q='+lat+','+lng;
+      inner='<a href="'+mapUrl+'" target="_blank" rel="noopener" '+
+            'style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit">'+
+            '<span style="font-size:26px">📍</span>'+
+            '<span style="font-size:13px;line-height:1.4">'+(lang==='ar'?'الموقع':lang==='en'?'Location':'موقعیت مکانی')+
+            '<br><span style="font-size:11px;opacity:.75;text-decoration:underline">'+(lang==='ar'?'افتح في الخريطة':lang==='en'?'Open in maps':'باز کردن در نقشه')+'</span></span></a>';
+    } else {
+      inner='<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+raw.replace(/</g,'&lt;')+'</div>';
+    }
     return '<div style="max-width:78%;padding:8px 11px;'+bubbleStyle+'">'+
       (!mine?'<div style="font-size:10px;color:var(--text3);margin-bottom:2px">'+(m.sender||'')+'</div>':'')+
-      '<div style="font-size:13px;line-height:1.5;white-space:pre-wrap">'+body+'</div>'+
+      inner+
       '<div style="font-size:9px;opacity:.6;text-align:left;margin-top:3px">'+time+'</div>'+
     '</div>';
   }).join('');
@@ -6525,6 +6551,92 @@ async function sendChatMessage(){
     showToast('خطا: '+(e.message||e),'error');
     inp.value=text;
   }
+}
+
+// ===== CHAT: image + location (the "+" menu) =====
+var CHAT_BUCKET='chat-images';
+
+function toggleChatPlus(ev){
+  if(ev){ ev.stopPropagation(); }
+  var menu=document.getElementById('chat-plus-menu');
+  if(!menu) return;
+  menu.style.display = (menu.style.display==='none'||!menu.style.display) ? 'block' : 'none';
+}
+function closeChatPlus(){ var menu=document.getElementById('chat-plus-menu'); if(menu) menu.style.display='none'; }
+// close the menu when tapping anywhere else
+document.addEventListener('click',function(e){
+  var menu=document.getElementById('chat-plus-menu');
+  var btn=document.getElementById('chat-plus-btn');
+  if(menu&&menu.style.display==='block'&&!menu.contains(e.target)&&e.target!==btn){ menu.style.display='none'; }
+});
+
+function chatPickImage(){
+  closeChatPlus();
+  var fi=document.getElementById('chat-file-input');
+  if(fi){ fi.value=''; fi.click(); }
+}
+
+// shared helper: insert a message row of any type
+async function sendChatMedia(type, content){
+  if(!chatCurrentId){ showToast('chatCurrentId is empty','error'); return false; }
+  var me=currentUser?currentUser.name:'';
+  try {
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages',{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+      body:JSON.stringify({chat_id:chatCurrentId,sender:me,content:content,type:type})
+    });
+    if(!res.ok){ var t=await res.text(); console.log('send media error:',t); showToast('خطا: '+t,'error'); return false; }
+    await loadChatMessages();
+    var box=document.getElementById('chat-messages'); if(box) box.scrollTop=box.scrollHeight;
+    return true;
+  } catch(e){ console.log('send media exception:',e); showToast('خطا: '+(e.message||e),'error'); return false; }
+}
+
+async function chatUploadImage(input){
+  var file=input&&input.files&&input.files[0];
+  if(!file) return;
+  if(!chatCurrentId){ showToast('chatCurrentId is empty','error'); return; }
+  if(file.size>6*1024*1024){ showToast(lang==='ar'?'الصورة كبيرة جداً (الحد 6MB)':lang==='en'?'Image too large (max 6MB)':'عکس خیلی بزرگه (حداکثر ۶ مگابایت)','error'); return; }
+  showToast(lang==='ar'?'جاري رفع الصورة...':lang==='en'?'Uploading...':'در حال آپلود عکس...','info');
+  try {
+    var ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+    var path='chat/'+chatCurrentId+'/'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.'+ext;
+    var up=await fetch(SB_URL+'/storage/v1/object/'+CHAT_BUCKET+'/'+path,{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},
+      body:file
+    });
+    if(!up.ok){ var t=await up.text(); console.log('storage upload error:',t); showToast(lang==='ar'?'فشل رفع الصورة':lang==='en'?'Upload failed':'آپلود عکس ناموفق بود','error'); return; }
+    var publicUrl=SB_URL+'/storage/v1/object/public/'+CHAT_BUCKET+'/'+path;
+    await sendChatMedia('image', publicUrl);
+  } catch(e){ console.log('upload exception:',e); showToast('خطا: '+(e.message||e),'error'); }
+  finally { input.value=''; }
+}
+
+function chatSendLocation(){
+  closeChatPlus();
+  if(!navigator.geolocation){ showToast(lang==='ar'?'الموقع غير مدعوم':lang==='en'?'Geolocation not supported':'موقعیت مکانی پشتیبانی نمی‌شود','error'); return; }
+  showToast(lang==='ar'?'جاري تحديد الموقع...':lang==='en'?'Getting location...':'در حال یافتن موقعیت...','info');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    var lat=pos.coords.latitude.toFixed(6), lng=pos.coords.longitude.toFixed(6);
+    sendChatMedia('location', lat+','+lng);
+  }, function(err){
+    console.log('geo error:',err);
+    showToast(lang==='ar'?'تعذر تحديد الموقع':lang==='en'?'Could not get location':'موقعیت مکانی پیدا نشد','error');
+  }, {enableHighAccuracy:true,timeout:10000,maximumAge:0});
+}
+
+// fullscreen image viewer
+function openChatImage(url){
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:99999;display:flex;align-items:center;justify-content:center;cursor:zoom-out';
+  ov.onclick=function(){ ov.remove(); };
+  var img=document.createElement('img');
+  img.src=url;
+  img.style.cssText='max-width:96%;max-height:92%;border-radius:8px';
+  ov.appendChild(img);
+  document.body.appendChild(ov);
 }
 
 function startChatPoll(){ stopChatPoll(); chatPollTimer=setInterval(function(){ if(chatCurrentId&&!document.hidden) loadChatMessages(); },4000); }
