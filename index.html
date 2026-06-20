@@ -283,7 +283,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="tab" onclick="showTab('staff')" id="tab-staff">👥 <span id="t-staff">کارکنان</span></button>
     <button class="tab" onclick="showTab('requests')" id="tab-requests">🛒 <span id="t-requests">درخواست خرید</span></button>
     <button class="tab" onclick="showTab('notify')" id="tab-notify">🔔 <span id="t-notify">اعلان‌ها</span></button>
-    <button class="tab" onclick="showTab('chat')" id="tab-chat">💬 <span id="t-chat">گفتگو</span></button>
+    <button class="tab" onclick="showTab('chat')" id="tab-chat">💬 <span id="t-chat">گفتگو</span><span id="chat-tab-badge" style="display:none;background:#e0245e;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-right:4px;font-weight:700"></span></button>
     <button class="tab" onclick="showTab('personal')" id="tab-personal" style="display:none">💳 <span id="t-personal">مخارج شخصی</span></button>
   </div>
 
@@ -6307,18 +6307,10 @@ async function checkNewChatMessages(){
 }
 
 function updateChatBadge(n){
-  var tab=document.getElementById('tab-chat');
-  if(!tab) return;
   var b=document.getElementById('chat-tab-badge');
-  if(n>0){
-    if(!b){
-      b=document.createElement('span');
-      b.id='chat-tab-badge';
-      b.style.cssText='background:#e0245e;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-right:3px;font-weight:700';
-      tab.appendChild(b);
-    }
-    b.textContent=n;
-  } else if(b){ b.remove(); }
+  if(!b) return;
+  if(n>0){ b.textContent=n; b.style.display='inline-block'; }
+  else { b.style.display='none'; }
 }
 
 function startChatNotif(){
