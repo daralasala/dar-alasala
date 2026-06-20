@@ -6289,20 +6289,22 @@ function privateChatKey(a,b){ return [a,b].sort().join('|'); }
 async function openPrivateChat(otherName){
   var me=currentUser?currentUser.name:'';
   chatCurrentName=otherName;
-  // find or create the chat row for this pair
   var key=privateChatKey(me,otherName);
   var existing=null;
+  // find existing chat by key (use api helper which encodes the query)
   try {
     var rows=await api('GET','chats','','?select=*&is_group=eq.false&name=eq.'+encodeURIComponent(key));
-    existing=(rows&&rows[0])?rows[0]:null;
-  } catch(e){}
+    existing=(rows&&rows.length)?rows[0]:null;
+  } catch(e){ console.log('find chat err',e); }
   if(!existing){
     try {
       var created=await fetch(SB_URL+'/rest/v1/chats',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({name:key,is_group:false,created_by:me})});
-      existing=(await created.json())[0];
-    } catch(e){}
+      if(!created.ok){ var et=await created.text(); console.log('create chat err',et); showToast(lang==='ar'?'فشل فتح المحادثة':lang==='en'?'Cannot open chat':'چت باز نشد: '+et,'error'); return; }
+      var arr=await created.json();
+      existing=arr&&arr[0]?arr[0]:null;
+    } catch(e){ console.log('create chat err2',e); }
   }
-  if(!existing) return;
+  if(!existing){ showToast(lang==='ar'?'فشل فتح المحادثة':lang==='en'?'Cannot open chat':'چت باز نشد','error'); return; }
   chatCurrentId=existing.id;
   document.getElementById('chat-list-view').style.display='none';
   document.getElementById('chat-conv-view').style.display='block';
