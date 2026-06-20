@@ -6279,21 +6279,19 @@ async function checkNewChatMessages(){
   if(!currentUser) return;
   var me=currentUser.name;
   try {
-    var rows=await api('GET','chat_messages','','?select=id,chat_id,sender&order=id.desc&limit=300');
-    if(!rows) return;
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender&order=id.desc&limit=300',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
+    if(!res.ok){ console.log('chat check HTTP', res.status); return; }
+    var rows=await res.json();
     var totalUnread=0, perChat={};
     rows.forEach(function(m){
-      if(m.sender===me) return;                 // my own messages never count
-      if(m.chat_id===chatCurrentId) return;      // the chat I'm currently viewing is "read"
+      if(m.sender===me) return;
+      if(m.chat_id===chatCurrentId) return;
       var seen=_chatLastSeen[m.chat_id]||0;
-      if(m.id>seen){
-        perChat[m.chat_id]=(perChat[m.chat_id]||0)+1;
-        totalUnread++;
-      }
+      if(m.id>seen){ perChat[m.chat_id]=(perChat[m.chat_id]||0)+1; totalUnread++; }
     });
+    console.log('chat check me=['+me+'] msgs='+rows.length+' unread='+totalUnread);
     var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
     _chatUnread=perChat;
-    // sound only when NEW unread arrives (not on the very first check after load)
     if(_chatSeededOnce && totalUnread>prevTotal){
       playChatBeep();
       if(navigator.vibrate){ try{navigator.vibrate(200);}catch(e){} }
