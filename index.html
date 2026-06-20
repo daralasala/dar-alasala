@@ -1670,9 +1670,9 @@ function applyTabPermissions(){
     var el=document.getElementById('tab-'+t);
     if(el) el.style.display=allowed.indexOf(t)>=0?'':'none';
   });
-  // Family role: hide everything except personal (even dashboard/notify)
+  // Family role: hide everything except personal (even dashboard/notify/chat)
   var isFamily=currentUser&&(currentUser.role==='family'||currentUser.department==='خانواده');
-  ['dashboard','notify'].forEach(function(t){
+  ['dashboard','notify','chat'].forEach(function(t){
     var el=document.getElementById('tab-'+t);
     if(el) el.style.display=isFamily?'none':'';
   });
@@ -1771,7 +1771,12 @@ function doLogout(){
 
 // ===== TABS =====
 function showTab(tab){
-  // Chat is available to everyone (no special permission needed)
+  // Family members can't access the work chat
+  if(tab==='chat' && currentUser && (currentUser.role==='family'||currentUser.department==='خانواده')){
+    showToast(lang==='ar'?'غير متاح':lang==='en'?'Not available':'در دسترس نیست','error');
+    return;
+  }
+  // Chat is available to everyone else (no special permission needed)
   if(tab!=='chat' && currentUser && getUserPermissions(currentUser).indexOf(tab)<0){
     showToast(lang==='ar'?'لا تملك صلاحية':lang==='en'?'No permission':'دسترسی ندارید','error');
     return;
@@ -6328,9 +6333,12 @@ async function openChatList(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   document.getElementById('chat-people-title').textContent=L('المحادثات','Conversations','گفتگوها');
   var box=document.getElementById('chat-people');
-  // Show every active user except myself
+  // Show every active user except myself — and exclude family members (not part of work chat)
   var me=currentUser?currentUser.name:'';
-  var people=(allUsers||[]).filter(function(u){ return u.status==='active' && u.name && u.name!==me; });
+  var people=(allUsers||[]).filter(function(u){
+    return u.status==='active' && u.name && u.name!==me
+      && u.role!=='family' && u.department!=='خانواده';
+  });
   // include the manager (admin) as a contact for workers
   if(me!=='Manager' && !people.some(function(p){return p.name==='Manager';})){
     people.unshift({name:'Manager',department:'مدیر'});
