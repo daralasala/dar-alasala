@@ -6618,12 +6618,25 @@ function chatSendLocation(){
   closeChatPlus();
   if(!navigator.geolocation){ showToast(lang==='ar'?'الموقع غير مدعوم':lang==='en'?'Geolocation not supported':'موقعیت مکانی پشتیبانی نمی‌شود','error'); return; }
   showToast(lang==='ar'?'جاري تحديد الموقع...':lang==='en'?'Getting location...':'در حال یافتن موقعیت...','info');
-  navigator.geolocation.getCurrentPosition(function(pos){
+  function ok(pos){
     var lat=pos.coords.latitude.toFixed(6), lng=pos.coords.longitude.toFixed(6);
     sendChatMedia('location', lat+','+lng);
-  }, function(err){
-    console.log('geo error:',err);
-    showToast(lang==='ar'?'تعذر تحديد الموقع':lang==='en'?'Could not get location':'موقعیت مکانی پیدا نشد','error');
+  }
+  function failMsg(err){
+    var why = err&&err.code===1 ? (lang==='ar'?'تم رفض إذن الموقع':lang==='en'?'Location permission denied':'اجازه‌ی موقعیت رد شد')
+            : err&&err.code===2 ? (lang==='ar'?'الموقع غير متاح':lang==='en'?'Position unavailable':'موقعیت در دسترس نیست')
+            : err&&err.code===3 ? (lang==='ar'?'انتهت المهلة':lang==='en'?'Timed out':'زمان تمام شد')
+            : (lang==='ar'?'تعذر تحديد الموقع':lang==='en'?'Could not get location':'موقعیت پیدا نشد');
+    showToast(why,'error');
+  }
+  // first try high accuracy (GPS); if it fails, retry with low accuracy (wifi/IP)
+  navigator.geolocation.getCurrentPosition(ok, function(err1){
+    console.log('geo error (high):',err1&&err1.code,err1&&err1.message);
+    if(err1&&err1.code===1){ failMsg(err1); return; } // permission denied — no point retrying
+    navigator.geolocation.getCurrentPosition(ok, function(err2){
+      console.log('geo error (low):',err2&&err2.code,err2&&err2.message);
+      failMsg(err2);
+    }, {enableHighAccuracy:false,timeout:15000,maximumAge:60000});
   }, {enableHighAccuracy:true,timeout:10000,maximumAge:0});
 }
 
