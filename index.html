@@ -1699,6 +1699,15 @@ function applyTabPermissions(){
   });
   // If family, jump straight to personal tab
   if(isFamily){ showTab('personal'); }
+  applyInvoiceVisibility();
+}
+
+// "All invoices" (sales invoices list) should only be visible to manager & accountant.
+// Foreman, purchasing, and other staff must NOT see it.
+function applyInvoiceVisibility(){
+  var allowed = currentUser && (currentUser.role==='manager' || currentUser.department==='حسابدار');
+  var btn=document.getElementById('fb-allinv');
+  if(btn) btn.style.display = allowed ? '' : 'none';
 }
 
 function enterApp(){
@@ -3714,6 +3723,11 @@ function renderPurchaseInvoices(){
 }
 
 function openAllInvoices(){
+  // safety: only manager & accountant may open the sales-invoices list
+  if(!(currentUser && (currentUser.role==='manager' || currentUser.department==='حسابدار'))){
+    showToast(lang==='ar'?'غير مصرح':lang==='en'?'Not allowed':'دسترسی ندارید','error');
+    return;
+  }
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   document.getElementById('ai-title').textContent=L('كل الفواتير','All invoices','همه فاکتورها');
   document.getElementById('ai-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
