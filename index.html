@@ -1788,7 +1788,7 @@ function showTab(tab){
   if(tab==='inventory') loadInventory();
   if(tab==='customers') loadCustomers();
   if(tab==='notify') renderNotifications();
-  if(tab==='chat') openChatList();
+  if(tab==='chat'){ openChatList(); startChatNotif(); }
   if(tab==='personal'){ loadPersonalExp().then(renderPersonal); }
 }
 
