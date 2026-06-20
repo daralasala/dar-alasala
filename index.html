@@ -6266,6 +6266,31 @@ var _chatLastSeen={};   // chatId -> last message id I've seen
 var _chatUnread={};     // chatId -> unread count
 var _chatNotifTimer=null;
 var _chatSeededOnce=false;
+var _myChatIds=null;    // set of chat ids I'm a member of (cached)
+
+// --- persist "last seen" per-user so the unread badge survives refresh (WhatsApp-style) ---
+function _chatSeenKey(){ return 'chatLastSeen_'+((currentUser&&currentUser.name)||'anon'); }
+function loadChatLastSeen(){
+  try { var raw=localStorage.getItem(_chatSeenKey()); _chatLastSeen=raw?JSON.parse(raw):{}; }
+  catch(e){ _chatLastSeen={}; }
+  if(!_chatLastSeen||typeof _chatLastSeen!=='object') _chatLastSeen={};
+}
+function saveChatLastSeen(){
+  try { localStorage.setItem(_chatSeenKey(), JSON.stringify(_chatLastSeen)); } catch(e){}
+}
+// figure out which chat ids the current user belongs to (private chat name = "name1|name2")
+async function refreshMyChatIds(){
+  var me=currentUser?currentUser.name:'';
+  try {
+    var rows=await api('GET','chats','','?select=id,name');
+    var s={};
+    (rows||[]).forEach(function(c){
+      var parts=(c.name||'').split('|');
+      if(parts.indexOf(me)>-1) s[c.id]=true;
+    });
+    _myChatIds=s;
+  } catch(e){ /* keep previous cache on error */ }
+}
 
 function playChatBeep(){
   try {
@@ -6283,20 +6308,25 @@ function playChatBeep(){
 async function checkNewChatMessages(){
   if(!currentUser) return;
   var me=currentUser.name;
+  // make sure persisted "seen" state and my chat membership are loaded
+  if(!_chatSeededOnce){ loadChatLastSeen(); }
+  if(_myChatIds===null){ await refreshMyChatIds(); }
   try {
     var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender&order=id.desc&limit=300',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
     if(!res.ok){ console.log('chat check HTTP', res.status); return; }
     var rows=await res.json();
     var totalUnread=0, perChat={};
     rows.forEach(function(m){
-      if(m.sender===me) return;
-      if(m.chat_id===chatCurrentId) return;
+      if(m.sender===me) return;                       // my own messages never count
+      if(m.chat_id===chatCurrentId) return;           // the chat I'm currently viewing is "read"
+      if(_myChatIds && !_myChatIds[m.chat_id]) return;// only count chats I'm a member of
       var seen=_chatLastSeen[m.chat_id]||0;
       if(m.id>seen){ perChat[m.chat_id]=(perChat[m.chat_id]||0)+1; totalUnread++; }
     });
     console.log('chat check me=['+me+'] msgs='+rows.length+' unread='+totalUnread);
     var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
     _chatUnread=perChat;
+    // play sound/vibrate only when a genuinely new message arrives after the first check
     if(_chatSeededOnce && totalUnread>prevTotal){
       playChatBeep();
       if(navigator.vibrate){ try{navigator.vibrate(200);}catch(e){} }
@@ -6318,6 +6348,9 @@ function updateChatBadge(n){
 
 function startChatNotif(){
   stopChatNotif();
+  _chatSeededOnce=false;   // re-seed for this session
+  _myChatIds=null;         // force a fresh membership lookup
+  loadChatLastSeen();      // restore "seen" state from a previous session (survives refresh)
   checkNewChatMessages();
   _chatNotifTimer=setInterval(function(){ if(!document.hidden) checkNewChatMessages(); }, 6000);
 }
@@ -6336,8 +6369,15 @@ async function openChatList(){
   // Show every active user except myself — and exclude family members (not part of work chat)
   var me=currentUser?currentUser.name:'';
   var people=(allUsers||[]).filter(function(u){
-    return u.status==='active' && u.name && u.name!==me
-      && u.role!=='family' && u.department!=='خانواده';
+    if(u.status!=='active' || !u.name || u.name===me) return false;
+    // exclude family members from the company chat
+    if(u.role==='family' || u.department==='خانواده' || u.department==='عائلة' || u.department==='family') return false;
+    // family accounts typically only have the "personal" permission — exclude those too
+    try {
+      var perms=u.permissions?(typeof u.permissions==='string'?JSON.parse(u.permissions):u.permissions):[];
+      if(Array.isArray(perms) && perms.length===1 && perms[0]==='personal') return false;
+    } catch(e){}
+    return true;
   });
   // include the manager (admin) as a contact for workers
   if(me!=='Manager' && !people.some(function(p){return p.name==='Manager';})){
@@ -6402,14 +6442,15 @@ async function openPrivateChat(otherName){
     } catch(e){ console.log('create chat err2',e); }
   }
   if(!existing){ showToast(lang==='ar'?'فشل فتح المحادثة':lang==='en'?'Cannot open chat':'چت باز نشد','error'); return; }
+  _myChatIds=null; // a chat may have just been created — refresh membership next check
   chatCurrentId=existing.id;
   document.getElementById('chat-list-view').style.display='none';
   document.getElementById('chat-conv-view').style.display='block';
   document.getElementById('chat-conv-name').textContent=otherName;
   document.getElementById('chat-input').value='';
   await loadChatMessages();
-  // mark as seen: remember the latest message id in this chat
-  if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs[allChatMsgs.length-1].id; }
+  // mark as seen: remember the highest message id in this chat (and persist it)
+  if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){return m.id>mx?m.id:mx;},0); saveChatLastSeen(); }
   _chatUnread[chatCurrentId]=0;
   // update the tab badge silently (no sound) right away
   var t=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
@@ -6428,8 +6469,8 @@ async function loadChatMessages(){
   try {
     var msgs=await api('GET','chat_messages','','?select=*&chat_id=eq.'+chatCurrentId+'&order=created_at.asc');
     allChatMsgs=msgs||[];
-    // while this chat is open, everything is considered seen
-    if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs[allChatMsgs.length-1].id; _chatUnread[chatCurrentId]=0; }
+    // while this chat is open, everything in it is considered seen (persist so it survives refresh)
+    if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs.reduce(function(mx,m){return m.id>mx?m.id:mx;},0); _chatUnread[chatCurrentId]=0; saveChatLastSeen(); }
     renderChatMessages();
   } catch(e){}
 }
