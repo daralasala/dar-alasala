@@ -3821,6 +3821,8 @@ function finReportData(){
 function renderFinReport(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var d=finReportData();
+  // Foreman & purchasing (non-managers): only expenses & purchases — no income/sales, no profit
+  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
   var fmt=function(n){ return (n||0).toLocaleString()+' '+L('ر.ق','QAR','ریال'); };
   var catRows=function(obj){
     var keys=Object.keys(obj);
@@ -3830,13 +3832,19 @@ function renderFinReport(){
     }).join('');
   };
   var profitColor=d.profit>=0?'var(--green)':'var(--red)';
-  var html=''+
-    '<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">'+
+  var summaryBox = expenseOnly ?
+    ('<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">'+
+      '<div style="display:flex;justify-content:space-between"><span style="color:var(--red);font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:var(--red);font-weight:700">'+fmt(d.expense)+'</span></div>'+
+    '</div>')
+    :
+    ('<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:12px">'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--green);font-weight:700">'+L('إجمالي الدخل','Total income','کل درآمد')+'</span><span style="color:var(--green);font-weight:700">'+fmt(d.income)+'</span></div>'+
       '<div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--red);font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:var(--red);font-weight:700">'+fmt(d.expense)+'</span></div>'+
       '<div style="display:flex;justify-content:space-between;border-top:1px solid var(--border);padding-top:6px"><span style="color:'+profitColor+';font-weight:800">'+L('صافي الربح','Net profit','سود خالص')+'</span><span style="color:'+profitColor+';font-weight:800">'+fmt(d.profit)+'</span></div>'+
-    '</div>'+
-    '<div style="font-size:13px;font-weight:700;color:var(--green);margin:10px 0 4px">⬆️ '+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</div>'+catRows(d.incomeByCat)+
+    '</div>');
+  var html=''+
+    summaryBox+
+    (expenseOnly?'':('<div style="font-size:13px;font-weight:700;color:var(--green);margin:10px 0 4px">⬆️ '+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</div>'+catRows(d.incomeByCat)))+
     '<div style="font-size:13px;font-weight:700;color:var(--red);margin:10px 0 4px">⬇️ '+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</div>'+catRows(d.expenseByCat)+
     (currentUser&&currentUser.role==='manager'?(
       '<div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 4px">👤 '+L('المصاريف الشخصية (منفصلة)','Personal expenses (separate)','مخارج شخصی (جداگانه)')+'</div>'+
@@ -3859,17 +3867,24 @@ function printFinReport(){
     return keys.map(function(k){ return '<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">'+catLabel(k)+'</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left">'+fmt(obj[k])+'</td></tr>'; }).join('');
   };
   var dir=lang==='en'?'ltr':'rtl';
+  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
   var profitColor=d.profit>=0?'#1a7f37':'#c0392b';
+  var summaryBox = expenseOnly ?
+    ('<div class="box">'+
+      '<div class="row big"><span style="color:#c0392b">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:#c0392b">'+fmt(d.expense)+'</span></div>'+
+    '</div>')
+    :
+    ('<div class="box">'+
+      '<div class="row"><span style="color:#1a7f37;font-weight:700">'+L('إجمالي الدخل','Total income','کل درآمد')+'</span><span style="color:#1a7f37;font-weight:700">'+fmt(d.income)+'</span></div>'+
+      '<div class="row"><span style="color:#c0392b;font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:#c0392b;font-weight:700">'+fmt(d.expense)+'</span></div>'+
+      '<div class="row big" style="border-top:2px solid #333;margin-top:6px;padding-top:8px"><span style="color:'+profitColor+'">'+L('صافي الربح','Net profit','سود خالص')+'</span><span style="color:'+profitColor+'">'+fmt(d.profit)+'</span></div>'+
+    '</div>');
   var html='<!DOCTYPE html><html dir="'+dir+'"><head><meta charset="UTF-8"><title>'+L('كشف الحساب','Statement','صورت‌حساب')+'</title>'+
     '<style>body{font-family:Arial,sans-serif;padding:24px;color:#222}h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;color:#444}table{width:100%;border-collapse:collapse}.box{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px}.row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px}.big{font-weight:800;font-size:16px}@media print{.noprint{display:none}}</style></head><body>'+
     '<h1>دار الأصالة للمفروشات — '+L('كشف حساب','Financial Statement','صورت‌حساب مالی')+'</h1>'+
     '<div style="font-size:13px;color:#666;margin-bottom:14px">'+L('الفترة','Period','دوره')+': '+periodLabel+'</div>'+
-    '<div class="box">'+
-      '<div class="row"><span style="color:#1a7f37;font-weight:700">'+L('إجمالي الدخل','Total income','کل درآمد')+'</span><span style="color:#1a7f37;font-weight:700">'+fmt(d.income)+'</span></div>'+
-      '<div class="row"><span style="color:#c0392b;font-weight:700">'+L('إجمالي المصاريف','Total expenses','کل هزینه')+'</span><span style="color:#c0392b;font-weight:700">'+fmt(d.expense)+'</span></div>'+
-      '<div class="row big" style="border-top:2px solid #333;margin-top:6px;padding-top:8px"><span style="color:'+profitColor+'">'+L('صافي الربح','Net profit','سود خالص')+'</span><span style="color:'+profitColor+'">'+fmt(d.profit)+'</span></div>'+
-    '</div>'+
-    '<h2>'+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</h2><table>'+catRows(d.incomeByCat)+'</table>'+
+    summaryBox+
+    (expenseOnly?'':('<h2>'+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</h2><table>'+catRows(d.incomeByCat)+'</table>'))+
     '<h2>'+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</h2><table>'+catRows(d.expenseByCat)+'</table>'+
     (currentUser&&currentUser.role==='manager'?(
       '<h2 style="color:#a07830">'+L('المصاريف الشخصية (منفصلة عن المصنع)','Personal expenses (separate from factory)','مخارج شخصی (جدا از کارخانه)')+'</h2>'+
