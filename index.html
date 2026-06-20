@@ -6345,18 +6345,30 @@ async function openChatList(){
     people.unshift({name:'Manager',department:'مدیر'});
   }
   if(people.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">💬</div><div>'+T('no_data')+'</div></div>'; return; }
-  // map: person name -> unread count (via their private chat key)
+  // map: person name -> unread count, and person name -> last message time (to sort like WhatsApp)
   var unreadByName={};
+  var lastTimeByName={};
   try {
     var myChats=await api('GET','chats','','?select=id,name&is_group=eq.false');
-    (myChats||[]).forEach(function(c){
+    var myList=(myChats||[]).filter(function(c){ return (c.name||'').split('|').indexOf(me)>-1; });
+    // get the latest message time for each of my chats
+    for(var ci=0; ci<myList.length; ci++){
+      var c=myList[ci];
       var parts=(c.name||'').split('|');
-      if(parts.indexOf(me)>-1){
-        var other=parts[0]===me?parts[1]:parts[0];
-        if(_chatUnread[c.id]>0) unreadByName[other]=_chatUnread[c.id];
-      }
-    });
+      var other=parts[0]===me?parts[1]:parts[0];
+      if(_chatUnread[c.id]>0) unreadByName[other]=_chatUnread[c.id];
+      try {
+        var last=await api('GET','chat_messages','','?select=created_at&chat_id=eq.'+c.id+'&order=id.desc&limit=1');
+        if(last&&last[0]&&last[0].created_at){ lastTimeByName[other]=new Date(last[0].created_at).getTime(); }
+      } catch(e){}
+    }
   } catch(e){}
+  // sort: people with a recent conversation first (newest on top), then the rest alphabetically
+  people.sort(function(a,b){
+    var ta=lastTimeByName[a.name]||0, tb=lastTimeByName[b.name]||0;
+    if(ta!==tb) return tb-ta;                 // newest message first
+    return (a.name||'').localeCompare(b.name||'');
+  });
   box.innerHTML=people.map(function(u){
     var initial=(u.name||'?').charAt(0).toUpperCase();
     var unread=unreadByName[u.name]||0;
