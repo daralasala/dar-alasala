@@ -1695,6 +1695,7 @@ function enterApp(){
     applyTabPermissions();
     loadAll();
     startAutoRefresh();
+    startChatNotif();
   },380);
 }
 
@@ -6255,6 +6256,77 @@ async function renewQid(userId){
     showToast(L('فشل','Error','خطا'),'error');
   }
 }
+// ===== CHAT UNREAD: badge on tab, per-person count, and sound =====
+var _chatLastSeen={};   // chatId -> last message id I've seen
+var _chatUnread={};     // chatId -> unread count
+var _chatNotifTimer=null;
+var _chatSeededOnce=false;
+
+function playChatBeep(){
+  try {
+    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var o=ctx.createOscillator(), g=ctx.createGain();
+    o.connect(g); g.connect(ctx.destination);
+    o.type='sine'; o.frequency.value=720;
+    g.gain.setValueAtTime(0.0001,ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.25,ctx.currentTime+0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001,ctx.currentTime+0.3);
+    o.start(); o.stop(ctx.currentTime+0.32);
+  } catch(e){}
+}
+
+async function checkNewChatMessages(){
+  if(!currentUser) return;
+  var me=currentUser.name;
+  try {
+    var rows=await api('GET','chat_messages','','?select=id,chat_id,sender&order=id.desc&limit=200');
+    if(!rows) return;
+    var totalUnread=0, perChat={};
+    rows.forEach(function(m){
+      if(m.sender===me) return;            // my own messages don't count
+      var seen=_chatLastSeen[m.chat_id]||0;
+      if(m.id>seen){
+        perChat[m.chat_id]=(perChat[m.chat_id]||0)+1;
+        totalUnread++;
+      }
+    });
+    var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
+    _chatUnread=perChat;
+    if(_chatSeededOnce && totalUnread>prevTotal){
+      playChatBeep();
+      if(navigator.vibrate){ try{navigator.vibrate(200);}catch(e){} }
+    }
+    _chatSeededOnce=true;
+    updateChatBadge(totalUnread);
+    // refresh people list badges if it's open
+    var pageChat=document.getElementById('page-chat');
+    var lv=document.getElementById('chat-list-view');
+    if(pageChat&&pageChat.classList.contains('active')&&lv&&lv.style.display!=='none'){ openChatList(); }
+  } catch(e){}
+}
+
+function updateChatBadge(n){
+  var tab=document.getElementById('tab-chat');
+  if(!tab) return;
+  var b=document.getElementById('chat-tab-badge');
+  if(n>0){
+    if(!b){
+      b=document.createElement('span');
+      b.id='chat-tab-badge';
+      b.style.cssText='background:#e0245e;color:#fff;border-radius:10px;font-size:10px;padding:1px 6px;margin-right:3px;font-weight:700';
+      tab.appendChild(b);
+    }
+    b.textContent=n;
+  } else if(b){ b.remove(); }
+}
+
+function startChatNotif(){
+  stopChatNotif();
+  checkNewChatMessages();
+  _chatNotifTimer=setInterval(function(){ if(!document.hidden) checkNewChatMessages(); }, 6000);
+}
+function stopChatNotif(){ if(_chatNotifTimer){ clearInterval(_chatNotifTimer); _chatNotifTimer=null; } }
+
 // ===== CHAT (stage 1: private text chat) =====
 var chatCurrentId=null, chatCurrentName='', chatPollTimer=null, allChatMsgs=[];
 
@@ -6273,12 +6345,26 @@ async function openChatList(){
     people.unshift({name:'Manager',department:'مدیر'});
   }
   if(people.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">💬</div><div>'+T('no_data')+'</div></div>'; return; }
+  // map: person name -> unread count (via their private chat key)
+  var unreadByName={};
+  try {
+    var myChats=await api('GET','chats','','?select=id,name&is_group=eq.false');
+    (myChats||[]).forEach(function(c){
+      var parts=(c.name||'').split('|');
+      if(parts.indexOf(me)>-1){
+        var other=parts[0]===me?parts[1]:parts[0];
+        if(_chatUnread[c.id]>0) unreadByName[other]=_chatUnread[c.id];
+      }
+    });
+  } catch(e){}
   box.innerHTML=people.map(function(u){
     var initial=(u.name||'?').charAt(0).toUpperCase();
+    var unread=unreadByName[u.name]||0;
+    var badge=unread>0?'<div style="background:#e0245e;color:#fff;border-radius:11px;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 5px">'+unread+'</div>':'<div style="font-size:18px">💬</div>';
     return '<div onclick="openPrivateChat(\''+(u.name||'').replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:11px;background:var(--surface2);border-radius:12px;padding:11px;margin-bottom:8px;cursor:pointer">'+
       '<div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">'+initial+'</div>'+
       '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+u.name+'</div>'+(u.department?('<div style="font-size:11px;color:var(--text2)">'+u.department+'</div>'):'')+'</div>'+
-      '<div style="font-size:18px">💬</div>'+
+      badge+
     '</div>';
   }).join('');
 }
@@ -6311,6 +6397,10 @@ async function openPrivateChat(otherName){
   document.getElementById('chat-conv-name').textContent=otherName;
   document.getElementById('chat-input').value='';
   await loadChatMessages();
+  // mark as seen: remember the latest message id in this chat
+  if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs[allChatMsgs.length-1].id; }
+  _chatUnread[chatCurrentId]=0;
+  checkNewChatMessages();
   startChatPoll();
 }
 
@@ -6325,6 +6415,8 @@ async function loadChatMessages(){
   try {
     var msgs=await api('GET','chat_messages','','?select=*&chat_id=eq.'+chatCurrentId+'&order=created_at.asc');
     allChatMsgs=msgs||[];
+    // while this chat is open, everything is considered seen
+    if(allChatMsgs.length){ _chatLastSeen[chatCurrentId]=allChatMsgs[allChatMsgs.length-1].id; _chatUnread[chatCurrentId]=0; }
     renderChatMessages();
   } catch(e){}
 }
