@@ -4358,10 +4358,10 @@ async function savePurchase(){
   var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':lang==='en'?' (Credit)':' (قرضی)'):'');
   // 1) Financial transaction
   const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
-  const trans=tRes.ok?await tRes.json():null;
-  if(trans&&trans[0]){
-    await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
-  }
+  if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); return; }
+  const trans=await tRes.json();
+  if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); return; }
+  await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
   // 2) Add each item to inventory (existing -> add qty; new -> create)
   for(var i=0;i<validItems.length;i++){
     var it=validItems[i];
