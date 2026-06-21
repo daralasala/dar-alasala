@@ -3802,12 +3802,17 @@ function finReportData(){
   };
   var income=0, expense=0;
   var incomeByCat={}, expenseByCat={};
+  var expenseList=[]; // itemized expenses & purchases
   (allTransactions||[]).forEach(function(t){
     var d=trDate(t); if(!inPeriod(d)) return;
     var amt=t.amount||0;
     if(t.type==='income'){ income+=amt; var c=t.category||'سایر'; incomeByCat[c]=(incomeByCat[c]||0)+amt; }
-    else if(t.type==='expense'||t.type==='purchase'){ expense+=amt; var c2=t.category||(t.type==='purchase'?'خرید':'سایر'); expenseByCat[c2]=(expenseByCat[c2]||0)+amt; }
+    else if(t.type==='expense'||t.type==='purchase'){
+      expense+=amt; var c2=t.category||(t.type==='purchase'?'خرید':'سایر'); expenseByCat[c2]=(expenseByCat[c2]||0)+amt;
+      expenseList.push({date:d, kind:t.type, cat:c2, desc:(t.description||t.note||''), amount:amt});
+    }
   });
+  expenseList.sort(function(a,b){ return (b.date?b.date.getTime():0)-(a.date?a.date.getTime():0); });
   // Personal expenses (listed separately, NOT in factory profit)
   var personal=0, personalByCat={};
   (allPersonalExp||[]).forEach(function(e){
@@ -3816,7 +3821,8 @@ function finReportData(){
     var c=e.category||'سایر'; personalByCat[c]=(personalByCat[c]||0)+amt;
   });
   return {period:period,month:month,year:year,income:income,expense:expense,profit:income-expense,
-          incomeByCat:incomeByCat,expenseByCat:expenseByCat,personal:personal,personalByCat:personalByCat};
+          incomeByCat:incomeByCat,expenseByCat:expenseByCat,personal:personal,personalByCat:personalByCat,
+          expenseList:expenseList};
 }
 function renderFinReport(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
@@ -3829,6 +3835,18 @@ function renderFinReport(){
     if(keys.length===0) return '<div style="font-size:12px;color:var(--text2);padding:6px">'+L('لا يوجد','None','موردی نیست')+'</div>';
     return keys.map(function(k){
       return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;border-bottom:1px solid var(--border)"><span>'+catLabel(k)+'</span><span>'+fmt(obj[k])+'</span></div>';
+    }).join('');
+  };
+  var itemRows=function(list){
+    if(!list||list.length===0) return '<div style="font-size:12px;color:var(--text2);padding:6px">'+L('لا يوجد','None','موردی نیست')+'</div>';
+    return list.map(function(it){
+      var ds=it.date?(it.date.toISOString().slice(0,10)):'';
+      var tag=it.kind==='purchase'?'🛒':'💸';
+      var title=(it.desc&&it.desc.trim())?it.desc:catLabel(it.cat);
+      return '<div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:12px;padding:6px;border-bottom:1px solid var(--border)">'+
+        '<div style="flex:1;min-width:0"><div style="font-weight:600">'+tag+' '+title+'</div>'+
+        '<div style="font-size:10px;color:var(--text3)">'+ds+' · '+catLabel(it.cat)+'</div></div>'+
+        '<span style="color:var(--red);white-space:nowrap;margin-right:6px">'+fmt(it.amount)+'</span></div>';
     }).join('');
   };
   var profitColor=d.profit>=0?'var(--green)':'var(--red)';
@@ -3846,6 +3864,7 @@ function renderFinReport(){
     summaryBox+
     (expenseOnly?'':('<div style="font-size:13px;font-weight:700;color:var(--green);margin:10px 0 4px">⬆️ '+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</div>'+catRows(d.incomeByCat)))+
     '<div style="font-size:13px;font-weight:700;color:var(--red);margin:10px 0 4px">⬇️ '+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</div>'+catRows(d.expenseByCat)+
+    '<div style="font-size:13px;font-weight:700;color:var(--red);margin:14px 0 4px">📋 '+L('تفاصيل المصاريف والمشتريات','Expenses & purchases (itemized)','جزئیات خرید و هزینه (دونه‌دونه)')+'</div>'+itemRows(d.expenseList)+
     (currentUser&&currentUser.role==='manager'?(
       '<div style="font-size:13px;font-weight:700;color:var(--accent);margin:14px 0 4px">👤 '+L('المصاريف الشخصية (منفصلة)','Personal expenses (separate)','مخارج شخصی (جداگانه)')+'</div>'+
       '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 6px;font-weight:700"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
@@ -3865,6 +3884,20 @@ function printFinReport(){
     var keys=Object.keys(obj);
     if(keys.length===0) return '<tr><td colspan="2" style="padding:6px;color:#888">'+L('لا يوجد','None','موردی نیست')+'</td></tr>';
     return keys.map(function(k){ return '<tr><td style="padding:5px 8px;border-bottom:1px solid #eee">'+catLabel(k)+'</td><td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left">'+fmt(obj[k])+'</td></tr>'; }).join('');
+  };
+  var itemRowsP=function(list){
+    if(!list||list.length===0) return '<tr><td colspan="4" style="padding:6px;color:#888">'+L('لا يوجد','None','موردی نیست')+'</td></tr>';
+    return list.map(function(it){
+      var ds=it.date?(it.date.toISOString().slice(0,10)):'';
+      var tag=it.kind==='purchase'?'🛒':'💸';
+      var title=(it.desc&&it.desc.trim())?it.desc:catLabel(it.cat);
+      return '<tr>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;white-space:nowrap">'+ds+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee">'+tag+' '+title+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;color:#666">'+catLabel(it.cat)+'</td>'+
+        '<td style="padding:5px 8px;border-bottom:1px solid #eee;text-align:left;white-space:nowrap">'+fmt(it.amount)+'</td>'+
+      '</tr>';
+    }).join('');
   };
   var dir=lang==='en'?'ltr':'rtl';
   var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
@@ -3886,6 +3919,13 @@ function printFinReport(){
     summaryBox+
     (expenseOnly?'':('<h2>'+L('الدخل حسب التصنيف','Income by category','درآمد بر اساس دسته')+'</h2><table>'+catRows(d.incomeByCat)+'</table>'))+
     '<h2>'+L('المصاريف حسب التصنيف','Expenses by category','هزینه بر اساس دسته')+'</h2><table>'+catRows(d.expenseByCat)+'</table>'+
+    '<h2>'+L('تفاصيل المصاريف والمشتريات','Expenses & purchases (itemized)','جزئیات خرید و هزینه (دونه‌دونه)')+'</h2>'+
+    '<table><thead><tr style="background:#f5f5f5">'+
+      '<th style="padding:6px 8px;text-align:'+(dir==='rtl'?'right':'left')+';font-size:12px">'+L('التاريخ','Date','تاریخ')+'</th>'+
+      '<th style="padding:6px 8px;text-align:'+(dir==='rtl'?'right':'left')+';font-size:12px">'+L('البيان','Item','شرح')+'</th>'+
+      '<th style="padding:6px 8px;text-align:'+(dir==='rtl'?'right':'left')+';font-size:12px">'+L('التصنيف','Category','دسته')+'</th>'+
+      '<th style="padding:6px 8px;text-align:left;font-size:12px">'+L('المبلغ','Amount','مبلغ')+'</th>'+
+    '</tr></thead><tbody>'+itemRowsP(d.expenseList)+'</tbody></table>'+
     (currentUser&&currentUser.role==='manager'?(
       '<h2 style="color:#a07830">'+L('المصاريف الشخصية (منفصلة عن المصنع)','Personal expenses (separate from factory)','مخارج شخصی (جدا از کارخانه)')+'</h2>'+
       '<div class="row big"><span>'+L('إجمالي الشخصي','Total personal','جمع شخصی')+'</span><span>'+fmt(d.personal)+'</span></div>'+
