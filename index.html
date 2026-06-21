@@ -4202,7 +4202,8 @@ function removePurchaseItem(i){
   renderPurchaseItems();
 }
 function updatePurchaseTotal(){
-  var total=purchaseItems.reduce(function(s,it){return s+((it.qty||0)*(it.price||0));},0);
+  var num=function(v){ var n=parseFloat(v); return isFinite(n)?n:0; };
+  var total=purchaseItems.reduce(function(s,it){return s+(num(it.qty)*num(it.price));},0);
   var disp=document.getElementById('p-total-display');
   if(disp) disp.textContent=total.toLocaleString()+' QAR';
   var hidden=document.getElementById('p-total');
@@ -4282,7 +4283,7 @@ function renderPurchaseItems(){
         '</select>'+
         '<input class="form-control" id="pi-price-'+i+'" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
       '</div>'+
-      '<div style="font-size:11px;color:var(--text2);text-align:left;margin-top:4px">'+((it.qty||0)*(it.price||0)).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:11px;color:var(--text2);text-align:left;margin-top:4px">'+(((parseFloat(it.qty)||0)*(parseFloat(it.price)||0))||0).toLocaleString()+' QAR</div>'+
     '</div>';
   }).join('');
   updatePurchaseTotal();
@@ -6130,7 +6131,11 @@ async function openPurchaseForRequest(reqId){
   _pendingReqId=reqId;
   // Pre-fill the first item with the request's item name and quantity
   try {
-    purchaseItems=[{invId:'__new__',name:r.item_name||'',qty:r.quantity||1,price:0,unit:'عدد',image:r.image||''}];
+    // r.quantity may be free text like "10 متر" — pull the first number out, default to 1
+    var qMatch=(r.quantity!=null?String(r.quantity):'').match(/[\d.]+/);
+    var qNum=qMatch?parseFloat(qMatch[0]):1;
+    if(!isFinite(qNum)||qNum<=0) qNum=1;
+    purchaseItems=[{invId:'__new__',name:r.item_name||'',qty:qNum,price:0,unit:'عدد',image:r.image||''}];
     renderPurchaseItems();
   } catch(e){}
 }
