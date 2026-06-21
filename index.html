@@ -6022,10 +6022,14 @@ async function renderRequests(){
   const reqs=await api('GET','purchase_requests','','?select=*&order=created_at.desc');
   allRequests=reqs||[];
   const isManagerOrBuyer = currentUser&&(currentUser.role==='manager'||currentUser.department==='مسئول خرید');
+  const isForeman = currentUser&&currentUser.department==='فورمن';
+  const canSeeAll = isManagerOrBuyer||isForeman;        // foreman also sees everyone's requests
+  const canApprove = isManagerOrBuyer||isForeman;       // foreman can approve/reject
+  const canBuy = isManagerOrBuyer||isForeman;           // foreman can also mark as bought
   var msBtn=document.getElementById('mat-shop-btn');
   if(msBtn) msBtn.style.display=(isManagerOrBuyer||(currentUser&&currentUser.department==='حسابدار'))?'':'none';
-  // Workers see only their own requests; manager/buyer see all
-  var list=isManagerOrBuyer?allRequests:allRequests.filter(r=>r.worker_name&&r.worker_name.indexOf(currentUser.name)>-1);
+  // Workers see only their own requests; manager/buyer/foreman see all
+  var list=canSeeAll?allRequests:allRequests.filter(r=>r.worker_name&&r.worker_name.indexOf(currentUser.name)>-1);
   // Bought requests move to History — hide them from the active list (unless history mode is on)
   if(reqHistoryMode){
     list=list.filter(function(r){return r.status==='bought';});
@@ -6047,12 +6051,12 @@ async function renderRequests(){
         </div>
         ${r.notes?`<div style="font-size:12px;color:var(--text2);margin-bottom:7px">${r.notes}</div>`:''}
         <div style="font-size:10px;color:var(--text3)">${r.created_at?r.created_at.slice(0,10):''}</div>
-        ${isManagerOrBuyer&&r.status==='pending'?`<div style="display:flex;gap:6px;margin-top:8px">
+        ${canApprove&&r.status==='pending'?`<div style="display:flex;gap:6px;margin-top:8px">
           <button class="btn btn-green btn-sm" onclick="updateRequest(${r.id},'approved')">✅ ${lang==='ar'?'موافقة':lang==='en'?'Approve':'تایید'}</button>
-          <button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button>
+          ${canBuy?`<button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button>`:''}
           <button class="btn btn-red btn-sm" onclick="updateRequest(${r.id},'rejected')">✕</button>
         </div>`:''}
-        ${isManagerOrBuyer&&r.status==='approved'?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button></div>`:''}
+        ${canBuy&&r.status==='approved'?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button></div>`:''}
         ${currentUser&&currentUser.role==='manager'?`<div style="margin-top:8px"><button class="btn btn-red btn-sm" onclick="deleteRequest(${r.id})">🗑️ ${lang==='ar'?'حذف':lang==='en'?'Delete':'حذف'}</button></div>`:''}
       </div>`).join('');
 }
