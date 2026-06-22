@@ -371,6 +371,7 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="page" id="page-staff">
     <button class="btn btn-primary btn-block" onclick="openAddStaffModal()" id="add-staff-btn" style="margin-bottom:8px;display:none">➕ <span id="add-staff-label">إضافة موظف / افزودن کارگر</span></button>
     <button class="btn btn-outline btn-block" onclick="openJobTitlesManager()" id="manage-titles-btn" style="margin-bottom:12px;display:none">⚙️ <span id="manage-titles-label">إدارة المسميات / مدیریت سمت‌ها</span></button>
+    <button class="btn btn-outline btn-block" onclick="showAllSalaryHistory()" id="all-salary-btn" style="margin-bottom:12px;display:none">📜 <span id="all-salary-label">سجل رواتب الجميع / تاریخچه‌ی حقوق همه</span></button>
     <div id="pending-users-section" style="display:none">
       <div class="section-title" id="sl-pending">در انتظار تایید</div>
       <div id="pending-list"></div>
@@ -5696,6 +5697,8 @@ async function renderStaff(){
   if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   var mtBtn=document.getElementById('manage-titles-btn');
   if(mtBtn) mtBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
+  var asBtn=document.getElementById('all-salary-btn');
+  if(asBtn) asBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   const sec=document.getElementById('pending-users-section');
   if(pending.length>0&&currentUser?.role==='manager'){
     sec.style.display='block';
@@ -5943,33 +5946,35 @@ function openStaffFile(id){
 function salaryDueInfo(u){
   var now=new Date(); now.setHours(0,0,0,0);
   var hire=new Date(u.hire_date); hire.setHours(0,0,0,0);
-  var payDay=hire.getDate(); // the day of month salary is paid (e.g. 20th)
-  var cand;
+  var payDay=hire.getDate(); // the day of month salary is paid (e.g. 12th)
+  // The pay day for the CURRENT month
+  var thisCycle=new Date(now.getFullYear(),now.getMonth(),payDay); thisCycle.setHours(0,0,0,0);
+  // If this month's pay day hasn't arrived yet, the relevant due date is this month's;
+  // it only becomes "overdue" once that day passes without payment.
+  var due=thisCycle;
+  // Has the worker already been paid for THIS cycle? Check last_salary_paid OR a salary
+  // transaction dated on/after this cycle's pay day.
+  var paidThisCycle=false;
   if(u.last_salary_paid){
-    // Next salary = one month after the last paid date
     var lp=new Date(u.last_salary_paid); lp.setHours(0,0,0,0);
-    cand=new Date(lp.getFullYear(),lp.getMonth()+1,payDay);
-    // advance until it's in the future (or current overdue cycle)
-    while(cand<now){
-      var nx=new Date(cand.getFullYear(),cand.getMonth()+1,payDay);
-      if(nx>now){ break; }
-      cand=nx;
-    }
-  } else {
-    // No payment recorded → assume prior months were paid; show the NEXT upcoming pay day from today.
-    // This month's pay day:
-    cand=new Date(now.getFullYear(),now.getMonth(),payDay);
-    // If this month's pay day already passed, the next one is next month
-    if(cand<now){
-      cand=new Date(now.getFullYear(),now.getMonth()+1,payDay);
-    }
-    // But never earlier than the hire date itself
-    if(cand<hire){
-      cand=new Date(hire.getFullYear(),hire.getMonth()+1,payDay);
-    }
+    if(lp>=thisCycle) paidThisCycle=true;
   }
-  var daysLeft=Math.ceil((cand-now)/(1000*60*60*24));
-  return {nextDate:cand.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0};
+  if(!paidThisCycle && typeof allTransactions!=='undefined'){
+    paidThisCycle=(allTransactions||[]).some(function(t){
+      if(t.type!=='expense'||t.category!=='salary') return false;
+      if((t.description||'').indexOf(u.name)<0) return false;
+      var td=new Date(t.created_at||t.date||0); td.setHours(0,0,0,0);
+      return td>=thisCycle;
+    });
+  }
+  if(paidThisCycle){
+    // already paid this cycle → next due is next month's pay day
+    due=new Date(now.getFullYear(),now.getMonth()+1,payDay); due.setHours(0,0,0,0);
+  }
+  // Never show a due date before the hire date
+  if(due<hire){ due=new Date(hire.getFullYear(),hire.getMonth()+1,payDay); due.setHours(0,0,0,0); }
+  var daysLeft=Math.ceil((due-now)/(1000*60*60*24));
+  return {nextDate:due.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0,paidThisCycle:paidThisCycle};
 }
 
 async function saveStaffFile(){
@@ -6095,6 +6100,50 @@ function showSalaryHistory(name){
   var box=document.createElement('div');
   box.style.cssText='background:var(--surface);color:var(--text);border-radius:16px;max-width:440px;width:100%;max-height:84vh;overflow:auto;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.4)';
   box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:700;font-size:16px">📜 '+L('سجل رواتب','Salary history','تاریخچه‌ی حقوق')+' — '+name+'</div><button class="btn btn-sm" style="background:var(--surface2);color:var(--text);padding:4px 11px;border-radius:50%" onclick="var o=document.getElementById(\'salHistOverlay\');if(o)o.remove()">✕</button></div>'+body;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+}
+
+// Show ALL workers' salary payments together (manager view)
+function showAllSalaryHistory(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
+  var rows=(allTransactions||[]).filter(function(t){
+    return t.type==='expense' && t.category==='salary';
+  }).sort(function(a,b){
+    var da=new Date(a.created_at||a.date||0), db=new Date(b.created_at||b.date||0);
+    return db-da;
+  });
+  var total=rows.reduce(function(s,t){return s+(t.amount||0);},0);
+  var body;
+  if(rows.length===0){
+    body='<div style="padding:18px;text-align:center;color:var(--text2)">'+L('لا يوجد سجل رواتب','No salary history yet','هنوز پرداختی ثبت نشده')+'</div>';
+  } else {
+    body='<div style="display:flex;justify-content:space-between;font-weight:700;padding:8px 4px;border-bottom:2px solid var(--border);margin-bottom:4px"><span>'+L('إجمالي كل الرواتب','Total all salaries','جمع کل حقوق‌ها')+'</span><span style="color:var(--green)">'+fmt(total)+'</span></div>';
+    // group by month (YYYY-MM)
+    var groups={};
+    rows.forEach(function(t){
+      var dt=(t.created_at||t.date||'').slice(0,10);
+      var ym=dt.slice(0,7)||'—';
+      (groups[ym]=groups[ym]||[]).push({dt:dt,t:t});
+    });
+    Object.keys(groups).sort().reverse().forEach(function(ym){
+      var mTotal=groups[ym].reduce(function(s,x){return s+(x.t.amount||0);},0);
+      body+='<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;margin:10px 0 4px;display:flex;justify-content:space-between;font-weight:700;font-size:13px"><span>'+ym+'</span><span>'+fmt(mTotal)+'</span></div>';
+      body+=groups[ym].map(function(x){
+        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:13px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
+          '<div style="flex:1;min-width:0"><div style="font-weight:600">'+(x.t.description||'')+'</div></div>'+
+          '<div style="text-align:left;white-space:nowrap;margin-right:8px"><div style="color:var(--green);font-weight:600">'+fmt(x.t.amount)+'</div><div style="font-size:10px;color:var(--text3)">'+x.dt+'</div></div></div>';
+      }).join('');
+    });
+  }
+  var ov=document.createElement('div');
+  ov.id='allSalHistOverlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--surface);color:var(--text);border-radius:16px;max-width:460px;width:100%;max-height:86vh;overflow:auto;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:700;font-size:16px">📜 '+L('سجل رواتب الجميع','All salary history','تاریخچه‌ی حقوق همه')+'</div><button class="btn btn-sm" style="background:var(--surface2);color:var(--text);padding:4px 11px;border-radius:50%" onclick="var o=document.getElementById(\'allSalHistOverlay\');if(o)o.remove()">✕</button></div>'+body;
   ov.appendChild(box);
   document.body.appendChild(ov);
 }
