@@ -1143,6 +1143,20 @@ function workerTag(o){
   if(o.work_started) return ' · ▶️ '+name;
   return ' · 👷 '+name;
 }
+// Worker avatar (photo if available, else initial) — used next to each order's worker
+function workerAvatar(o){
+  if(!o) return '';
+  if(o.status==='delivered'||o.status==='pending_payment'||o.status==='paid') return '';
+  var name=o.assigned_worker||o.worker;
+  if(!name) return '';
+  var u=(allUsers||[]).find(function(x){return x.name===name;});
+  var statusIcon=o.work_done?'✅':o.work_started?'▶️':'👷';
+  var pic=(u&&u.photo)
+    ? '<img src="'+u.photo+'" style="width:24px;height:24px;border-radius:50%;object-fit:cover;flex-shrink:0">'
+    : '<div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#000;flex-shrink:0">'+name.charAt(0).toUpperCase()+'</div>';
+  return '<div style="display:flex;align-items:center;gap:5px;margin-top:4px">'+pic+
+    '<span style="font-size:11px;color:var(--text2)">'+statusIcon+' '+name+'</span></div>';
+}
 function stageOrStatusLabel(o){
   if(!o) return '-';
   if(o.status==='pending_payment'||o.status==='paid'||!o.current_stage){
@@ -2022,7 +2036,8 @@ function renderOrders(){
           return '<div onclick="openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:8px;border-radius:10px;background:var(--surface2);margin-bottom:6px;cursor:pointer">'+
             orderCardThumb(o)+
             '<div style="flex:1"><div style="font-size:13px;font-weight:600">'+o.product+'</div>'+
-            '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+(workerTag(o))+'</div>'+
+            '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+daysLeftLabel(o.delivery_date)+'</div>'+
+            workerAvatar(o)+
             (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
             '</div>'+
             '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
@@ -2448,7 +2463,8 @@ function openInvoiceFolder(invId){
     return '<div onclick="closeModal(\'invoiceFolderModal\');openOrderDetail('+o.id+')" style="display:flex;gap:10px;align-items:center;padding:9px;border-radius:10px;background:var(--surface2);margin-bottom:7px;cursor:pointer">'+
       thumb+
       '<div style="flex:1"><div style="font-size:13px;font-weight:700">'+o.product+'</div>'+
-      '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+workerTag(o)+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:11px;color:var(--text2)">'+stageOrStatusLabel(o)+daysLeftLabel(o.delivery_date)+' · '+(o.total_price||0).toLocaleString()+' QAR</div>'+
+      workerAvatar(o)+
       (o.progress>0?'<div class="progress-bar" style="margin-top:4px"><div class="progress-fill" style="width:'+o.progress+'%"></div></div>':'')+
       '</div>'+
       '<span class="badge '+(sm[o.status]||'badge-blue')+'" style="font-size:9px">'+T('status_'+(o.status||'building'))+'</span>'+
