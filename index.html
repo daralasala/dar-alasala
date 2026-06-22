@@ -5931,6 +5931,7 @@ function openStaffFile(id){
     '<input type="hidden" id="sf-id" value="'+u.id+'">'+
     '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveStaffFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
     (u.salary>0?'<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="payStaffSalary('+u.id+')">💰 '+L('دفع الراتب (يُخصم من المالية)','Pay salary (deduct from finance)','پرداخت حقوق (از مالی کم می‌شود)')+'</button>':'')+
+    '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="showSalaryHistory(\''+(u.name||'').replace(/'/g,"\\'")+'\')">📜 '+L('سجل الرواتب','Salary history','تاریخچه‌ی حقوق')+'</button>'+
     ((u.ticket_cost||0)>0?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="payStaffTicket('+u.id+')">✈️ '+L('تسجيل التذكرة كمصروف للشركة','Log ticket as company expense','ثبت بلیت به‌عنوان هزینه‌ی شرکت')+'</button>':'')+
     '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="toggleStaffPause('+u.id+')">'+(u.is_paused?'▶️ '+L('استئناف (عاد من السفر)','Resume (back from travel)','ادامه (برگشت از سفر)'):'⏸️ '+L('إيقاف مؤقت (سفر)','Pause (travel)','توقف موقت (سفر)'))+'</button>'+
     ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="resetStaffPassword('+u.id+')">🔑 '+L('تعيين كلمة مرور جديدة','Set new password','تعیین رمز جدید')+'</button>':'')+
@@ -6059,6 +6060,43 @@ async function payStaffTicket(id){
   closeModal('staffModal');
   await loadAll();
   showToast(L('تم تسجيل التذكرة كمصروف','Ticket logged as expense','بلیت به‌عنوان هزینه ثبت شد'),'success');
+}
+
+// Show this worker's salary payment history (read from finance transactions, category=salary)
+function showSalaryHistory(name){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
+  // salary transactions whose description contains this worker's name
+  var rows=(allTransactions||[]).filter(function(t){
+    return t.type==='expense' && t.category==='salary' && (t.description||'').indexOf(name)>-1;
+  }).sort(function(a,b){
+    var da=new Date(a.created_at||a.date||0), db=new Date(b.created_at||b.date||0);
+    return db-da;
+  });
+  var total=rows.reduce(function(s,t){return s+(t.amount||0);},0);
+  var body;
+  if(rows.length===0){
+    body='<div style="padding:18px;text-align:center;color:var(--text2)">'+L('لا يوجد سجل رواتب','No salary history yet','هنوز پرداختی ثبت نشده')+'</div>';
+  } else {
+    body='<div style="display:flex;justify-content:space-between;font-weight:700;padding:8px 4px;border-bottom:2px solid var(--border);margin-bottom:4px"><span>'+L('الإجمالي المدفوع','Total paid','جمع پرداخت‌شده')+'</span><span style="color:var(--green)">'+fmt(total)+'</span></div>';
+    body+=rows.map(function(t){
+      var dt=(t.created_at||t.date||'').slice(0,10);
+      return '<div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:13px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
+        '<div><div style="font-weight:600">'+fmt(t.amount)+'</div>'+
+        '<div style="font-size:11px;color:var(--text3)">'+(t.description||'')+'</div></div>'+
+        '<span style="font-size:12px;color:var(--text2);white-space:nowrap">'+dt+'</span></div>';
+    }).join('');
+  }
+  // simple overlay popup
+  var ov=document.createElement('div');
+  ov.id='salHistOverlay';
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:100000;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.onclick=function(e){ if(e.target===ov) ov.remove(); };
+  var box=document.createElement('div');
+  box.style.cssText='background:var(--surface);color:var(--text);border-radius:16px;max-width:440px;width:100%;max-height:84vh;overflow:auto;padding:18px;box-shadow:0 8px 30px rgba(0,0,0,.4)';
+  box.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div style="font-weight:700;font-size:16px">📜 '+L('سجل رواتب','Salary history','تاریخچه‌ی حقوق')+' — '+name+'</div><button class="btn btn-sm" style="background:var(--surface2);color:var(--text);padding:4px 11px;border-radius:50%" onclick="var o=document.getElementById(\'salHistOverlay\');if(o)o.remove()">✕</button></div>'+body;
+  ov.appendChild(box);
+  document.body.appendChild(ov);
 }
 
 async function toggleStaffPause(id){
@@ -6953,10 +6991,13 @@ function renderNotifications(){
     allUsers.filter(u=>u.status==='active'&&u.salary>0&&u.hire_date&&!u.is_paused).forEach(u=>{
       var d=salaryDueInfo(u);
       if(d.daysLeft<=5){
+        var lateDays=Math.abs(d.daysLeft);
         var txt=d.overdue
-          ? (lang==='ar'?'الراتب متأخر!':lang==='en'?'Salary overdue!':'حقوق عقب افتاده!')
+          ? (lang==='ar'?('الراتب متأخر '+lateDays+' يوم!'):lang==='en'?('Salary '+lateDays+'d overdue!'):('حقوق '+lateDays+' روز تأخیر!'))
           : (lang==='ar'?('الراتب خلال '+d.daysLeft+' يوم'):lang==='en'?('Salary due in '+d.daysLeft+'d'):('سررسید حقوق تا '+d.daysLeft+' روز'));
-        html+='<div class="notif-item unread" style="border-right:3px solid var(--accent)" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">💰</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:var(--accent)">'+txt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+(u.salary||0).toLocaleString()+' QAR</div></div></div>';
+        var brdr=d.overdue?'var(--red)':'var(--accent)';
+        var clr=d.overdue?'var(--red)':'var(--accent)';
+        html+='<div class="notif-item unread" style="border-right:3px solid '+brdr+'" onclick="openStaffFile('+u.id+')"><div style="font-size:18px">💰</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:'+clr+'">'+txt+'</div><div style="font-size:12px;color:var(--text2)">'+u.name+' · '+(u.salary||0).toLocaleString()+' QAR'+(d.overdue?(' · '+(lang==='ar'?'تاريخ الاستحقاق':lang==='en'?'due':'سررسید')+' '+d.nextDate):'')+'</div></div></div>';
       }
     });
     allUsers.filter(u=>u.status==='active'&&u.qid_expiry).forEach(u=>{
