@@ -5931,6 +5931,7 @@ function openStaffFile(id){
     '<input type="hidden" id="sf-id" value="'+u.id+'">'+
     '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="saveStaffFile()">💾 '+L('حفظ','Save','ذخیره')+'</button>'+
     (u.salary>0?'<button class="btn btn-green btn-block" style="margin-bottom:8px" onclick="payStaffSalary('+u.id+')">💰 '+L('دفع الراتب (يُخصم من المالية)','Pay salary (deduct from finance)','پرداخت حقوق (از مالی کم می‌شود)')+'</button>':'')+
+    ((u.ticket_cost||0)>0?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="payStaffTicket('+u.id+')">✈️ '+L('تسجيل التذكرة كمصروف للشركة','Log ticket as company expense','ثبت بلیت به‌عنوان هزینه‌ی شرکت')+'</button>':'')+
     '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="toggleStaffPause('+u.id+')">'+(u.is_paused?'▶️ '+L('استئناف (عاد من السفر)','Resume (back from travel)','ادامه (برگشت از سفر)'):'⏸️ '+L('إيقاف مؤقت (سفر)','Pause (travel)','توقف موقت (سفر)'))+'</button>'+
     ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="resetStaffPassword('+u.id+')">🔑 '+L('تعيين كلمة مرور جديدة','Set new password','تعیین رمز جدید')+'</button>':'')+
     '<button class="btn btn-red btn-block" onclick="removeUser('+u.id+');closeModal(\'staffModal\')">🗑️ '+L('حذف الموظف','Remove employee','حذف کارگر')+'</button>';
@@ -6045,6 +6046,19 @@ async function payStaffSalary(id){
   closeModal('staffModal');
   await loadAll();
   showToast(lang==='ar'?'تم دفع الراتب':lang==='en'?'Salary paid':'حقوق پرداخت شد','success');
+}
+
+// Record the worker's ticket cost as a COMPANY expense (not deducted from worker's salary)
+async function payStaffTicket(id){
+  var u=allUsers.find(x=>x.id===id); if(!u) return;
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var ticket=u.ticket_cost||0;
+  if(ticket<=0){ showToast(L('لا توجد تكلفة تذكرة','No ticket cost','هزینه بلیطی ثبت نشده'),'error'); return; }
+  if(!confirm(u.name+'\n\n'+L('تسجيل تكلفة التذكرة كمصروف للشركة','Log ticket cost as company expense','ثبت هزینه بلیت به‌عنوان هزینه‌ی شرکت')+': '+ticket.toLocaleString()+' QAR')) return;
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:ticket,description:(lang==='ar'?'تذكرة سفر ':lang==='en'?'Travel ticket ':'بلیت سفر ')+u.name,category:'حمل‌ونقل'})});
+  closeModal('staffModal');
+  await loadAll();
+  showToast(L('تم تسجيل التذكرة كمصروف','Ticket logged as expense','بلیت به‌عنوان هزینه ثبت شد'),'success');
 }
 
 async function toggleStaffPause(id){
