@@ -5947,13 +5947,18 @@ function salaryDueInfo(u){
   var now=new Date(); now.setHours(0,0,0,0);
   var hire=new Date(u.hire_date); hire.setHours(0,0,0,0);
   var payDay=hire.getDate(); // the day of month salary is paid (e.g. 12th)
+  // build a date for (year, month, payDay) but clamp payDay to that month's last day
+  var mkDue=function(y,m){
+    var lastDay=new Date(y,m+1,0).getDate();
+    var dd=Math.min(payDay,lastDay);
+    var dt=new Date(y,m,dd); dt.setHours(0,0,0,0); return dt;
+  };
+  // First salary is only due ONE FULL MONTH after the hire date.
+  var firstDue=mkDue(hire.getFullYear(),hire.getMonth()+1);
   // The pay day for the CURRENT month
-  var thisCycle=new Date(now.getFullYear(),now.getMonth(),payDay); thisCycle.setHours(0,0,0,0);
-  // If this month's pay day hasn't arrived yet, the relevant due date is this month's;
-  // it only becomes "overdue" once that day passes without payment.
+  var thisCycle=mkDue(now.getFullYear(),now.getMonth());
   var due=thisCycle;
-  // Has the worker already been paid for THIS cycle? Check last_salary_paid OR a salary
-  // transaction dated on/after this cycle's pay day.
+  // Has the worker already been paid for THIS cycle? Check last_salary_paid OR a salary tx.
   var paidThisCycle=false;
   if(u.last_salary_paid){
     var lp=new Date(u.last_salary_paid); lp.setHours(0,0,0,0);
@@ -5968,11 +5973,10 @@ function salaryDueInfo(u){
     });
   }
   if(paidThisCycle){
-    // already paid this cycle → next due is next month's pay day
-    due=new Date(now.getFullYear(),now.getMonth()+1,payDay); due.setHours(0,0,0,0);
+    due=mkDue(now.getFullYear(),now.getMonth()+1);
   }
-  // Never show a due date before the hire date
-  if(due<hire){ due=new Date(hire.getFullYear(),hire.getMonth()+1,payDay); due.setHours(0,0,0,0); }
+  // Never earlier than the first due date (one full month after hire)
+  if(due<firstDue){ due=firstDue; }
   var daysLeft=Math.ceil((due-now)/(1000*60*60*24));
   return {nextDate:due.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0,paidThisCycle:paidThisCycle};
 }
