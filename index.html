@@ -1916,11 +1916,17 @@ function openFinAnalysis(){
   var purchPaidSum=purchPaid.reduce(function(s,t){return s+(t.amount||0);},0);
   var purchCreditSum=purchCredit.reduce(function(s,t){return s+(t.amount||0);},0);
 
-  // 2) EXPENSES (type=expense, grouped by category)
+  // 2) EXPENSES (type=expense, grouped by category) — from transactions
   var exp=T.filter(function(t){return t.type==='expense';});
   var expByCat={};
   exp.forEach(function(t){ var c=t.category||'سایر'; expByCat[c]=(expByCat[c]||0)+(t.amount||0); });
   var expSum=exp.reduce(function(s,t){return s+(t.amount||0);},0);
+  // 2b) FIXED expenses (rent, etc.) — separate table
+  var fixedSum=(allFixedExp||[]).reduce(function(s,e){return s+(e.amount||0);},0);
+  var fixedRows={};
+  (allFixedExp||[]).forEach(function(e){ var c=e.name||e.category||'ثابت'; fixedRows[c]=(fixedRows[c]||0)+(e.amount||0); });
+  // 2c) PERSONAL expenses — separate table (not factory cost)
+  var personalSum=(allPersonalExp||[]).reduce(function(s,e){return s+(e.amount||0);},0);
 
   // 3) INCOME RECEIVED (type=income — actual money in)
   var inc=T.filter(function(t){return t.type==='income';});
@@ -1965,13 +1971,21 @@ function openFinAnalysis(){
   // 1) purchases
   html+=card('var(--blue)', '🛒 '+L('المشتريات','Purchases','خریدها'), purchPaidSum+purchCreditSum,
     '<div style="font-size:11px;color:var(--text2)">'+L('مدفوع','Paid','پرداخت‌شده')+': '+fmt(purchPaidSum)+' ('+purchPaid.length+') · '+L('آجل','Credit','قرضی')+': '+fmt(purchCreditSum)+' ('+purchCredit.length+')</div>');
-  // 2) expenses
-  html+=card('var(--red)', '💸 '+L('المصاريف','Expenses','هزینه‌ها'), expSum, catRows(expByCat));
+  // 2) expenses (variable, from transactions)
+  html+=card('var(--red)', '💸 '+L('مصاريف متغيرة','Variable expenses','هزینه‌های متغیر'), expSum, catRows(expByCat));
+  // 2b) fixed expenses
+  html+=card('var(--red)', '🔁 '+L('مصاريف ثابتة (إيجار..)','Fixed expenses (rent..)','هزینه‌های ثابت (اجاره..)'), fixedSum, catRows(fixedRows));
+  // 2c) personal expenses
+  html+=card('var(--accent)', '👤 '+L('مصاريف شخصية','Personal expenses','مخارج شخصی'), personalSum,
+    '<div style="font-size:11px;color:var(--text2)">'+(allPersonalExp?allPersonalExp.length:0)+' '+L('عملية','items','مورد')+' · '+L('منفصلة عن المصنع','separate from factory','جدا از کارخانه')+'</div>');
   // summary
+  var totalExpenseAll=expSum+fixedSum; // factory expenses (not personal)
   html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px;margin-top:6px">'+
     '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('الدخل المستلم','Income in','درآمد دریافتی')+'</span><span style="color:var(--green)">'+fmt(incSum)+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('مشتريات مدفوعة + مصاريف','Paid purchases + expenses','خرید پرداختی + هزینه')+'</span><span style="color:var(--red)">-'+fmt(purchPaidSum+expSum)+'</span></div>'+
-    '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:7px;margin-top:4px"><span>'+L('الصافي','Net','خالص')+'</span><span style="color:'+((incSum-purchPaidSum-expSum)>=0?'var(--green)':'var(--red)')+'">'+fmt(incSum-purchPaidSum-expSum)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('مشتريات مدفوعة','Paid purchases','خرید پرداختی')+'</span><span style="color:var(--red)">-'+fmt(purchPaidSum)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('مصاريف (متغيرة+ثابتة)','Expenses (var+fixed)','هزینه (متغیر+ثابت)')+'</span><span style="color:var(--red)">-'+fmt(totalExpenseAll)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:7px;margin-top:4px"><span>'+L('صافي المصنع','Factory net','خالص کارخانه')+'</span><span style="color:'+((incSum-purchPaidSum-totalExpenseAll)>=0?'var(--green)':'var(--red)')+'">'+fmt(incSum-purchPaidSum-totalExpenseAll)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:6px 0 0;color:var(--text2)"><span>'+L('بعد المصاريف الشخصية','After personal','بعد از مخارج شخصی')+'</span><span>'+fmt(incSum-purchPaidSum-totalExpenseAll-personalSum)+'</span></div>'+
   '</div>';
   // duplicates warning
   if(dupes.length){
