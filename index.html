@@ -353,6 +353,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">بدهی‌ها (طلبکارها)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--green);color:var(--green)" onclick="recoverMissingPrepayIncome()" id="fb-recover">🔧 <span id="fb-recover-lbl">بازسازی درآمدهای گم‌شده</span></button>
+    <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingPurchaseExpenses()" id="fb-recover-exp">🔧 <span id="fb-recover-exp-lbl">بازسازی هزینه‌های خرید گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
@@ -857,6 +858,14 @@ body.en .search-icon{right:auto;left:10px;}
     </div>
     <div id="dbt-list"></div>
     <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="toggleDebtsPaid()" id="dbt-toggle-paid">👁️ نمایش پرداخت‌شده‌ها</button></div>
+  </div>
+</div>
+
+<!-- FINANCIAL ANALYSIS MODAL (read-only) -->
+<div class="modal-overlay modal-top" id="finAnalysisModal">
+  <div class="modal" style="max-width:600px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">🔍 <span id="fa-title">تحلیل مالی کامل</span></div><button class="modal-close" onclick="closeModal('finAnalysisModal')">✕</button></div>
+    <div id="fa-body"></div>
   </div>
 </div>
 
@@ -1766,6 +1775,8 @@ function applyInvoiceVisibility(){
   if(rbtn) rbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var rebtn=document.getElementById('fb-recover-exp');
   if(rebtn) rebtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
+  var anbtn=document.getElementById('fb-analysis');
+  if(anbtn) anbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
 }
 
 // ===== DEBTS (money the company owes to others) — manager only =====
@@ -1889,6 +1900,90 @@ async function deleteDebt(id){
   catch(e){ showToast('خطا: '+(e.message||e),'error'); }
 }
 function toggleDebtsPaid(){ _debtsShowPaid=!_debtsShowPaid; renderDebts(); }
+
+// ===== Read-only financial analysis: shows the FULL picture clearly =====
+function openFinAnalysis(){
+  if(!(currentUser&&currentUser.role==='manager')){ showToast('غير مصرح','error'); return; }
+  var fmt=function(n){ return Math.round((n||0)).toLocaleString()+' QAR'; };
+  var T=allTransactions||[];
+  var O=allOrders||[];
+  var INV=allInvoices||[];
+
+  // 1) PURCHASES (type=purchase)
+  var purch=T.filter(function(t){return t.type==='purchase';});
+  var purchPaid=purch.filter(function(t){return !(t.is_credit&&!t.paid);});
+  var purchCredit=purch.filter(function(t){return t.is_credit&&!t.paid;});
+  var purchPaidSum=purchPaid.reduce(function(s,t){return s+(t.amount||0);},0);
+  var purchCreditSum=purchCredit.reduce(function(s,t){return s+(t.amount||0);},0);
+
+  // 2) EXPENSES (type=expense, grouped by category)
+  var exp=T.filter(function(t){return t.type==='expense';});
+  var expByCat={};
+  exp.forEach(function(t){ var c=t.category||'سایر'; expByCat[c]=(expByCat[c]||0)+(t.amount||0); });
+  var expSum=exp.reduce(function(s,t){return s+(t.amount||0);},0);
+
+  // 3) INCOME RECEIVED (type=income — actual money in)
+  var inc=T.filter(function(t){return t.type==='income';});
+  var incSum=inc.reduce(function(s,t){return s+(t.amount||0);},0);
+
+  // 4) INCOME REMAINING (what customers still owe = invoice totals - prepay)
+  var totalSales=0, totalPrepay=0;
+  INV.forEach(function(iv){
+    var sub=O.filter(function(o){return String(o.invoice_id)===String(iv.id);}).reduce(function(s,o){return s+(o.total_price||0);},0);
+    var grand=Math.max(0,sub-(iv.discount||0));
+    totalSales+=grand;
+    totalPrepay+=(iv.prepay||0);
+  });
+  var remaining=totalSales-totalPrepay;
+
+  // detect possible DUPLICATE income (same amount+desc)
+  var seen={}, dupes=[];
+  inc.forEach(function(t){
+    var k=(t.amount||0)+'|'+(t.description||'');
+    if(seen[k]) dupes.push(t); else seen[k]=true;
+  });
+
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var catRows=function(obj){
+    var ks=Object.keys(obj); if(!ks.length) return '<div style="font-size:12px;color:var(--text2);padding:4px">—</div>';
+    return ks.map(function(k){return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 6px;border-bottom:1px solid var(--border)"><span>'+catLabel(k)+'</span><span>'+fmt(obj[k])+'</span></div>';}).join('');
+  };
+  var card=function(color,title,big,sub){
+    return '<div style="background:var(--surface2);border-radius:12px;padding:13px;margin-bottom:10px;border-right:4px solid '+color+'">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:700;font-size:14px">'+title+'</span>'+
+      '<span style="font-weight:800;font-size:17px;color:'+color+'">'+fmt(big)+'</span></div>'+
+      (sub?('<div style="margin-top:8px">'+sub+'</div>'):'')+'</div>';
+  };
+
+  var html='';
+  // 3) income received
+  html+=card('var(--green)', '💰 '+L('الدخل المستلم (نقداً)','Income received','درآمد دریافت‌شده'), incSum,
+    '<div style="font-size:11px;color:var(--text2)">'+inc.length+' '+L('عملية','transactions','تراکنش')+'</div>');
+  // 4) income remaining
+  html+=card('var(--orange)', '⏳ '+L('باقي على العملاء','Customers still owe','درآمد باقی‌مانده (طلب از مشتری)'), remaining,
+    '<div style="font-size:11px;color:var(--text2)">'+L('إجمالي المبيعات','Total sales','کل فروش')+': '+fmt(totalSales)+' · '+L('مدفوع مقدماً','Prepaid','پیش‌پرداخت')+': '+fmt(totalPrepay)+'</div>');
+  // 1) purchases
+  html+=card('var(--blue)', '🛒 '+L('المشتريات','Purchases','خریدها'), purchPaidSum+purchCreditSum,
+    '<div style="font-size:11px;color:var(--text2)">'+L('مدفوع','Paid','پرداخت‌شده')+': '+fmt(purchPaidSum)+' ('+purchPaid.length+') · '+L('آجل','Credit','قرضی')+': '+fmt(purchCreditSum)+' ('+purchCredit.length+')</div>');
+  // 2) expenses
+  html+=card('var(--red)', '💸 '+L('المصاريف','Expenses','هزینه‌ها'), expSum, catRows(expByCat));
+  // summary
+  html+='<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px;margin-top:6px">'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('الدخل المستلم','Income in','درآمد دریافتی')+'</span><span style="color:var(--green)">'+fmt(incSum)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0"><span>'+L('مشتريات مدفوعة + مصاريف','Paid purchases + expenses','خرید پرداختی + هزینه')+'</span><span style="color:var(--red)">-'+fmt(purchPaidSum+expSum)+'</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:15px;font-weight:800;border-top:2px solid var(--border);padding-top:7px;margin-top:4px"><span>'+L('الصافي','Net','خالص')+'</span><span style="color:'+((incSum-purchPaidSum-expSum)>=0?'var(--green)':'var(--red)')+'">'+fmt(incSum-purchPaidSum-expSum)+'</span></div>'+
+  '</div>';
+  // duplicates warning
+  if(dupes.length){
+    html+='<div style="background:rgba(224,36,94,.12);border:1px solid var(--red);border-radius:10px;padding:11px;margin-top:10px">'+
+      '<div style="font-weight:700;color:var(--red);font-size:13px">⚠️ '+L('دخل مكرر محتمل','Possible duplicate income','درآمد احتمالاً تکراری')+': '+dupes.length+'</div>'+
+      dupes.map(function(t){return '<div style="font-size:11px;color:var(--text2);margin-top:4px">'+fmt(t.amount)+' · '+(t.description||'')+'</div>';}).join('')+
+    '</div>';
+  }
+  document.getElementById('fa-body').innerHTML=html;
+  var t=document.getElementById('fa-title'); if(t) t.textContent=L('تحليل مالي كامل','Full financial analysis','تحلیل مالی کامل');
+  openModal('finAnalysisModal');
+}
 
 // One-time repair: for invoices whose items are already PAID but whose prepay income
 // was never recorded (old bug), add the missing income transaction.
