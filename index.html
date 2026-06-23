@@ -355,6 +355,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--green);color:var(--green)" onclick="recoverMissingPrepayIncome()" id="fb-recover">🔧 <span id="fb-recover-lbl">بازسازی درآمدهای گم‌شده</span></button>
     <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingPurchaseExpenses()" id="fb-recover-exp">🔧 <span id="fb-recover-exp-lbl">بازسازی هزینه‌های خرید گم‌شده</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingSalaries()" id="fb-recover-sal">🔧 <span id="fb-recover-sal-lbl">بازسازی حقوق‌های گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
@@ -1775,6 +1776,8 @@ function applyInvoiceVisibility(){
   if(rbtn) rbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var rebtn=document.getElementById('fb-recover-exp');
   if(rebtn) rebtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
+  var rsbtn=document.getElementById('fb-recover-sal');
+  if(rsbtn) rsbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var anbtn=document.getElementById('fb-analysis');
   if(anbtn) anbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
 }
@@ -2067,6 +2070,30 @@ async function recoverMissingPurchaseExpenses(){
   await loadAll();
   renderFinance();
   showToast(L('تم استرجاع '+toAdd.length+' فاتورة','Recovered '+toAdd.length+' purchases','‌'+toAdd.length+' فاکتور خرید بازسازی شد'),'success');
+}
+
+// One-time repair: for workers who have been paid (last_salary_paid set) but whose
+// salary expense transaction is missing, recreate it.
+async function recoverMissingSalaries(){
+  if(!(currentUser&&currentUser.role==='manager')){ return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var salaryTx=(allTransactions||[]).filter(function(t){return t.type==='expense'&&t.category==='salary';});
+  var toAdd=[];
+  (allUsers||[]).forEach(function(u){
+    if(!u||!u.last_salary_paid||!(u.salary>0)) return;
+    // is there already a salary transaction for this worker?
+    var has=salaryTx.some(function(t){return (t.description||'').indexOf(u.name)>-1;});
+    if(!has){ toAdd.push({amount:u.salary,name:u.name}); }
+  });
+  if(toAdd.length===0){ showToast(L('لا توجد رواتب ناقصة','No missing salaries','حقوق گم‌شده‌ای نیست'),'info'); return; }
+  var sum=toAdd.reduce(function(s,x){return s+x.amount;},0);
+  if(!confirm(L('استرجاع '+toAdd.length+' راتب بمجموع '+sum.toLocaleString()+' ر.ق؟','Recover '+toAdd.length+' salaries totaling '+sum.toLocaleString()+' QAR?','بازسازی '+toAdd.length+' حقوق به جمع '+sum.toLocaleString()+' ریال؟'))) return;
+  for(var i=0;i<toAdd.length;i++){
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:toAdd[i].amount,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+toAdd[i].name,category:'salary'})});
+  }
+  await loadAll();
+  renderFinance();
+  showToast(L('تم استرجاع '+toAdd.length+' راتب','Recovered '+toAdd.length+' salaries','‌'+toAdd.length+' حقوق بازسازی شد'),'success');
 }
 
 function enterApp(){
