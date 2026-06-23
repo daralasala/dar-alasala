@@ -1902,8 +1902,11 @@ async function deleteDebt(id){
 function toggleDebtsPaid(){ _debtsShowPaid=!_debtsShowPaid; renderDebts(); }
 
 // ===== Read-only financial analysis: shows the FULL picture clearly =====
-function openFinAnalysis(){
+async function openFinAnalysis(){
   if(!(currentUser&&currentUser.role==='manager')){ showToast('غير مصرح','error'); return; }
+  // make sure fixed & personal expense tables are loaded fresh
+  try { allFixedExp=await api('GET','fixed_expenses','','?select=*&order=created_at.desc')||[]; } catch(e){}
+  try { allPersonalExp=await api('GET','personal_expenses','','?select=*&order=expense_date.desc&limit=300')||[]; } catch(e){}
   var fmt=function(n){ return Math.round((n||0)).toLocaleString()+' QAR'; };
   var T=allTransactions||[];
   var O=allOrders||[];
