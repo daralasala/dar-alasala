@@ -350,6 +350,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
@@ -4257,9 +4258,30 @@ async function openPurchaseModal(){
       allInventory=inv||[];
     }
   } catch(e){}
+  _skipInventory=false;       // normal purchase -> adds to inventory
   resetPurchaseItems();
   var pinv=document.getElementById('p-invno'); if(pinv) pinv.value='';
   _pendingReqId=null;
+  var ttl=document.getElementById('pm-title');
+  if(ttl) ttl.textContent=(lang==='ar'?'🛒 تسجيل شراء':lang==='en'?'🛒 Record purchase':'🛒 ثبت خرید');
+  openModal('purchaseModal');
+}
+
+// Old purchases: record the expense WITHOUT touching inventory (for past invoices)
+var _skipInventory=false;
+async function openOldPurchaseModal(){
+  try {
+    if(!allInventory || allInventory.length===0){
+      var inv=await api('GET','inventory','','?select=*&order=name.asc');
+      allInventory=inv||[];
+    }
+  } catch(e){}
+  _skipInventory=true;        // OLD purchase -> does NOT add to inventory
+  resetPurchaseItems();
+  var pinv=document.getElementById('p-invno'); if(pinv) pinv.value='';
+  _pendingReqId=null;
+  var ttl=document.getElementById('pm-title');
+  if(ttl) ttl.textContent=(lang==='ar'?'📁 فاتورة قديمة (بدون مخزن)':lang==='en'?'📁 Old invoice (no inventory)':'📁 فاکتور قدیمی (بدون انبار)');
   openModal('purchaseModal');
 }
 function resetPurchaseItems(){
@@ -4396,7 +4418,8 @@ async function savePurchase(){
   const trans=await tRes.json();
   if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); return; }
   await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
-  // 2) Add each item to inventory (existing -> add qty; new -> create)
+  // 2) Add each item to inventory (existing -> add qty; new -> create) — SKIPPED for old purchases
+  if(!_skipInventory)
   for(var i=0;i<validItems.length;i++){
     var it=validItems[i];
     if(it.invId!=='__new__'){
@@ -4429,7 +4452,10 @@ async function savePurchase(){
   await loadAll();
   renderFinance();
   if(typeof renderRequests==='function') renderRequests();
-  showToast(L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
+  showToast(_skipInventory
+    ? L('تم تسجيل الفاتورة القديمة (بدون مخزن)','Old invoice saved (no inventory)','فاکتور قدیمی ثبت شد (بدون انبار)')
+    : L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
+  _skipInventory=false;
   // reset
   resetPurchaseItems();
   document.getElementById('p-due').value='';
