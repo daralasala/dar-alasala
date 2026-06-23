@@ -4504,7 +4504,9 @@ function renderPurchaseItems(){
   try { if(typeof autoTranslateLabels==='function') autoTranslateLabels(lang); } catch(e){}
 }
 
+var _savingPurchase=false;
 async function savePurchase(){
+  if(_savingPurchase) return; // prevent double-submit
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   // Read all current field values from the DOM into the model first
   for(var s=0;s<purchaseItems.length;s++){ syncPurchaseRowFromDOM(s); }
@@ -4530,10 +4532,11 @@ async function savePurchase(){
   var itemsSummary=validItems.map(function(it){return it.name+' ('+it.qty+' '+it.unit+' × '+it.price+')';}).join(' / ');
   var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':lang==='en'?' (Credit)':' (قرضی)'):'');
   // 1) Financial transaction
+  _savingPurchase=true;
   const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
-  if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); return; }
+  if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); _savingPurchase=false; return; }
   const trans=await tRes.json();
-  if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); return; }
+  if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); _savingPurchase=false; return; }
   await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
   // 2) Add each item to inventory (existing -> add qty; new -> create) — SKIPPED for old purchases
   if(!_skipInventory)
@@ -4573,6 +4576,7 @@ async function savePurchase(){
     ? L('تم تسجيل الفاتورة القديمة (بدون مخزن)','Old invoice saved (no inventory)','فاکتور قدیمی ثبت شد (بدون انبار)')
     : L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
   _skipInventory=false;
+  _savingPurchase=false;
   // reset
   resetPurchaseItems();
   document.getElementById('p-due').value='';
@@ -6420,20 +6424,38 @@ function onReqPickCatalog(){
   }
 }
 
+var _savingRequest=false;
 async function savePurchaseRequest(){
+  if(_savingRequest) return; // already submitting — ignore extra taps
   const item=document.getElementById('req-item').value.trim();
   const qty=document.getElementById('req-qty').value.trim();
   const notes=document.getElementById('req-notes').value.trim();
   if(!item){ showToast(T('err_fill'),'error'); return; }
-  await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending',image:reqImageData||null})});
-  closeModal('reqModal');
-  document.getElementById('req-item').value='';
-  document.getElementById('req-qty').value='';
-  document.getElementById('req-notes').value='';
-  reqImageData='';
-  document.getElementById('req-image-preview').innerHTML='';
-  renderRequests();
-  showToast(T('saved'),'success');
+  _savingRequest=true;
+  var btn=document.getElementById('rm-save');
+  var btnEl=btn?btn.closest('button'):null;
+  var oldTxt=btn?btn.textContent:'';
+  if(btnEl){ btnEl.disabled=true; btnEl.style.opacity='0.6'; }
+  if(btn){ btn.textContent=(lang==='ar'?'جاري الإرسال...':lang==='en'?'Sending...':'در حال ارسال...'); }
+  try {
+    var res=await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending',image:reqImageData||null})});
+    if(!res.ok){ var t=await res.text(); console.log('request save error:',t); showToast(T('error')||'خطا','error'); return; }
+    closeModal('reqModal');
+    document.getElementById('req-item').value='';
+    document.getElementById('req-qty').value='';
+    document.getElementById('req-notes').value='';
+    reqImageData='';
+    document.getElementById('req-image-preview').innerHTML='';
+    renderRequests();
+    showToast(T('saved'),'success');
+  } catch(e){
+    console.log('request save exception:',e);
+    showToast('خطا: '+(e.message||e),'error');
+  } finally {
+    _savingRequest=false;
+    if(btnEl){ btnEl.disabled=false; btnEl.style.opacity='1'; }
+    if(btn){ btn.textContent=oldTxt||(lang==='ar'?'تسجيل الطلب':lang==='en'?'Submit request':'ثبت درخواست'); }
+  }
 }
 
 async function updateRequest(id,status){
