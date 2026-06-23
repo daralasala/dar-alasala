@@ -856,6 +856,10 @@ body.en .search-icon{right:auto;left:10px;}
     <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="toggleDebtsPaid()" id="dbt-toggle-paid">👁️ نمایش پرداخت‌شده‌ها</button></div>
   </div>
 </div>
+
+<!-- MOVE INVENTORY ITEM TO EXPENSE MODAL -->
+<div class="modal-overlay modal-top" id="moveExpModal">
+  <div class="modal">
     <div class="modal-header"><div class="modal-title">➡️ <span id="mte-title">انتقال به هزینه</span></div><button class="modal-close" onclick="closeModal('moveExpModal')">✕</button></div>
     <div id="mte-info" style="font-size:13px;color:var(--text2);margin-bottom:10px"></div>
     <input type="hidden" id="mte-item-id">
