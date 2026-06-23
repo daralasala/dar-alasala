@@ -1452,6 +1452,9 @@ function refreshStaticLabels(l){
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
   safeSet('fb-purchinv-lbl',P('فواتير الشراء','Purchase invoices','فاکتورهای خرید'));
+  safeSet('fl-debt',P('الديون المستحقة','Outstanding receivables','بدهی معوق'));
+  safeSet('fb-oldpurch-lbl',P('فواتير قديمة (بدون مخزن)','Old invoices (no inventory)','فاکتورهای قدیمی (بدون انبار)'));
+  safeSet('fb-debts-lbl',P('الديون (الدائنون)','Debts (creditors)','بدهی‌ها (طلبکارها)'));
   safeSet('fb-allinv-lbl',P('كل الفواتير','All invoices','همه فاکتورها'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
@@ -1757,6 +1760,16 @@ async function loadDebts(){
 }
 async function openDebtsModal(){
   if(!(currentUser&&currentUser.role==='manager')){ showToast(lang==='ar'?'غير مصرح':lang==='en'?'Not allowed':'دسترسی ندارید','error'); return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var setTxt=function(id,t){ var el=document.getElementById(id); if(el) el.textContent=t; };
+  var setPh=function(id,t){ var el=document.getElementById(id); if(el) el.placeholder=t; };
+  setTxt('dbt-title',L('الديون (الدائنون)','Debts (creditors)','بدهی‌ها (طلبکارها)'));
+  setTxt('dbt-add-title','➕ '+L('إضافة دين جديد','Add new debt','افزودن بدهی جدید'));
+  setPh('dbt-creditor',L('اسم الدائن','Creditor name','نام طلبکار'));
+  setPh('dbt-amount',L('المبلغ (QAR)','Amount (QAR)','مبلغ (QAR)'));
+  setTxt('dbt-due-lbl',L('تاريخ الاستحقاق (متى يجب الدفع)','Due date (when to pay)','تاریخ سررسید (کِی باید بدی)'));
+  setPh('dbt-notes',L('ملاحظات','Notes','توضیحات'));
+  setTxt('dbt-save-btn','💾 '+L('تسجيل الدين','Save debt','ثبت بدهی'));
   await loadDebts();
   _debtsShowPaid=false;
   renderDebts();
