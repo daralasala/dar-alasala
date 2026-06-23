@@ -619,7 +619,8 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="modal">
     <div class="modal-header"><div class="modal-title">🛒 <span id="rm-title">درخواست خرید جنس</span></div><button class="modal-close" onclick="closeModal('reqModal')">✕</button></div>
     <div class="form-group"><label class="form-label" id="rm-pick">انتخاب از اجناس موجود (یا دستی بنویس)</label>
-      <select class="form-control" id="req-pick" onchange="onReqPickCatalog()"></select>
+      <input class="form-control" id="req-pick-search" placeholder="🔍 جستجوی جنس..." oninput="filterReqPick()" style="margin-bottom:6px">
+      <select class="form-control" id="req-pick" onchange="onReqPickCatalog()" size="6" style="height:auto"></select>
     </div>
     <div class="form-group"><label class="form-label" id="rm-item">نام جنس / کالا</label><input class="form-control" type="text" id="req-item" placeholder="مثلا: چوب، رنگ، پیچ..."></div>
     <div class="form-group"><label class="form-label" id="rm-qty">مقدار / تعداد</label><input class="form-control" type="text" id="req-qty" placeholder="مثلا: 10 متر، 5 کیلو..."></div>
@@ -6395,17 +6396,30 @@ async function deleteRequest(id){
 }
 
 // Open request modal and fill the catalog dropdown from inventory
-function openReqModal(){
+var _reqPickList=[];
+function _fillReqPick(filter){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var sel=document.getElementById('req-pick');
-  if(sel){
-    var opts='<option value="">— '+L('كتابة يدوية','Manual','دستی')+' —</option>';
-    (allInventory||[]).forEach(function(it){
-      opts+='<option value="'+(it.name||'').replace(/"/g,'&quot;')+'">'+(it.name||'')+(it.unit?(' ('+it.unit+')'):'')+'</option>';
-    });
-    sel.innerHTML=opts;
-    sel.value='';
-  }
+  if(!sel) return;
+  var f=(filter||'').trim().toLowerCase();
+  var opts='<option value="">— '+L('كتابة يدوية','Manual','دستی')+' —</option>';
+  _reqPickList.forEach(function(it){
+    var nm=(it.name||'');
+    if(f && nm.toLowerCase().indexOf(f)<0) return;
+    opts+='<option value="'+nm.replace(/"/g,'&quot;')+'">'+nm+(it.unit?(' ('+it.unit+')'):'')+'</option>';
+  });
+  sel.innerHTML=opts;
+}
+function filterReqPick(){
+  var s=document.getElementById('req-pick-search');
+  _fillReqPick(s?s.value:'');
+}
+function openReqModal(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  _reqPickList=(allInventory||[]).slice();
+  var ss=document.getElementById('req-pick-search'); if(ss) ss.value='';
+  _fillReqPick('');
+  var sel=document.getElementById('req-pick'); if(sel) sel.value='';
   // reset fields
   document.getElementById('req-item').value='';
   document.getElementById('req-qty').value='';
@@ -6414,6 +6428,7 @@ function openReqModal(){
   var pv=document.getElementById('req-image-preview'); if(pv) pv.innerHTML='';
   // labels
   var lbl=document.getElementById('rm-pick'); if(lbl) lbl.textContent=L('اختر من المخزون (أو اكتب يدوياً)','Pick from inventory (or type manually)','انتخاب از اجناس موجود (یا دستی بنویس)');
+  var sp=document.getElementById('req-pick-search'); if(sp) sp.placeholder=L('🔍 ابحث عن صنف...','🔍 Search item...','🔍 جستجوی جنس...');
   openModal('reqModal');
 }
 // When a catalog item is picked, fill the manual name field
