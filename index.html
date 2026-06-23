@@ -351,6 +351,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">بدهی‌ها (طلبکارها)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
@@ -834,9 +835,27 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
-<!-- MOVE INVENTORY ITEM TO EXPENSE MODAL -->
-<div class="modal-overlay modal-top" id="moveExpModal">
-  <div class="modal">
+<!-- DEBTS MODAL (money I owe to others) -->
+<div class="modal-overlay modal-top" id="debtsModal">
+  <div class="modal" style="max-width:560px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">💸 <span id="dbt-title">بدهی‌ها (طلبکارها)</span></div><button class="modal-close" onclick="closeModal('debtsModal')">✕</button></div>
+    <div style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:14px">
+      <div style="font-weight:700;font-size:14px;margin-bottom:8px" id="dbt-add-title">➕ افزودن بدهی جدید</div>
+      <input class="form-control" id="dbt-creditor" placeholder="نام طلبکار" style="margin-bottom:8px">
+      <input class="form-control" id="dbt-amount" type="number" placeholder="مبلغ (QAR)" style="margin-bottom:8px">
+      <label style="font-size:12px;color:var(--text2)" id="dbt-due-lbl">تاریخ سررسید (کِی باید بدی)</label>
+      <input class="form-control" id="dbt-due" type="date" style="margin-bottom:8px">
+      <textarea class="form-control" id="dbt-notes" placeholder="توضیحات" rows="2" style="margin-bottom:8px"></textarea>
+      <button class="btn btn-primary btn-block" onclick="saveDebt()" id="dbt-save-btn">💾 ثبت بدهی</button>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-weight:700;font-size:14px" id="dbt-list-title">📋 بدهی‌های باز</div>
+      <div style="font-weight:700;color:var(--red)" id="dbt-total"></div>
+    </div>
+    <div id="dbt-list"></div>
+    <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="toggleDebtsPaid()" id="dbt-toggle-paid">👁️ نمایش پرداخت‌شده‌ها</button></div>
+  </div>
+</div>
     <div class="modal-header"><div class="modal-title">➡️ <span id="mte-title">انتقال به هزینه</span></div><button class="modal-close" onclick="closeModal('moveExpModal')">✕</button></div>
     <div id="mte-info" style="font-size:13px;color:var(--text2);margin-bottom:10px"></div>
     <input type="hidden" id="mte-item-id">
@@ -1724,7 +1743,88 @@ function applyInvoiceVisibility(){
   var allowed = currentUser && (currentUser.role==='manager' || currentUser.department==='حسابدار');
   var btn=document.getElementById('fb-allinv');
   if(btn) btn.style.display = allowed ? '' : 'none';
+  // Debts: manager only
+  var dbtn=document.getElementById('fb-debts');
+  if(dbtn) dbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
 }
+
+// ===== DEBTS (money the company owes to others) — manager only =====
+var allDebts=[];
+var _debtsShowPaid=false;
+async function loadDebts(){
+  try { allDebts=await api('GET','debts','','?select=*&order=due_date.asc')||[]; }
+  catch(e){ allDebts=[]; }
+}
+async function openDebtsModal(){
+  if(!(currentUser&&currentUser.role==='manager')){ showToast(lang==='ar'?'غير مصرح':lang==='en'?'Not allowed':'دسترسی ندارید','error'); return; }
+  await loadDebts();
+  _debtsShowPaid=false;
+  renderDebts();
+  openModal('debtsModal');
+}
+async function saveDebt(){
+  var creditor=(document.getElementById('dbt-creditor').value||'').trim();
+  var amount=parseFloat(document.getElementById('dbt-amount').value)||0;
+  var due=document.getElementById('dbt-due').value||null;
+  var notes=(document.getElementById('dbt-notes').value||'').trim();
+  if(!creditor||amount<=0){ showToast(lang==='ar'?'أدخل الاسم والمبلغ':lang==='en'?'Enter name and amount':'نام و مبلغ را وارد کن','error'); return; }
+  try {
+    await api('POST','debts',{creditor:creditor,amount:amount,due_date:due,notes:notes,is_paid:false});
+    document.getElementById('dbt-creditor').value='';
+    document.getElementById('dbt-amount').value='';
+    document.getElementById('dbt-due').value='';
+    document.getElementById('dbt-notes').value='';
+    await loadDebts();
+    renderDebts();
+    showToast(lang==='ar'?'تم تسجيل الدين':lang==='en'?'Debt saved':'بدهی ثبت شد','success');
+  } catch(e){ showToast('خطا: '+(e.message||e),'error'); }
+}
+function renderDebts(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
+  var list=allDebts.filter(function(d){ return _debtsShowPaid ? d.is_paid : !d.is_paid; });
+  var openTotal=allDebts.filter(function(d){return !d.is_paid;}).reduce(function(s,d){return s+(d.amount||0);},0);
+  var totEl=document.getElementById('dbt-total'); if(totEl) totEl.textContent=L('المجموع','Total','جمع')+': '+fmt(openTotal);
+  var ltEl=document.getElementById('dbt-list-title'); if(ltEl) ltEl.textContent=_debtsShowPaid?('✅ '+L('المدفوعة','Paid','پرداخت‌شده‌ها')):('📋 '+L('الديون المفتوحة','Open debts','بدهی‌های باز'));
+  var tgEl=document.getElementById('dbt-toggle-paid'); if(tgEl) tgEl.textContent=_debtsShowPaid?('📋 '+L('عرض المفتوحة','Show open','نمایش بازها')):('👁️ '+L('عرض المدفوعة','Show paid','نمایش پرداخت‌شده‌ها'));
+  var today=new Date(); today.setHours(0,0,0,0);
+  document.getElementById('dbt-list').innerHTML = list.length===0
+    ? '<div style="text-align:center;color:var(--text2);padding:18px">'+L('لا يوجد','None','موردی نیست')+'</div>'
+    : list.map(function(d){
+        var overdueTxt='';
+        if(!d.is_paid && d.due_date){
+          var due=new Date(d.due_date); due.setHours(0,0,0,0);
+          var diff=Math.ceil((due-today)/(1000*60*60*24));
+          if(diff<0) overdueTxt='<span style="color:var(--red);font-size:11px"> · ⚠️ '+Math.abs(diff)+' '+L('يوم متأخر','d overdue','روز گذشته')+'</span>';
+          else if(diff<=5) overdueTxt='<span style="color:var(--orange);font-size:11px"> · ⏳ '+diff+' '+L('يوم','d','روز')+'</span>';
+        }
+        return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+            '<div style="flex:1"><div style="font-weight:700;font-size:14px">'+d.creditor+overdueTxt+'</div>'+
+            (d.due_date?'<div style="font-size:11px;color:var(--text3)">📅 '+d.due_date+'</div>':'')+
+            (d.notes?'<div style="font-size:12px;color:var(--text2);margin-top:3px">'+d.notes+'</div>':'')+'</div>'+
+            '<div style="font-weight:800;color:var(--red);white-space:nowrap;margin-right:8px">'+fmt(d.amount)+'</div>'+
+          '</div>'+
+          '<div style="display:flex;gap:6px;margin-top:8px">'+
+            (d.is_paid
+              ? '<span class="badge badge-green" style="font-size:10px">✅ '+L('مدفوع','Paid','پرداخت شد')+'</span>'
+              : '<button class="btn btn-green btn-sm" onclick="markDebtPaid('+d.id+')">✅ '+L('تم الدفع','Mark paid','پرداخت شد')+'</button>')+
+            '<button class="btn btn-red btn-sm" onclick="deleteDebt('+d.id+')">🗑️</button>'+
+          '</div>'+
+        '</div>';
+      }).join('');
+}
+async function markDebtPaid(id){
+  if(!confirm(lang==='ar'?'تم دفع هذا الدين؟':lang==='en'?'Mark this debt as paid?':'این بدهی پرداخت شد؟')) return;
+  try { await api('PATCH','debts',{is_paid:true},'?id=eq.'+id); await loadDebts(); renderDebts(); showToast(lang==='ar'?'تم':lang==='en'?'Done':'انجام شد','success'); }
+  catch(e){ showToast('خطا: '+(e.message||e),'error'); }
+}
+async function deleteDebt(id){
+  if(!confirm(lang==='ar'?'حذف هذا الدين؟':lang==='en'?'Delete this debt?':'این بدهی حذف شود؟')) return;
+  try { await api('DELETE','debts','','?id=eq.'+id); await loadDebts(); renderDebts(); showToast(lang==='ar'?'تم الحذف':lang==='en'?'Deleted':'حذف شد','success'); }
+  catch(e){ showToast('خطا: '+(e.message||e),'error'); }
+}
+function toggleDebtsPaid(){ _debtsShowPaid=!_debtsShowPaid; renderDebts(); }
 
 function enterApp(){
   // Save session so user stays logged in after refresh
@@ -1838,7 +1938,7 @@ function showTab(tab){
   if(tab==='requests') renderRequests();
   if(tab==='inventory') loadInventory();
   if(tab==='customers') loadCustomers();
-  if(tab==='notify') renderNotifications();
+  if(tab==='notify'){ if(currentUser&&currentUser.role==='manager'){ loadDebts().then(renderNotifications); } else { renderNotifications(); } }
   if(tab==='chat'){ openChatList(); startChatNotif(); }
   if(tab==='personal'){ loadPersonalExp().then(renderPersonal); }
 }
@@ -7091,6 +7191,31 @@ function renderNotifications(){
   allUsers.filter(u=>u.status==='pending').forEach(u=>{ if(currentUser?.role==='manager') html+=`<div class="notif-item unread"><div style="font-size:18px">👤</div><div><div style="font-size:13px;font-weight:700">${T('pending')}</div><div style="font-size:12px;color:var(--text2)">${u.name} - ${u.department}</div></div></div>`; });
   // Salary due + QID expiry alerts (manager only)
   if(currentUser?.role==='manager'){
+    // --- Debts I owe: remind every 10 days (and always if overdue/near due) ---
+    (allDebts||[]).filter(function(d){return !d.is_paid;}).forEach(function(d){
+      var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+      var show=false, urgent=false, extra='';
+      var today=new Date(); today.setHours(0,0,0,0);
+      // due-date based
+      if(d.due_date){
+        var due=new Date(d.due_date); due.setHours(0,0,0,0);
+        var diff=Math.ceil((due-today)/(1000*60*60*24));
+        if(diff<0){ show=true; urgent=true; extra=' · ⚠️ '+Math.abs(diff)+' '+L('يوم متأخر','d overdue','روز گذشته'); }
+        else if(diff<=5){ show=true; urgent=true; extra=' · ⏳ '+diff+' '+L('يوم','d','روز'); }
+      }
+      // every-10-days reminder from creation date
+      if(!show && d.created_at){
+        var cr=new Date(d.created_at); cr.setHours(0,0,0,0);
+        var ageDays=Math.floor((today-cr)/(1000*60*60*24));
+        if(ageDays>0 && ageDays%10===0) show=true;
+      }
+      if(show){
+        var amt=(d.amount||0).toLocaleString()+' QAR';
+        var msg=L('تذكير دين: ','Debt reminder: ','یادآوری بدهی: ')+d.creditor+' — '+amt;
+        var brdr=urgent?'var(--red)':'var(--orange)';
+        html+='<div class="notif-item unread" style="border-right:3px solid '+brdr+'" onclick="openDebtsModal()"><div style="font-size:18px">💸</div><div style="flex:1"><div style="font-size:13px;font-weight:700;color:'+brdr+'">'+msg+extra+'</div>'+(d.notes?'<div style="font-size:12px;color:var(--text2)">'+d.notes+'</div>':'')+'</div></div>';
+      }
+    });
     allUsers.filter(u=>u.status==='active'&&u.salary>0&&u.hire_date&&!u.is_paused).forEach(u=>{
       var d=salaryDueInfo(u);
       if(d.daysLeft<=5){
