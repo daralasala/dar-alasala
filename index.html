@@ -353,6 +353,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">بدهی‌ها (طلبکارها)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--green);color:var(--green)" onclick="recoverMissingPrepayIncome()" id="fb-recover">🔧 <span id="fb-recover-lbl">بازسازی درآمدهای گم‌شده</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingPurchaseExpenses()" id="fb-recover-exp">🔧 <span id="fb-recover-exp-lbl">بازسازی هزینه‌های خرید گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
@@ -1763,6 +1764,8 @@ function applyInvoiceVisibility(){
   if(dbtn) dbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var rbtn=document.getElementById('fb-recover');
   if(rbtn) rbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
+  var rebtn=document.getElementById('fb-recover-exp');
+  if(rebtn) rebtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
 }
 
 // ===== DEBTS (money the company owes to others) — manager only =====
@@ -1923,6 +1926,35 @@ async function recoverMissingPrepayIncome(){
   await loadAll();
   renderFinance();
   showToast(L('تم استرجاع '+toAdd.length+' دفعة','Recovered '+toAdd.length+' payments','‌'+toAdd.length+' پیش‌پرداخت بازسازی شد'),'success');
+}
+
+// One-time repair: for purchases in the `purchases` table whose expense transaction
+// is missing (interrupted save), recreate the expense transaction.
+async function recoverMissingPurchaseExpenses(){
+  if(!(currentUser&&currentUser.role==='manager')){ return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var txIds={};
+  (allTransactions||[]).forEach(function(t){ txIds[String(t.id)]=true; });
+  var toAdd=[];
+  (allPurchases||[]).forEach(function(p){
+    // if this purchase points to a transaction that no longer exists, its expense is missing
+    if(p.transaction_id && !txIds[String(p.transaction_id)]){
+      toAdd.push({amount:(p.total_price||0),description:(p.supplier||'')+' '+(p.invoice_no?('#'+p.invoice_no):''),supplier:p.supplier||'',pid:p.id});
+    }
+  });
+  toAdd=toAdd.filter(function(x){return x.amount>0;});
+  if(toAdd.length===0){ showToast(L('لا توجد مشتريات ناقصة','No missing purchases','خرید گم‌شده‌ای نیست'),'info'); return; }
+  var sum=toAdd.reduce(function(s,x){return s+x.amount;},0);
+  if(!confirm(L('استرجاع '+toAdd.length+' فاتورة شراء بمجموع '+sum.toLocaleString()+' ر.ق؟','Recover '+toAdd.length+' purchases totaling '+sum.toLocaleString()+' QAR?','بازسازی '+toAdd.length+' فاکتور خرید به جمع '+sum.toLocaleString()+' ریال؟'))) return;
+  for(var i=0;i<toAdd.length;i++){
+    var x=toAdd[i];
+    var res=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:x.amount,description:x.description,category:'purchase',supplier_name:x.supplier,paid:true})});
+    // relink the purchase record to the new transaction
+    try { var nt=await res.json(); if(nt&&nt[0]&&x.pid){ await api('PATCH','purchases',{transaction_id:nt[0].id},'?id=eq.'+x.pid); } } catch(e){}
+  }
+  await loadAll();
+  renderFinance();
+  showToast(L('تم استرجاع '+toAdd.length+' فاتورة','Recovered '+toAdd.length+' purchases','‌'+toAdd.length+' فاکتور خرید بازسازی شد'),'success');
 }
 
 function enterApp(){
