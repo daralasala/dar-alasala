@@ -6404,10 +6404,10 @@ function openStaffFile(id){
     '</div>'+
     fld('sf-hire',L('تاريخ بدء العمل','Hire date','تاریخ شروع کار'),u.hire_date,'date')+
     fld('sf-salary',L('الراتب الشهري (QAR)','Monthly salary (QAR)','حقوق ماهیانه (QAR)'),u.salary||0,'number')+
-    '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','قرض و هزینه‌ها')+'</div>'+
-    fld('sf-loan',L('رصيد السلفة المتبقي (QAR)','Remaining loan balance (QAR)','مانده قرض (QAR)'),u.loan_balance||0,'number')+
-    fld('sf-loan-deduct',L('خصم من السلفة هذا الشهر (QAR)','Loan deduction this month (QAR)','کسر قرض این ماه (QAR)'),0,'number')+
-    '<div style="font-size:11px;color:var(--text2);margin:-4px 0 10px">'+L('يُخصم من راتب هذا الشهر وينقص من رصيد السلفة عند الدفع','Deducted from this month salary and subtracted from loan balance when paying','هنگام پرداخت حقوق، از حقوق این ماه کم و از مانده قرض کسر می‌شود')+'</div>'+
+    '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','وام و هزینه‌ها')+'</div>'+
+    fld('sf-loan',L('رصيد السلفة المتبقي (QAR)','Remaining loan balance (QAR)','مانده وام (QAR)'),u.loan_balance||0,'number')+
+    fld('sf-loan-deduct',L('خصم من السلفة هذا الشهر (QAR)','Loan deduction this month (QAR)','کسر وام این ماه (QAR)'),0,'number')+
+    '<div style="font-size:11px;color:var(--text2);margin:-4px 0 10px">'+L('يُخصم من راتب هذا الشهر وينقص من رصيد السلفة عند الدفع','Deducted from this month salary and subtracted from loan balance when paying','هنگام پرداخت حقوق، از حقوق این ماه کم و از مانده وام کسر می‌شود')+'</div>'+
     fld('sf-ticket',L('تكلفة التذكرة (QAR)','Ticket cost (QAR)','هزینه بلیط (QAR)'),u.ticket_cost||0,'number')+
     fld('sf-other',L('تكاليف أخرى (QAR)','Other costs (QAR)','هزینه‌های دیگر (QAR)'),u.other_costs||0,'number')+
     buildPermissionsSection(u)+
@@ -6521,12 +6521,12 @@ async function payStaffSalary(id){
   if(netPay<0) netPay=0;
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var msg=L('راتب','Salary','حقوق')+': '+salary.toLocaleString()+' QAR\n'+
-    (loanDeduct>0?(L('خصم السلفة','Loan deduction','کسر قرض')+': -'+loanDeduct.toLocaleString()+' QAR\n'):'')+
+    (loanDeduct>0?(L('خصم السلفة','Loan deduction','کسر وام')+': -'+loanDeduct.toLocaleString()+' QAR\n'):'')+
     L('المدفوع للعامل','Paid to worker','پرداختی به کارگر')+': '+netPay.toLocaleString()+' QAR'+
-    (loanDeduct>0?('\n'+L('رصيد السلفة الجديد','New loan balance','مانده قرض جدید')+': '+(loanBal-loanDeduct).toLocaleString()+' QAR'):'');
+    (loanDeduct>0?('\n'+L('رصيد السلفة الجديد','New loan balance','مانده وام جدید')+': '+(loanBal-loanDeduct).toLocaleString()+' QAR'):'');
   if(!confirm(u.name+'\n\n'+msg)) return;
   // Record NET pay as expense (deducts from finance balance)
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+(loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر قرض')+')'):''),category:'salary'})});
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+(loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر وام')+')'):''),category:'salary'})});
   // Update loan balance + last paid date
   var today=new Date().toISOString().slice(0,10);
   var patch={last_salary_paid:today};
