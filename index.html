@@ -354,6 +354,7 @@ body.en .search-icon{right:auto;left:10px;}
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">بدهی‌ها (طلبکارها)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--green);color:var(--green)" onclick="recoverMissingPrepayIncome()" id="fb-recover">🔧 <span id="fb-recover-lbl">بازسازی درآمدهای گم‌شده</span></button>
     <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--accent);color:var(--accent)" onclick="backupAllData()" id="fb-backup">💾 <span id="fb-backup-lbl">پشتیبان‌گیری کامل (دانلود)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingPurchaseExpenses()" id="fb-recover-exp">🔧 <span id="fb-recover-exp-lbl">بازسازی هزینه‌های خرید گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingSalaries()" id="fb-recover-sal">🔧 <span id="fb-recover-sal-lbl">بازسازی حقوق‌های گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
@@ -1780,6 +1781,8 @@ function applyInvoiceVisibility(){
   if(rsbtn) rsbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var anbtn=document.getElementById('fb-analysis');
   if(anbtn) anbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
+  var bkbtn=document.getElementById('fb-backup');
+  if(bkbtn) bkbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
 }
 
 // ===== DEBTS (money the company owes to others) — manager only =====
@@ -2007,14 +2010,54 @@ async function openFinAnalysis(){
 
 // One-time repair: for invoices whose items are already PAID but whose prepay income
 // was never recorded (old bug), add the missing income transaction.
+// ===== FULL BACKUP — manager only. Downloads all financial tables as one JSON =====
+async function backupAllData(){
+  if(!(currentUser&&currentUser.role==='manager')){ return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  showToast(L('جاري النسخ الاحتياطي...','Backing up...','در حال پشتیبان‌گیری...'),'info');
+  var tables=['transactions','invoices','orders','purchases','users','inventory','fixed_expenses','personal_expenses','debts','suppliers','assets','customers'];
+  var backup={ _meta:{ created_at:new Date().toISOString(), by:(currentUser?currentUser.name:''), app:'dar-alasala' } };
+  try{
+    for(var i=0;i<tables.length;i++){
+      var rows=await fetch(SB_URL+'/rest/v1/'+tables[i]+'?select=*',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.ok?r.json():[];});
+      backup[tables[i]]=rows||[];
+    }
+    var blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+    var a=document.createElement('a');
+    var d=new Date();
+    var stamp=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+'_'+('0'+d.getHours()).slice(-2)+('0'+d.getMinutes()).slice(-2);
+    a.href=URL.createObjectURL(blob);
+    a.download='dar-alasala-backup_'+stamp+'.json';
+    a.click();
+    var total=tables.reduce(function(s,t){return s+(backup[t]?backup[t].length:0);},0);
+    showToast(L('تم النسخ ('+total+' سجل)','Backup done ('+total+' records)','پشتیبان دانلود شد ('+total+' رکورد)'),'success');
+  }catch(e){
+    showToast(L('فشل النسخ الاحتياطي','Backup failed','خطا در پشتیبان‌گیری'),'error');
+  }
+}
+
 async function recoverMissingPrepayIncome(){
   if(!(currentUser&&currentUser.role==='manager')){ return; }
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  // group paid (or building/ready/delivered) orders by invoice
+  // SAFETY: fetch ALL existing income transactions DIRECTLY from DB (not from
+  // the in-memory allTransactions which may be incomplete). This prevents the
+  // duplicate-creation bug where a partially-loaded list made the function
+  // think incomes were missing when they actually existed in the database.
+  var existingIncome=[];
+  try{
+    existingIncome=await fetch(SB_URL+'/rest/v1/transactions?select=description,amount&type=eq.income',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();})||[];
+  }catch(e){
+    showToast(L('خطأ في الاتصال','Connection error','خطای اتصال — دوباره تلاش کنید'),'error'); return;
+  }
+  // normalize: strip invoice codes so '#4716 name' and 'name' match
+  var norm=function(s){return String(s||'').replace(/#?\d{3,}#?/g,'').replace(/\s+/g,' ').trim();};
+  var existsKey={};
+  existingIncome.forEach(function(t){ existsKey[norm(t.description)+'|'+t.amount]=1; });
+  // group paid orders by invoice
   var byInv={};
   (allOrders||[]).forEach(function(o){
     if(!o.invoice_id) return;
-    if(o.status==='pending_payment') return; // not paid yet
+    if(o.status==='pending_payment') return;
     (byInv[o.invoice_id]=byInv[o.invoice_id]||[]).push(o);
   });
   var toAdd=[];
@@ -2025,12 +2068,9 @@ async function recoverMissingPrepayIncome(){
     var advance=inv?(inv.prepay||0):byInv[invId].reduce(function(s,it){return s+(it.prepay||0);},0);
     if(advance<=0) return;
     var prepayDesc='Prepay - '+custName+' #'+invCode;
-    // already recorded? check both new format (#code) and old format (no code)
-    var oldDesc='Prepay - '+custName;
-    var exists=(allTransactions||[]).some(function(t){
-      return t.category==='prepay' && (t.description===prepayDesc || t.description===oldDesc);
-    });
-    if(!exists){ toAdd.push({amount:advance,description:prepayDesc}); }
+    // already recorded? check against DB using normalized key (code-insensitive)
+    var key=norm(prepayDesc)+'|'+advance;
+    if(!existsKey[key]){ toAdd.push({amount:advance,description:prepayDesc}); existsKey[key]=1; }
   });
   if(toAdd.length===0){ showToast(L('لا توجد دفعات ناقصة','No missing payments','درآمد گم‌شده‌ای نیست','info')||L('لا توجد دفعات ناقصة','No missing payments','درآمد گم‌شده‌ای نیست'),'info'); return; }
   var sum=toAdd.reduce(function(s,x){return s+x.amount;},0);
@@ -2240,8 +2280,8 @@ async function loadAll(){
   ];
   // Heavy data only for those who can see it
   var idxTrans=-1, idxPurch=-1, idxInvs=-1, idxCust=-1, idxSup=-1, idxAssets=-1, idxFixed=-1;
-  if(seeFinance){ idxTrans=core.length; core.push(api('GET','transactions','','?select=*&order=created_at.desc&limit=50')); }
-  if(seeFinance){ idxPurch=core.length; core.push(api('GET','purchases','','?select=*&order=created_at.desc&limit=50')); }
+  if(seeFinance){ idxTrans=core.length; core.push(api('GET','transactions','','?select=*&order=created_at.desc')); }
+  if(seeFinance){ idxPurch=core.length; core.push(api('GET','purchases','','?select=*&order=created_at.desc')); }
   idxInvs=core.length; core.push(api('GET','invoices','','?select=*&order=created_at.desc'));
   if(seeCustomers){ idxCust=core.length; core.push(api('GET','customers','','?select=*&order=created_at.desc')); }
   if(seeFinance){ idxSup=core.length; core.push(api('GET','suppliers','','?select=*')); }
@@ -2250,18 +2290,18 @@ async function loadAll(){
 
   var res=await Promise.all(core);
 
-  allOrders=res[0]||[];
-  allUsers=res[1]||[];
+  allOrders=(res[0]||[]).filter(function(x){return x&&typeof x==='object';});
+  allUsers=(res[1]||[]).filter(function(x){return x&&typeof x==='object';});
   // stages
   var st=res[2]||[];
   if(st.length>0){ allStages=st.map(function(r){return {id:r.id,name:r.name_fa,name_fa:r.name_fa,name_ar:r.name_ar,name_en:r.name_en,order_num:r.order_num};}); }
   // job titles
   var jt=res[3]||[];
   if(jt.length>0){ allJobTitles=jt.map(function(r){return {id:r.id,name:r.name};}); }
-  allInventory=res[4]||[];
-  allTransactions=idxTrans>=0?(res[idxTrans]||[]):[];
-  allPurchases=idxPurch>=0?(res[idxPurch]||[]):[];
-  allInvoices=idxInvs>=0?(res[idxInvs]||[]):[];
+  allInventory=(res[4]||[]).filter(function(x){return x&&typeof x==='object';});
+  allTransactions=(idxTrans>=0?(res[idxTrans]||[]):[]).filter(function(x){return x&&typeof x==='object';});
+  allPurchases=(idxPurch>=0?(res[idxPurch]||[]):[]).filter(function(x){return x&&typeof x==='object';});
+  allInvoices=(idxInvs>=0?(res[idxInvs]||[]):[]).filter(function(x){return x&&typeof x==='object';});
   allCustomers=idxCust>=0?(res[idxCust]||[]):[];
   allSuppliers=idxSup>=0?(res[idxSup]||[]):[];
   allAssets=idxAssets>=0?(res[idxAssets]||[]):[];
@@ -2784,7 +2824,7 @@ async function loadOrderWorkers(orderId){
   html+=rows.map(function(r){
     var when=r.started_at?r.started_at.slice(0,16).replace('T',' '):'';
     // Find this worker's job title from users
-    var u=allUsers.find(function(x){return x.name===r.worker_name;});
+    var u=allUsers.find(function(x){return x&&x.name===r.worker_name;});
     var job=u&&u.department?stageLabel(u.department):'';
     var jobPrefix=job?(job+' '):'';
     // Full sentence: "[job] [name] → moved to stage [X]"
@@ -4595,7 +4635,7 @@ async function saveTransaction(type){
   if(type==='expense'&&expenseImage){ body.image=expenseImage; }
   await api('POST','transactions',body);
   closeModal(modalId);
-  const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
+  const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc');
   allTransactions=newTrans||[];
   renderFinance();
   showToast(T('saved'),'success');
@@ -5163,7 +5203,7 @@ async function confirmMoveToExpense(){
     // refresh
     var freshInv=await api('GET','inventory','','?select=*&order=name.asc');
     allInventory=freshInv||[];
-    var newTrans=await api('GET','transactions','','?select=*&order=created_at.desc&limit=50');
+    var newTrans=await api('GET','transactions','','?select=*&order=created_at.desc');
     allTransactions=newTrans||[];
     closeModal('moveExpModal');
     renderInventory();
@@ -6614,7 +6654,7 @@ function toggleReqHistory(){
 }
 async function renderRequests(){
   const reqs=await api('GET','purchase_requests','','?select=*&order=created_at.desc');
-  allRequests=reqs||[];
+  allRequests=(reqs||[]).filter(function(x){return x&&typeof x==='object';});
   const isManagerOrBuyer = currentUser&&(currentUser.role==='manager'||currentUser.department==='مسئول خرید');
   const isForeman = currentUser&&currentUser.department==='فورمن';
   const canSeeAll = isManagerOrBuyer||isForeman;        // foreman also sees everyone's requests
