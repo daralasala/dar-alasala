@@ -2127,7 +2127,7 @@ function startAutoRefresh(){
     // Don't refresh if the tab/page is hidden in the background
     if(document.hidden) return;
     loadAll();
-  },4000);
+  },10000);
 }
 
 // ===== CHANGE PASSWORD (any logged-in user) =====
@@ -7488,7 +7488,7 @@ function openChatImage(url){
   document.body.appendChild(ov);
 }
 
-function startChatPoll(){ stopChatPoll(); chatPollTimer=setInterval(function(){ if(chatCurrentId&&!document.hidden) loadChatMessages(); },4000); }
+function startChatPoll(){ stopChatPoll(); chatPollTimer=setInterval(function(){ if(chatCurrentId&&!document.hidden) loadChatMessages(); },8000); }
 function stopChatPoll(){ if(chatPollTimer){ clearInterval(chatPollTimer); chatPollTimer=null; } }
 
 function renderNotifications(){
