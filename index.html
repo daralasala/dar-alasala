@@ -1241,7 +1241,7 @@ const TR = {
     approve:'موافقة',reject:'رفض',remove:'حذف',
     pending_approval:'في انتظار موافقة المدير.',
     fab:'طلب جديد',order_detail:'تفاصيل الطلب',stage_transfer:'نقل المرحلة',
-    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع',status_paid:'مدفوع · جاهز للإنتاج',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
+    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع النهائي',status_paid:'مدفوع · جاهز للإنتاج',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
     notify_sent:'تم الارسال',saved:'تم الحفظ',err_fill:'يرجى ملء الحقول',
     err_login:'بيانات غير صحيحة',err_email:'البريد مسجل مسبقا',
     reg_success:'تم التسجيل! انتظر موافقة المدير.',no_data:'لا توجد بيانات',
@@ -1262,7 +1262,7 @@ const TR = {
     approve:'تایید',reject:'رد',remove:'حذف',
     pending_approval:'حساب شما ثبت شد و منتظر تایید مدیر است.',
     fab:'ساخت فاکتور',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
-    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت',status_paid:'تأیید شده · آماده تولید',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
+    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت نهایی',status_paid:'تأیید شده · آماده تولید',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
     notify_sent:'پیام ارسال شد',saved:'ذخیره شد',err_fill:'لطفا فیلدها را پر کنید',
     err_login:'اطلاعات اشتباه است',err_email:'ایمیل قبلا ثبت شده',
     reg_success:'ثبت نام انجام شد! منتظر تایید مدیر باشید.',no_data:'داده ای یافت نشد',
@@ -1283,7 +1283,7 @@ const TR = {
     approve:'Approve',reject:'Reject',remove:'Remove',
     pending_approval:'Your account is awaiting manager approval.',
     fab:'New Order',order_detail:'Order Details',stage_transfer:'Stage Transfer',
-    dept_label:'Department',status_pending_payment:'Awaiting Payment',status_paid:'Paid · Ready to Build',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
+    dept_label:'Department',status_pending_payment:'Awaiting Final Payment',status_paid:'Paid · Ready to Build',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
     notify_sent:'Notification sent',saved:'Saved',err_fill:'Please fill required fields',
     err_login:'Invalid credentials',err_email:'Email already registered',
     reg_success:'Registered! Awaiting manager approval.',no_data:'No data found',
@@ -2947,9 +2947,11 @@ function openInvoiceFolder(invId){
       deliverBtn='<button class="btn btn-block" style="margin-bottom:8px;background:var(--surface2);color:var(--text3);cursor:not-allowed" disabled>⏳ '+(lang==='ar'?'التسليم متاح بعد جهوز كل الأصناف':lang==='en'?'Delivery available when all items ready':'تحویل بعد از آماده شدن همه اجناس فعال می‌شود')+' ('+readyCount+'/'+items.length+')</button>';
     }
   }
+  // View-invoice button: available to everyone who can open this folder
+  var viewInvBtn='<div style="margin-bottom:10px"><button class="btn btn-outline btn-block" style="border-color:var(--green);color:var(--green)" onclick="viewInvoiceDoc(\''+invId+'\')">🧾 '+(lang==='ar'?'عرض الفاتورة':lang==='en'?'View invoice':'مشاهده فاکتور')+'</button></div>';
   var docBtns=(isManager||currentUser.department==='حسابدار')
     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+
-        '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createInvoice('+firstId+')">🧾 '+(lang==='ar'?'فاتورة':lang==='en'?'Invoice':'فاکتور')+'</button>'+
+        '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createInvoice('+firstId+')">🧾 '+(lang==='ar'?'تعديل/إنشاء فاتورة':lang==='en'?'Edit/Create invoice':'ویرایش/ساخت فاکتور')+'</button>'+
         '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createContract('+firstId+')">📜 '+(lang==='ar'?'عقد':lang==='en'?'Contract':'قرارداد')+'</button>'+
         '<button class="btn btn-green btn-sm" onclick="receiptForOrder('+firstId+')">📥 '+(lang==='ar'?'سند قبض':lang==='en'?'Receipt Voucher':'سند قبض')+'</button>'+
       '</div>'
@@ -2970,6 +2972,7 @@ function openInvoiceFolder(invId){
       '<div class="row"><span class="row-label">✅ '+(lang==='ar'?'المدفوع':lang==='en'?'Paid':'پرداخت‌شده')+'</span><span class="row-value" style="color:var(--green)">'+advance.toLocaleString()+' QAR</span></div>'+
       '<div class="row" style="margin-bottom:0"><span class="row-label">⏳ '+(lang==='ar'?'المتبقي':lang==='en'?'Remaining':'باقی‌مانده')+'</span><span class="row-value" style="color:var(--red)">'+balance.toLocaleString()+' QAR</span></div>'+
     '</div>'+
+    viewInvBtn+
     docBtns+
     startAllBtn+
     paidHint+
@@ -3579,6 +3582,22 @@ function downloadInvoicePDF(orderId){
   var styles=styleMatch?styleMatch[1]:'';
   var bodyContent=bodyMatch?bodyMatch[1]:r.html;
   pdfRender(styles, bodyContent, r.invNo);
+}
+
+// View the generated invoice directly (no editor) — used from the customer file / finance list
+function viewInvoiceDoc(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  var firstId = items.length ? items[0].id : null;
+  if(firstId===null){ showToast(lang==='ar'?'لا توجد أصناف':lang==='en'?'No items':'جنسی نیست','error'); return; }
+  // Pull all items of this invoice into invoiceItems so the generated doc is complete
+  var o=allOrders.find(function(x){return x.id===firstId;}); if(!o) return;
+  if(o.invoice_id){
+    var its=allOrders.filter(function(x){return String(x.invoice_id)===String(o.invoice_id);});
+    invoiceItems=its.map(function(it){return {desc:it.product||'',qty:it.item_qty||1,price:it.item_price||it.total_price||0};});
+  } else {
+    invoiceItems=[{desc:o.product||'',qty:o.item_qty||1,price:o.item_price||o.total_price||0}];
+  }
+  downloadInvoicePDF(firstId);
 }
 
 // Reliable renderer: opens a clean print window. User picks "Save as PDF" or prints.
@@ -4299,7 +4318,7 @@ function renderAllInvoices(){
   var stLabel=function(s){
     return s==='delivered'?L('تم التسليم','Delivered','تحویل شده'):
            s==='paid'?L('مدفوع','Paid','پرداخت شده'):
-           s==='pending_payment'?L('بانتظار الدفع','Pending payment','در انتظار پرداخت'):
+           s==='pending_payment'?L('بانتظار الدفع النهائي','Awaiting final payment','در انتظار پرداخت نهایی'):
            (s||'');
   };
   box.innerHTML=list.map(function(inv){
