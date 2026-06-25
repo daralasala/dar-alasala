@@ -2761,14 +2761,18 @@ async function openOrderDetail(id){
   // Items of the same invoice (so paid amount can be read at invoice level)
   const invoiceSiblings = o.invoice_id ? allOrders.filter(x=>String(x.invoice_id)===String(o.invoice_id)) : [o];
   const isMultiItem = invoiceSiblings.length>1;
-  // Paid for THIS order: prefer its own prepay; if 0, use this order's share of the
-  // invoice-level prepay (invoice prepay is often stored on the whole invoice, not per item).
+  // Paid for THIS order: prepay is usually stored at the INVOICE level (invoices.prepay),
+  // so read that first (same logic as the customer/invoice folder). Fall back to
+  // summing per-order prepay only if no invoice-level prepay exists.
+  var invObj = o.invoice_id ? allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}) : null;
+  var invLevelPrepay = invObj ? (invObj.prepay||0) : 0;
   var sumItemPrepay = invoiceSiblings.reduce(function(s,x){return s+(x.prepay||0);},0);
-  var invTotal = invoiceSiblings.reduce(function(s,x){return s+(x.total_price||0);},0);
+  var totalPrepay = invLevelPrepay>0 ? invLevelPrepay : sumItemPrepay;
+  var invTotal = invObj ? (invObj.total_price||0) : invoiceSiblings.reduce(function(s,x){return s+(x.total_price||0);},0);
   var paidThis = (o.prepay||0);
-  if(!paidThis && sumItemPrepay>0){
-    // share proportional to this order's value
-    paidThis = invTotal>0 ? Math.round(sumItemPrepay*((o.total_price||0)/invTotal)) : sumItemPrepay;
+  if(!paidThis && totalPrepay>0){
+    // share proportional to this order's value within the invoice
+    paidThis = invTotal>0 ? Math.round(totalPrepay*((o.total_price||0)/invTotal)) : totalPrepay;
   }
   const rem=(o.total_price||0)-paidThis;
   const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
