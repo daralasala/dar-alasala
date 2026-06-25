@@ -6539,16 +6539,33 @@ async function payStaffSalary(id){
 }
 
 // Record the worker's ticket cost as a COMPANY expense (not deducted from worker's salary)
+var _payingTicket=false;
 async function payStaffTicket(id){
+  if(_payingTicket) return; // guard against double-click
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var ticket=u.ticket_cost||0;
   if(ticket<=0){ showToast(L('لا توجد تكلفة تذكرة','No ticket cost','هزینه بلیطی ثبت نشده'),'error'); return; }
   if(!confirm(u.name+'\n\n'+L('تسجيل تكلفة التذكرة كمصروف للشركة','Log ticket cost as company expense','ثبت هزینه بلیت به‌عنوان هزینه‌ی شرکت')+': '+ticket.toLocaleString()+' QAR')) return;
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:ticket,description:(lang==='ar'?'تذكرة سفر ':lang==='en'?'Travel ticket ':'بلیت سفر ')+u.name,category:'حمل‌ونقل'})});
-  closeModal('staffModal');
-  await loadAll();
-  showToast(L('تم تسجيل التذكرة كمصروف','Ticket logged as expense','بلیت به‌عنوان هزینه ثبت شد'),'success');
+  _payingTicket=true;
+  try{
+    // DUPLICATE CHECK: was this exact ticket (same worker + amount) already logged in the last 24h?
+    var desc=(lang==='ar'?'تذكرة سفر ':lang==='en'?'Travel ticket ':'بلیت سفر ')+u.name;
+    var since=new Date(Date.now()-24*60*60*1000).toISOString();
+    var existing=await fetch(SB_URL+'/rest/v1/transactions?select=id&type=eq.expense&amount=eq.'+ticket+'&description=eq.'+encodeURIComponent(desc)+'&created_at=gte.'+since,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.ok?r.json():[];});
+    if(existing&&existing.length>0){
+      showToast(L('التذكرة مسجلة بالفعل اليوم','Ticket already logged today','این بلیت امروز قبلاً ثبت شده'),'error');
+      _payingTicket=false; return;
+    }
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:ticket,description:desc,category:'حمل‌ونقل'})});
+    closeModal('staffModal');
+    await loadAll();
+    showToast(L('تم تسجيل التذكرة كمصروف','Ticket logged as expense','بلیت به‌عنوان هزینه ثبت شد'),'success');
+  }catch(e){
+    showToast(L('حدث خطأ','An error occurred','خطایی رخ داد'),'error');
+  }finally{
+    _payingTicket=false;
+  }
 }
 
 // Show this worker's salary payment history (read from finance transactions, category=salary)
