@@ -345,19 +345,16 @@ body.en .search-icon{right:auto;left:10px;}
       <div class="fin-amount" style="color:#e6961e" id="f-debt">-</div>
       <div class="fin-label" id="fl-debt">الديون المستحقة / بدهی معوق</div>
     </div>
-    <div style="display:flex;gap:7px;margin-bottom:12px">
+    <div style="display:flex;gap:7px;margin-bottom:12px" id="fb-action-row">
       <button class="btn btn-green btn-sm" onclick="openModal('incomeModal')" id="fb-income">+ درآمد</button>
       <button class="btn btn-red btn-sm" onclick="openModal('expenseModal')" id="fb-expense">+ هزینه</button>
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
+      <button class="btn btn-outline btn-sm" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">خرید قبل</span></button>
     </div>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">قرضی‌ها (طلبکارها)</span></button>
-    <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--accent);color:var(--accent)" onclick="backupAllData()" id="fb-backup">💾 <span id="fb-backup-lbl">پشتیبان‌گیری کامل (دانلود)</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openExpenseInvoices()" id="fb-expinv">💸 <span id="fb-expinv-lbl">فاکتورهای هزینه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">فاکتورهای مشتری</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
       <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openAssetModal()">➕ <span id="asset-add-label">إضافة أصل / افزودن دارایی</span></button>
@@ -370,6 +367,12 @@ body.en .search-icon{right:auto;left:10px;}
     </div>
     <div class="section-title" id="sl-transactions">تراکنش‌های اخیر</div>
     <div id="transactions-list"><div class="loading"><div class="spinner"></div></div></div>
+    <!-- Manager-only tools at the very bottom -->
+    <div id="fb-bottom-tools" style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">
+      <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
+      <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
+      <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--accent);color:var(--accent)" onclick="backupAllData()" id="fb-backup">💾 <span id="fb-backup-lbl">پشتیبان‌گیری کامل (دانلود)</span></button>
+    </div>
   </div>
 
   <!-- STAFF -->
@@ -844,8 +847,9 @@ body.en .search-icon{right:auto;left:10px;}
 <!-- ALL INVOICES LIST MODAL -->
 <div class="modal-overlay modal-top" id="allInvoicesModal">
   <div class="modal" style="max-width:680px;max-height:92vh">
-    <div class="modal-header"><div class="modal-title">📄 <span id="ai-title">همه فاکتورها</span></div><button class="modal-close" onclick="closeModal('allInvoicesModal')">✕</button></div>
+    <div class="modal-header"><div class="modal-title">📄 <span id="ai-title">فاکتورهای مشتری</span></div><button class="modal-close" onclick="closeModal('allInvoicesModal')">✕</button></div>
     <input class="form-control" id="ai-search" placeholder="🔍" oninput="renderAllInvoices()" style="margin-bottom:10px">
+    <div id="ai-total" style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:10px;font-weight:700"></div>
     <div id="ai-list"></div>
   </div>
 </div>
@@ -1485,7 +1489,7 @@ function refreshStaticLabels(l){
   safeSet('fb-purchinv-lbl',P('فواتير الشراء','Purchase invoices','فاکتورهای خرید'));
   safeSet('fb-expinv-lbl',P('فواتير المصروفات','Expense invoices','فاکتورهای هزینه'));
   safeSet('fl-debt',P('الديون المستحقة','Outstanding receivables','قرضی معوق'));
-  safeSet('fb-oldpurch-lbl',P('فواتير قديمة (بدون مخزن)','Old invoices (no inventory)','فاکتورهای قدیمی (بدون انبار)'));
+  safeSet('fb-oldpurch-lbl',P('شراء سابق','Past purchase','خرید قبل'));
   safeSet('fb-debts-lbl',P('الديون (الدائنون)','Debts (creditors)','قرضی‌ها (طلبکارها)'));
   safeSet('fb-allinv-lbl',P('فواتير العملاء','Customer invoices','فاکتورهای مشتری'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
@@ -1783,10 +1787,10 @@ function applyInvoiceVisibility(){
   // Debts: manager only
   var dbtn=document.getElementById('fb-debts');
   if(dbtn) dbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
-  var anbtn=document.getElementById('fb-analysis');
-  if(anbtn) anbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
-  var bkbtn=document.getElementById('fb-backup');
-  if(bkbtn) bkbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
+  var isMgr = currentUser&&currentUser.role==='manager';
+  ['fb-bottom-tools','fb-analysis','fb-report','fb-backup'].forEach(function(bid){
+    var el=document.getElementById(bid); if(el) el.style.display = isMgr ? '' : 'none';
+  });
 }
 
 // ===== DEBTS (money the company owes to others) — manager only =====
@@ -4277,6 +4281,13 @@ function renderAllInvoices(){
   var q=(document.getElementById('ai-search').value||'').toLowerCase();
   var list=(allInvoices||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
   if(q) list=list.filter(function(inv){ return ((inv.inv_code||'')+(inv.customer_name||'')+(inv.customer_phone||'')).toLowerCase().indexOf(q)>=0; });
+  // total summary
+  var grandTotal=list.reduce(function(s,inv){return s+(+inv.total_price||0);},0);
+  var grandPrepaid=list.reduce(function(s,inv){return s+(+inv.prepay||0);},0);
+  var totEl=document.getElementById('ai-total');
+  if(totEl) totEl.innerHTML='<div style="display:flex;justify-content:space-between"><span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--accent)">'+grandTotal.toLocaleString()+' QAR</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:var(--text2);margin-top:4px"><span>'+L('المقدم','Prepaid','پیش‌پرداخت')+'</span><span style="color:var(--green)">'+grandPrepaid.toLocaleString()+' QAR</span></div>'+
+    '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:var(--text2);margin-top:2px"><span>'+L('المتبقي','Remaining','باقی‌مانده')+'</span><span style="color:var(--red)">'+(grandTotal-grandPrepaid).toLocaleString()+' QAR</span></div>';
   var box=document.getElementById('ai-list');
   if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">📄</div><div>'+T('no_data')+'</div></div>'; return; }
   var stLabel=function(s){
@@ -4287,14 +4298,23 @@ function renderAllInvoices(){
   };
   box.innerHTML=list.map(function(inv){
     var paid=inv.prepay||0, total=inv.total_price||0;
+    // find invoice image from a linked order
+    var oImg='';
+    try{
+      var ord=(allOrders||[]).find(function(o){return String(o.invoice_id)===String(inv.id)&&o.invoice_image;});
+      if(ord&&ord.invoice_image) oImg='<img src="'+ord.invoice_image+'" onclick="event.stopPropagation();document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
+    }catch(e){}
+    var shownDate=inv.created_at?String(inv.created_at).substring(0,10):'';
     return '<div onclick="closeModal(\'allInvoicesModal\');openInvoiceFolder(\''+inv.id+'\')" style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;cursor:pointer">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-weight:700;font-size:14px">'+(inv.inv_code||'-')+'</div>'+
         '<div style="font-size:11px;color:var(--text2)">'+stLabel(inv.status)+'</div>'+
       '</div>'+
       '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(inv.customer_name||'')+(inv.customer_phone?(' · '+inv.customer_phone):'')+'</div>'+
+      (shownDate?('<div style="font-size:11px;color:var(--text2);margin-top:2px">📅 '+shownDate+'</div>'):'')+
       '<div style="font-size:12px;margin-top:4px"><span style="color:var(--accent);font-weight:700">'+total.toLocaleString()+' QAR</span>'+
       (paid>0?(' · <span style="color:var(--green)">'+L('مقدم','Prepaid','پیش‌پرداخت')+': '+paid.toLocaleString()+'</span>'):'')+'</div>'+
+      oImg+
     '</div>';
   }).join('');
 }
@@ -4504,6 +4524,14 @@ function renderFinance(){
     // Real balance is MANAGER ONLY — never for purchasing
     var rcHide=document.getElementById('f-realbalance-card');
     if(rcHide) rcHide.style.display='none';
+    // Hide manager-only lists/tools: customer invoices, debts, analysis, backup, report
+    ['fb-allinv','fb-debts','fb-analysis','fb-backup','fb-report','fb-bottom-tools'].forEach(function(bid){
+      var el=document.getElementById(bid); if(el) el.style.display='none';
+    });
+    // Show only allowed: purchase invoices + expense invoices (entering invoices & seeing expenses)
+    ['fb-purchinv','fb-expinv'].forEach(function(bid){
+      var el=document.getElementById(bid); if(el) el.style.display='';
+    });
   } else {
     if(incCard) incCard.style.display='';
     if(balCard) balCard.style.display='';
