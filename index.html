@@ -352,9 +352,9 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-outline btn-sm" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">خرید قبل</span></button>
     </div>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">قرضی‌ها (طلبکارها)</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openExpenseInvoices()" id="fb-expinv">💸 <span id="fb-expinv-lbl">فاکتورهای هزینه</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">فاکتورهای مشتری</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;border-color:var(--blue);color:var(--blue)" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;border-color:var(--red);color:var(--red)" onclick="openExpenseInvoices()" id="fb-expinv">💸 <span id="fb-expinv-lbl">فاکتورهای هزینه</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;border-color:var(--green);color:var(--green)" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">فاکتورهای مشتری</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
       <button class="btn btn-primary btn-sm btn-block" style="margin-bottom:10px" onclick="openAssetModal()">➕ <span id="asset-add-label">إضافة أصل / افزودن دارایی</span></button>
@@ -1492,6 +1492,8 @@ function refreshStaticLabels(l){
   safeSet('fb-oldpurch-lbl',P('شراء سابق','Past purchase','خرید قبل'));
   safeSet('fb-debts-lbl',P('الديون (الدائنون)','Debts (creditors)','قرضی‌ها (طلبکارها)'));
   safeSet('fb-allinv-lbl',P('فواتير العملاء','Customer invoices','فاکتورهای مشتری'));
+  safeSet('fb-analysis-lbl',P('التحليل المالي الكامل','Full financial analysis','تحلیل مالی کامل'));
+  safeSet('fb-backup-lbl',P('نسخة احتياطية كاملة (تنزيل)','Full backup (download)','پشتیبان‌گیری کامل (دانلود)'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
   safeSet('ml-discount',P('الخصم (QAR)','Discount (QAR)','تخفیف (QAR)'));
@@ -4202,13 +4204,13 @@ function renderPurchaseInvoices(){
   // total summary
   var grand=list.reduce(function(s,p){return s+(+p.total_price||0);},0);
   var totEl=document.getElementById('pi-total');
-  if(totEl) totEl.innerHTML='<span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--accent)">'+grand.toLocaleString()+' QAR</span>';
+  if(totEl) totEl.innerHTML='<span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--blue)">'+grand.toLocaleString()+' QAR</span>';
   var box=document.getElementById('pi-list');
   if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🛒</div><div>'+T('no_data')+'</div></div>'; return; }
   box.innerHTML=list.map(function(p){
     var img=p.invoice_image?'<img src="'+p.invoice_image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">':'';
     var shownDate=p.invoice_date||(p.created_at?String(p.created_at).substring(0,10):'');
-    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
+    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;border-right:3px solid var(--blue)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-weight:700;font-size:14px">'+(p.supplier||L('بدون مورد','No supplier','بدون تأمین‌کننده'))+'</div>'+
         '<div style="font-size:11px;color:var(--text2)">📅 '+shownDate+'</div>'+
@@ -4216,7 +4218,7 @@ function renderPurchaseInvoices(){
       (p.invoice_no?('<div style="font-size:11px;color:var(--text2);margin-top:2px">#'+p.invoice_no+'</div>'):'')+
       '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(p.item_name||'')+'</div>'+
       (p.created_by?('<div style="font-size:11px;color:var(--accent);margin-top:3px">👤 '+L('أدخلها','Entered by','ثبت توسط')+': '+p.created_by+'</div>'):'')+
-      '<div style="font-size:13px;margin-top:4px;color:var(--accent);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
+      '<div style="font-size:13px;margin-top:4px;color:var(--blue);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
       img+
     '</div>';
   }).join('');
@@ -4252,7 +4254,7 @@ function renderExpenseInvoices(){
   box.innerHTML=list.map(function(t){
     var img=t.image?'<img src="'+t.image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">':'';
     var shownDate=t.created_at?String(t.created_at).substring(0,10):'';
-    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
+    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;border-right:3px solid var(--red)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-weight:700;font-size:14px">'+(t.description||L('بدون عنوان','No title','بدون عنوان'))+'</div>'+
         '<div style="font-size:11px;color:var(--text2)">📅 '+shownDate+'</div>'+
@@ -4285,7 +4287,7 @@ function renderAllInvoices(){
   var grandTotal=list.reduce(function(s,inv){return s+(+inv.total_price||0);},0);
   var grandPrepaid=list.reduce(function(s,inv){return s+(+inv.prepay||0);},0);
   var totEl=document.getElementById('ai-total');
-  if(totEl) totEl.innerHTML='<div style="display:flex;justify-content:space-between"><span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--accent)">'+grandTotal.toLocaleString()+' QAR</span></div>'+
+  if(totEl) totEl.innerHTML='<div style="display:flex;justify-content:space-between"><span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--green)">'+grandTotal.toLocaleString()+' QAR</span></div>'+
     '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:var(--text2);margin-top:4px"><span>'+L('المقدم','Prepaid','پیش‌پرداخت')+'</span><span style="color:var(--green)">'+grandPrepaid.toLocaleString()+' QAR</span></div>'+
     '<div style="display:flex;justify-content:space-between;font-size:12px;font-weight:500;color:var(--text2);margin-top:2px"><span>'+L('المتبقي','Remaining','باقی‌مانده')+'</span><span style="color:var(--red)">'+(grandTotal-grandPrepaid).toLocaleString()+' QAR</span></div>';
   var box=document.getElementById('ai-list');
@@ -4305,14 +4307,14 @@ function renderAllInvoices(){
       if(ord&&ord.invoice_image) oImg='<img src="'+ord.invoice_image+'" onclick="event.stopPropagation();document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">';
     }catch(e){}
     var shownDate=inv.created_at?String(inv.created_at).substring(0,10):'';
-    return '<div onclick="closeModal(\'allInvoicesModal\');openInvoiceFolder(\''+inv.id+'\')" style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;cursor:pointer">'+
+    return '<div onclick="closeModal(\'allInvoicesModal\');openInvoiceFolder(\''+inv.id+'\')" style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;cursor:pointer;border-right:3px solid var(--green)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-weight:700;font-size:14px">'+(inv.inv_code||'-')+'</div>'+
         '<div style="font-size:11px;color:var(--text2)">'+stLabel(inv.status)+'</div>'+
       '</div>'+
       '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(inv.customer_name||'')+(inv.customer_phone?(' · '+inv.customer_phone):'')+'</div>'+
       (shownDate?('<div style="font-size:11px;color:var(--text2);margin-top:2px">📅 '+shownDate+'</div>'):'')+
-      '<div style="font-size:12px;margin-top:4px"><span style="color:var(--accent);font-weight:700">'+total.toLocaleString()+' QAR</span>'+
+      '<div style="font-size:12px;margin-top:4px"><span style="color:var(--green);font-weight:700">'+total.toLocaleString()+' QAR</span>'+
       (paid>0?(' · <span style="color:var(--green)">'+L('مقدم','Prepaid','پیش‌پرداخت')+': '+paid.toLocaleString()+'</span>'):'')+'</div>'+
       oImg+
     '</div>';
