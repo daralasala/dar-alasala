@@ -351,14 +351,12 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-blue btn-sm" onclick="openPurchaseModal()" id="fb-purchase">🛒 خرید</button>
     </div>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openOldPurchaseModal()" id="fb-oldpurch">📁 <span id="fb-oldpurch-lbl">ثبت فاکتورهای قدیمی (بدون انبار)</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">بدهی‌ها (طلبکارها)</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--green);color:var(--green)" onclick="recoverMissingPrepayIncome()" id="fb-recover">🔧 <span id="fb-recover-lbl">بازسازی درآمدهای گم‌شده</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none" onclick="openDebtsModal()" id="fb-debts">💸 <span id="fb-debts-lbl">قرضی‌ها (طلبکارها)</span></button>
     <button class="btn btn-block" style="margin-bottom:12px;display:none;background:var(--accent);color:#000;font-weight:700" onclick="openFinAnalysis()" id="fb-analysis">🔍 <span id="fb-analysis-lbl">تحلیل مالی کامل</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--accent);color:var(--accent)" onclick="backupAllData()" id="fb-backup">💾 <span id="fb-backup-lbl">پشتیبان‌گیری کامل (دانلود)</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingPurchaseExpenses()" id="fb-recover-exp">🔧 <span id="fb-recover-exp-lbl">بازسازی هزینه‌های خرید گم‌شده</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px;display:none;border-color:var(--red);color:var(--red)" onclick="recoverMissingSalaries()" id="fb-recover-sal">🔧 <span id="fb-recover-sal-lbl">بازسازی حقوق‌های گم‌شده</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openPurchaseInvoices()" id="fb-purchinv">🛒 <span id="fb-purchinv-lbl">فاکتورهای خرید</span></button>
-    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">همه فاکتورها</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openExpenseInvoices()" id="fb-expinv">💸 <span id="fb-expinv-lbl">فاکتورهای هزینه</span></button>
+    <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openAllInvoices()" id="fb-allinv">📄 <span id="fb-allinv-lbl">فاکتورهای مشتری</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="openFinReport()" id="fb-report">📊 <span id="fb-report-lbl">صورت‌حساب ماهیانه و سالانه</span></button>
     <button class="btn btn-outline btn-block" style="margin-bottom:12px" onclick="toggleAssets()" id="fb-assets">🏛️ <span id="fb-assets-lbl">الأصول الثابتة / دارایی‌های ثابت</span></button>
     <div id="assets-section" style="display:none;margin-bottom:14px">
@@ -828,7 +826,18 @@ body.en .search-icon{right:auto;left:10px;}
   <div class="modal" style="max-width:680px;max-height:92vh">
     <div class="modal-header"><div class="modal-title">🛒 <span id="pi-title">فاکتورهای خرید</span></div><button class="modal-close" onclick="closeModal('purchInvoicesModal')">✕</button></div>
     <input class="form-control" id="pi-search" placeholder="🔍" oninput="renderPurchaseInvoices()" style="margin-bottom:10px">
+    <div id="pi-total" style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;font-weight:700"></div>
     <div id="pi-list"></div>
+  </div>
+</div>
+
+<!-- EXPENSE INVOICES LIST MODAL -->
+<div class="modal-overlay modal-top" id="expInvoicesModal">
+  <div class="modal" style="max-width:680px;max-height:92vh">
+    <div class="modal-header"><div class="modal-title">💸 <span id="ei-title">فاکتورهای هزینه</span></div><button class="modal-close" onclick="closeModal('expInvoicesModal')">✕</button></div>
+    <input class="form-control" id="ei-search" placeholder="🔍" oninput="renderExpenseInvoices()" style="margin-bottom:10px">
+    <div id="ei-total" style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;font-weight:700"></div>
+    <div id="ei-list"></div>
   </div>
 </div>
 
@@ -1474,10 +1483,11 @@ function refreshStaticLabels(l){
   safeSet('em-img-btn',P('إضافة صورة الفاتورة','Add receipt photo','افزودن عکس فاکتور'));
   safeSet('em-save',P('تسجيل مصروف','Add expense','ثبت هزینه'));
   safeSet('fb-purchinv-lbl',P('فواتير الشراء','Purchase invoices','فاکتورهای خرید'));
-  safeSet('fl-debt',P('الديون المستحقة','Outstanding receivables','بدهی معوق'));
+  safeSet('fb-expinv-lbl',P('فواتير المصروفات','Expense invoices','فاکتورهای هزینه'));
+  safeSet('fl-debt',P('الديون المستحقة','Outstanding receivables','قرضی معوق'));
   safeSet('fb-oldpurch-lbl',P('فواتير قديمة (بدون مخزن)','Old invoices (no inventory)','فاکتورهای قدیمی (بدون انبار)'));
-  safeSet('fb-debts-lbl',P('الديون (الدائنون)','Debts (creditors)','بدهی‌ها (طلبکارها)'));
-  safeSet('fb-allinv-lbl',P('كل الفواتير','All invoices','همه فاکتورها'));
+  safeSet('fb-debts-lbl',P('الديون (الدائنون)','Debts (creditors)','قرضی‌ها (طلبکارها)'));
+  safeSet('fb-allinv-lbl',P('فواتير العملاء','Customer invoices','فاکتورهای مشتری'));
   safeSet('fb-report-lbl',P('كشف الحساب الشهري والسنوي','Monthly & yearly statement','صورت‌حساب ماهیانه و سالانه'));
   safeSet('ml-invno',P('رقم الفاتورة','Invoice number','شماره فاکتور'));
   safeSet('ml-discount',P('الخصم (QAR)','Discount (QAR)','تخفیف (QAR)'));
@@ -1773,12 +1783,6 @@ function applyInvoiceVisibility(){
   // Debts: manager only
   var dbtn=document.getElementById('fb-debts');
   if(dbtn) dbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
-  var rbtn=document.getElementById('fb-recover');
-  if(rbtn) rbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
-  var rebtn=document.getElementById('fb-recover-exp');
-  if(rebtn) rebtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
-  var rsbtn=document.getElementById('fb-recover-sal');
-  if(rsbtn) rsbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var anbtn=document.getElementById('fb-analysis');
   if(anbtn) anbtn.style.display = (currentUser&&currentUser.role==='manager') ? '' : 'none';
   var bkbtn=document.getElementById('fb-backup');
@@ -1829,18 +1833,50 @@ async function saveDebt(){
 function renderDebts(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
-  // --- Credit purchases that are not yet paid (money owed to suppliers) ---
+  // --- Credit purchases: unpaid (owed) and paid (settled) ---
   var creditBuys=(allTransactions||[]).filter(function(t){ return t.is_credit && !t.paid; });
+  var creditPaid=(allTransactions||[]).filter(function(t){ return t.is_credit && t.paid; });
   var creditTotal=creditBuys.reduce(function(s,t){return s+(t.amount||0);},0);
+  var creditPaidTotal=creditPaid.reduce(function(s,t){return s+(t.amount||0);},0);
   var list=allDebts.filter(function(d){ return _debtsShowPaid ? d.is_paid : !d.is_paid; });
   var manualTotal=allDebts.filter(function(d){return !d.is_paid;}).reduce(function(s,d){return s+(d.amount||0);},0);
-  var openTotal=manualTotal+(_debtsShowPaid?0:creditTotal);
-  var totEl=document.getElementById('dbt-total'); if(totEl) totEl.textContent=L('المجموع','Total','جمع')+': '+fmt(openTotal);
-  var ltEl=document.getElementById('dbt-list-title'); if(ltEl) ltEl.textContent=_debtsShowPaid?('✅ '+L('المدفوعة','Paid','پرداخت‌شده‌ها')):('📋 '+L('الديون المفتوحة','Open debts','بدهی‌های باز'));
+  var manualPaidTotal=allDebts.filter(function(d){return d.is_paid;}).reduce(function(s,d){return s+(d.amount||0);},0);
+  var openTotal=manualTotal+creditTotal;
+  var paidTotal=manualPaidTotal+creditPaidTotal;
+  // EQUATION: total credit purchases = paid + remaining
+  var totEl=document.getElementById('dbt-total');
+  if(totEl){
+    if(_debtsShowPaid){
+      totEl.innerHTML=L('المدفوع','Paid','پرداخت‌شده')+': '+fmt(paidTotal);
+    } else {
+      totEl.innerHTML='<div>'+L('المتبقي','Remaining','مانده قرضی')+': <span style="color:var(--red)">'+fmt(openTotal)+'</span></div>'+
+        '<div style="font-size:11px;color:var(--text2);font-weight:500;margin-top:3px">'+
+        L('إجمالي الآجل','Total credit','کل قرضی')+': '+fmt(openTotal+paidTotal)+' = '+
+        L('مدفوع','paid','پرداخت‌شده')+' '+fmt(paidTotal)+' + '+L('متبقي','remaining','مانده')+' '+fmt(openTotal)+'</div>';
+    }
+  }
+  var ltEl=document.getElementById('dbt-list-title'); if(ltEl) ltEl.textContent=_debtsShowPaid?('✅ '+L('المدفوعة','Paid','پرداخت‌شده‌ها')):('📋 '+L('الديون المفتوحة','Open debts','قرضی‌های باز'));
   var tgEl=document.getElementById('dbt-toggle-paid'); if(tgEl) tgEl.textContent=_debtsShowPaid?('📋 '+L('عرض المفتوحة','Show open','نمایش بازها')):('👁️ '+L('عرض المدفوعة','Show paid','نمایش پرداخت‌شده‌ها'));
   var today=new Date(); today.setHours(0,0,0,0);
 
   var html='';
+  // PAID VIEW: show settled credit purchases with green badge
+  if(_debtsShowPaid && creditPaid.length){
+    html+='<div style="font-size:12px;font-weight:700;color:var(--green);margin:4px 0 6px">✅ '+L('مشتريات آجلة مدفوعة','Paid credit purchases','خریدهای قرضی پرداخت‌شده')+'</div>';
+    html+=creditPaid.sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);}).map(function(t){
+      var who=t.supplier_name||t.description||L('مورّد','Supplier','تأمین‌کننده');
+      var dt=(t.created_at||'').slice(0,10);
+      return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;border-right:3px solid var(--green)">'+
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start">'+
+          '<div style="flex:1"><div style="font-weight:700;font-size:14px">🛒 '+who+'</div>'+
+          (dt?'<div style="font-size:11px;color:var(--text3)">📅 '+dt+'</div>':'')+'</div>'+
+          '<div style="font-weight:800;color:var(--green);white-space:nowrap;margin-right:8px">'+fmt(t.amount)+'</div>'+
+        '</div>'+
+        '<div style="margin-top:8px"><span class="badge badge-green" style="font-size:10px">✅ '+L('مدفوع','Paid','پرداخت شد')+'</span></div>'+
+      '</div>';
+    }).join('');
+    if(list.length) html+='<div style="font-size:12px;font-weight:700;color:var(--text2);margin:12px 0 6px">✍️ '+L('ديون يدوية مدفوعة','Paid manual debts','بدهی‌های دستی پرداخت‌شده')+'</div>';
+  }
   // Section 1: credit purchases (only in "open" view)
   if(!_debtsShowPaid && creditBuys.length){
     html+='<div style="font-size:12px;font-weight:700;color:var(--orange);margin:4px 0 6px">🛒 '+L('مشتريات آجلة (لم تُسدد)','Credit purchases (unpaid)','خریدهای قرضی (پرداخت‌نشده)')+'</div>';
@@ -4159,18 +4195,66 @@ function renderPurchaseInvoices(){
   var q=(document.getElementById('pi-search').value||'').toLowerCase();
   var list=(allPurchases||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
   if(q) list=list.filter(function(p){ return ((p.supplier||'')+(p.item_name||'')).toLowerCase().indexOf(q)>=0; });
+  // total summary
+  var grand=list.reduce(function(s,p){return s+(+p.total_price||0);},0);
+  var totEl=document.getElementById('pi-total');
+  if(totEl) totEl.innerHTML='<span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('فاتورة','invoices','فاکتور')+')</span><span style="color:var(--accent)">'+grand.toLocaleString()+' QAR</span>';
   var box=document.getElementById('pi-list');
   if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">🛒</div><div>'+T('no_data')+'</div></div>'; return; }
   box.innerHTML=list.map(function(p){
     var img=p.invoice_image?'<img src="'+p.invoice_image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">':'';
+    var shownDate=p.invoice_date||(p.created_at?String(p.created_at).substring(0,10):'');
     return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
         '<div style="font-weight:700;font-size:14px">'+(p.supplier||L('بدون مورد','No supplier','بدون تأمین‌کننده'))+'</div>'+
-        '<div style="font-size:11px;color:var(--text2)">'+(p.invoice_date||'')+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">📅 '+shownDate+'</div>'+
       '</div>'+
+      (p.invoice_no?('<div style="font-size:11px;color:var(--text2);margin-top:2px">#'+p.invoice_no+'</div>'):'')+
       '<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(p.item_name||'')+'</div>'+
       (p.created_by?('<div style="font-size:11px;color:var(--accent);margin-top:3px">👤 '+L('أدخلها','Entered by','ثبت توسط')+': '+p.created_by+'</div>'):'')+
       '<div style="font-size:13px;margin-top:4px;color:var(--accent);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
+      img+
+    '</div>';
+  }).join('');
+}
+
+// ===== EXPENSE INVOICES LIST (variable expenses, excluding purchases & salaries shown separately) =====
+function openExpenseInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  document.getElementById('ei-title').textContent=L('فواتير المصروفات','Expense invoices','فاکتورهای هزینه');
+  document.getElementById('ei-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
+  renderExpenseInvoices();
+  openModal('expInvoicesModal');
+}
+function renderExpenseInvoices(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var q=(document.getElementById('ei-search').value||'').toLowerCase();
+  var list=(allTransactions||[]).filter(function(t){return t&&t.type==='expense';}).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  if(q) list=list.filter(function(t){ return ((t.description||'')+(t.category||'')).toLowerCase().indexOf(q)>=0; });
+  var grand=list.reduce(function(s,t){return s+(+t.amount||0);},0);
+  var totEl=document.getElementById('ei-total');
+  if(totEl) totEl.innerHTML='<span>📊 '+L('الإجمالي','Total','جمع کل')+' ('+list.length+' '+L('بند','items','مورد')+')</span><span style="color:var(--red)">'+grand.toLocaleString()+' QAR</span>';
+  var box=document.getElementById('ei-list');
+  if(list.length===0){ box.innerHTML='<div class="empty-state"><div class="empty-icon">💸</div><div>'+T('no_data')+'</div></div>'; return; }
+  var catName=function(c){
+    if(c==='salary') return L('راتب','Salary','حقوق');
+    if(c==='حمل‌ونقل'||c==='transport') return L('نقل','Transport','حمل‌ونقل');
+    if(c==='بنزین'||c==='fuel') return L('وقود','Fuel','بنزین');
+    if(c==='غذا'||c==='food') return L('طعام','Food','غذا');
+    if(c==='مواد اولیه') return L('مواد خام','Raw materials','مواد اولیه');
+    if(c==='تعمیرات') return L('صيانة','Repairs','تعمیرات');
+    return c||L('أخرى','Other','سایر');
+  };
+  box.innerHTML=list.map(function(t){
+    var img=t.image?'<img src="'+t.image+'" onclick="document.getElementById(\'lightbox-img\').src=this.src;document.getElementById(\'lightbox\').style.display=\'flex\'" style="width:100%;height:130px;object-fit:cover;border-radius:8px;margin-top:8px;cursor:pointer">':'';
+    var shownDate=t.created_at?String(t.created_at).substring(0,10):'';
+    return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center">'+
+        '<div style="font-weight:700;font-size:14px">'+(t.description||L('بدون عنوان','No title','بدون عنوان'))+'</div>'+
+        '<div style="font-size:11px;color:var(--text2)">📅 '+shownDate+'</div>'+
+      '</div>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:3px">🏷️ '+catName(t.category)+'</div>'+
+      '<div style="font-size:13px;margin-top:4px;color:var(--red);font-weight:700">'+(t.amount||0).toLocaleString()+' QAR</div>'+
       img+
     '</div>';
   }).join('');
@@ -4183,7 +4267,7 @@ function openAllInvoices(){
     return;
   }
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  document.getElementById('ai-title').textContent=L('كل الفواتير','All invoices','همه فاکتورها');
+  document.getElementById('ai-title').textContent=L('فواتير العملاء','Customer invoices','فاکتورهای مشتری');
   document.getElementById('ai-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
   renderAllInvoices();
   openModal('allInvoicesModal');
