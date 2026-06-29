@@ -4772,23 +4772,32 @@ function pickExpenseImage(){
   input.click();
 }
 async function saveTransaction(type){
+  var _unlock=lockBtn(typeof event!=='undefined'&&event?event.target.closest('button'):null);
+  if(_unlock===null) return; // already saving
+  _unlock=_unlock||function(){};
   const modalId=type==='income'?'incomeModal':'expenseModal';
   const amount=parseFloat(document.getElementById(type==='income'?'i-amount':'e-amount').value)||0;
   const desc=document.getElementById(type==='income'?'i-desc':'e-desc').value;
   const cat=document.getElementById(type==='income'?'i-cat':'e-cat').value;
-  if(!amount){ showToast(T('err_fill'),'error'); return; }
-  var body={type:type,amount:amount,description:desc,category:cat,user_id:currentUser?currentUser.id:null};
-  if(type==='expense'&&expenseImage){ body.image=expenseImage; }
-  await api('POST','transactions',body);
-  closeModal(modalId);
-  const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc');
-  allTransactions=newTrans||[];
-  renderFinance();
-  showToast(T('saved'),'success');
-  document.getElementById(type==='income'?'i-amount':'e-amount').value='';
-  document.getElementById(type==='income'?'i-desc':'e-desc').value='';
-  expenseImage='';
-  var pv=document.getElementById('e-img-preview'); if(pv) pv.innerHTML='';
+  if(!amount){ showToast(T('err_fill'),'error'); _unlock(); return; }
+  try {
+    var body={type:type,amount:amount,description:desc,category:cat,user_id:currentUser?currentUser.id:null};
+    if(type==='expense'&&expenseImage){ body.image=expenseImage; }
+    await api('POST','transactions',body);
+    closeModal(modalId);
+    const newTrans=await api('GET','transactions','','?select=*&order=created_at.desc');
+    allTransactions=newTrans||allTransactions;
+    renderFinance();
+    showToast(T('saved'),'success');
+    document.getElementById(type==='income'?'i-amount':'e-amount').value='';
+    document.getElementById(type==='income'?'i-desc':'e-desc').value='';
+    expenseImage='';
+    var pv=document.getElementById('e-img-preview'); if(pv) pv.innerHTML='';
+  } catch(err){
+    showToast(lang==='ar'?'حدث خطأ':lang==='en'?'An error occurred':'خطایی رخ داد','error');
+  } finally {
+    _unlock();
+  }
 }
 
 // ===== INVOICE AI =====
@@ -4957,9 +4966,37 @@ function renderPurchaseItems(){
   try { if(typeof autoTranslateLabels==='function') autoTranslateLabels(lang); } catch(e){}
 }
 
+// ===== GLOBAL BUTTON LOCK (prevents double-submit + shows progress) =====
+// Locks the clicked button while an async save runs, so a slow network can't
+// cause a second click to create a duplicate record.
+function lockBtn(btn){
+  if(!btn) return function(){};
+  if(btn.dataset._locked==='1') return null; // already running -> signal caller to abort
+  btn.dataset._locked='1';
+  btn.dataset._oldHtml=btn.innerHTML;
+  btn.disabled=true;
+  btn.style.opacity='0.6';
+  btn.style.pointerEvents='none';
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  btn.innerHTML='⏳ '+L('جاري الحفظ...','Saving...','در حال ثبت...');
+  // return an unlock function
+  return function(){
+    try{
+      btn.disabled=false;
+      btn.style.opacity='';
+      btn.style.pointerEvents='';
+      if(btn.dataset._oldHtml!==undefined) btn.innerHTML=btn.dataset._oldHtml;
+      btn.dataset._locked='0';
+    }catch(e){}
+  };
+}
+
 var _savingPurchase=false;
 async function savePurchase(){
   if(_savingPurchase) return; // prevent double-submit
+  var _unlock=lockBtn(typeof event!=='undefined'&&event?event.target.closest('button'):null);
+  if(_unlock===null) return; // a save is already running on this button
+  _unlock=_unlock||function(){};
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   // Read all current field values from the DOM into the model first
   for(var s=0;s<purchaseItems.length;s++){ syncPurchaseRowFromDOM(s); }
@@ -4972,26 +5009,27 @@ async function savePurchase(){
   var validItems=purchaseItems.filter(function(it){
     return (it.invId!=='__new__'||it.name.trim()) && (it.qty>0);
   });
-  if(validItems.length===0){ showToast(L('أضف صنفاً واحداً على الأقل','Add at least one item','حداقل یک قلم اضافه کن'),'error'); return; }
-  if(!supplier){ showToast(lang==='ar'?'اختر الشركة':lang==='en'?'Select company':'شرکت را انتخاب کنید','error'); return; }
+  if(validItems.length===0){ showToast(L('أضف صنفاً واحداً على الأقل','Add at least one item','حداقل یک قلم اضافه کن'),'error'); _unlock(); return; }
+  if(!supplier){ showToast(lang==='ar'?'اختر الشركة':lang==='en'?'Select company':'شرکت را انتخاب کنید','error'); _unlock(); return; }
   // Invoice number is REQUIRED and must be unique (prevents entering the same invoice twice)
   var invNo=(document.getElementById('p-invno').value||'').trim();
-  if(!invNo){ showToast(L('أدخل رقم فاتورة الشراء','Enter purchase invoice number','شماره فاکتور خرید را وارد کنید'),'error'); return; }
+  if(!invNo){ showToast(L('أدخل رقم فاتورة الشراء','Enter purchase invoice number','شماره فاکتور خرید را وارد کنید'),'error'); _unlock(); return; }
   var dup=(allPurchases||[]).some(function(p){ return p.invoice_no && String(p.invoice_no).trim().toLowerCase()===invNo.toLowerCase(); });
-  if(dup){ showToast(L('رقم الفاتورة مُدخل مسبقاً!','Invoice number already entered!','این شماره فاکتور قبلاً ثبت شده!'),'error'); return; }
+  if(dup){ showToast(L('رقم الفاتورة مُدخل مسبقاً!','Invoice number already entered!','این شماره فاکتور قبلاً ثبت شده!'),'error'); _unlock(); return; }
   const subtotal=validItems.reduce(function(s,it){return s+((it.qty||0)*(it.price||0));},0);
   var discountVal=parseFloat((document.getElementById('p-discount')||{}).value)||0;
   const total=Math.max(0, subtotal-discountVal);
-  if(!subtotal){ showToast(T('err_fill'),'error'); return; }
+  if(!subtotal){ showToast(T('err_fill'),'error'); _unlock(); return; }
   // Build a readable item summary for the purchase record
   var itemsSummary=validItems.map(function(it){return it.name+' ('+it.qty+' '+it.unit+' × '+it.price+')';}).join(' / ')+(discountVal>0?(' — '+(lang==='ar'?'خصم':lang==='en'?'discount':'تخفیف')+' '+discountVal):'');
   var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':lang==='en'?' (Credit)':' (قرضی)'):'');
   // 1) Financial transaction
   _savingPurchase=true;
+  try {
   const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
-  if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); _savingPurchase=false; return; }
+  if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); _savingPurchase=false; _unlock(); return; }
   const trans=await tRes.json();
-  if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); _savingPurchase=false; return; }
+  if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); _savingPurchase=false; _unlock(); return; }
   await api('POST','purchases',{transaction_id:trans[0].id,supplier:supplier,total_price:total,item_name:itemsSummary,invoice_date:date||null,invoice_image:invoiceImage||null,created_by:(currentUser?currentUser.name:''),invoice_no:invNo});
   // 2) Add each item to inventory (existing -> add qty; new -> create) — SKIPPED for old purchases
   if(!_skipInventory)
@@ -5031,11 +5069,16 @@ async function savePurchase(){
     ? L('تم تسجيل الفاتورة القديمة (بدون مخزن)','Old invoice saved (no inventory)','فاکتور قدیمی ثبت شد (بدون انبار)')
     : L('تم تسجيل الشراء وإضافته للمخزون','Purchase saved & added to inventory','خرید ثبت و به انبار اضافه شد'),'success');
   _skipInventory=false;
-  _savingPurchase=false;
   // reset
   resetPurchaseItems();
   document.getElementById('p-due').value='';
   document.getElementById('invoice-preview').innerHTML='';
+  } catch(err){
+    showToast(L('حدث خطأ، حاول مجدداً','An error occurred, try again','خطایی رخ داد، دوباره تلاش کنید'),'error');
+  } finally {
+    _savingPurchase=false;
+    _unlock();
+  }
 }
 
 // ===== SUPPLIERS =====
@@ -7877,11 +7920,14 @@ function handleItemImages(i,input){
 
 // ===== SAVE ORDER (creates invoice + one order per item) =====
 async function saveOrder(){
+  var _unlock=lockBtn(typeof event!=='undefined'&&event?event.target.closest('button'):null);
+  if(_unlock===null) return; // already saving
+  _unlock=_unlock||function(){};
   const cname=document.getElementById('f-cname').value.trim();
   const delivery=document.getElementById('f-delivery').value;
-  if(!cname||!delivery){ showToast(T('err_fill'),'error'); return; }
+  if(!cname||!delivery){ showToast(T('err_fill'),'error'); _unlock(); return; }
   var validItems=orderItems.filter(function(it){return it.product&&it.product.trim();});
-  if(validItems.length===0){ showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':lang==='en'?'Add at least one item':'حداقل یک جنس اضافه کنید','error'); return; }
+  if(validItems.length===0){ showToast(lang==='ar'?'أضف صنفاً واحداً على الأقل':lang==='en'?'Add at least one item':'حداقل یک جنس اضافه کنید','error'); _unlock(); return; }
   const phone=document.getElementById('f-phone').value.trim();
   const cid=document.getElementById('f-cid').value.trim();
   const prepay=parseFloat(document.getElementById('f-prepay').value)||0;
@@ -7892,9 +7938,10 @@ async function saveOrder(){
   // Use the manually-entered invoice number if provided, otherwise auto-generate
   var manualInv=(document.getElementById('f-invno').value||'').trim();
   const invCode=manualInv?manualInv:('INV-'+String(Date.now()).slice(-5));
+  try {
   // 1) Create invoice header
   const invRes=await fetch(SB_URL+'/rest/v1/invoices',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({inv_code:invCode,customer_name:cname,customer_phone:phone,customer_id:cid,total_price:total,discount:discount,prepay:prepay,status:'pending_payment',notes:desc})});
-  if(!invRes.ok){ showToast(await invRes.text(),'error'); return; }
+  if(!invRes.ok){ showToast(await invRes.text(),'error'); _unlock(); return; }
   const inv=(await invRes.json())[0];
   // 2) Create one order per item
   for(var k=0;k<validItems.length;k++){
@@ -7916,6 +7963,11 @@ async function saveOrder(){
   orderItems=[];
   await loadAll();
   showToast(T('saved'),'success');
+  } catch(err){
+    showToast(lang==='ar'?'حدث خطأ':lang==='en'?'An error occurred':'خطایی رخ داد','error');
+  } finally {
+    _unlock();
+  }
 }
 
 // ===== IMAGE UPLOAD =====
