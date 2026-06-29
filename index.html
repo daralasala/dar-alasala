@@ -2208,8 +2208,8 @@ function startAutoRefresh(){
     if(anyModalOpen) return;
     // Don't refresh if the tab/page is hidden in the background
     if(document.hidden) return;
-    loadAll();
-  },10000);
+    loadAll(true);
+  },30000);
 }
 
 // ===== CHANGE PASSWORD (any logged-in user) =====
@@ -2296,7 +2296,7 @@ function showTab(tab){
 }
 
 // ===== LOAD =====
-async function loadAll(){
+async function loadAll(isRefresh){
   var isManager=currentUser&&currentUser.role==='manager';
   var dep=currentUser?currentUser.department:'';
   var perms=currentUser?getUserPermissions(currentUser):[];
@@ -2332,22 +2332,31 @@ async function loadAll(){
 
   var res=await Promise.all(core);
 
-  allOrders=(res[0]||[]).filter(function(x){return x&&typeof x==='object';});
-  allUsers=(res[1]||[]).filter(function(x){return x&&typeof x==='object';});
+  // Helper: on auto-refresh, if a fetch comes back empty/failed, KEEP the previous
+  // data instead of blanking it (prevents amounts flashing to zero).
+  function pick(idx, prev){
+    var v=(idx>=0?res[idx]:null);
+    var arr=(v||[]).filter(function(x){return x&&typeof x==='object';});
+    if(isRefresh && arr.length===0 && prev && prev.length>0) return prev; // keep old
+    return arr;
+  }
+
+  allOrders=pick(0, allOrders);
+  allUsers=pick(1, allUsers);
   // stages
   var st=res[2]||[];
   if(st.length>0){ allStages=st.map(function(r){return {id:r.id,name:r.name_fa,name_fa:r.name_fa,name_ar:r.name_ar,name_en:r.name_en,order_num:r.order_num};}); }
   // job titles
   var jt=res[3]||[];
   if(jt.length>0){ allJobTitles=jt.map(function(r){return {id:r.id,name:r.name};}); }
-  allInventory=(res[4]||[]).filter(function(x){return x&&typeof x==='object';});
-  allTransactions=(idxTrans>=0?(res[idxTrans]||[]):[]).filter(function(x){return x&&typeof x==='object';});
-  allPurchases=(idxPurch>=0?(res[idxPurch]||[]):[]).filter(function(x){return x&&typeof x==='object';});
-  allInvoices=(idxInvs>=0?(res[idxInvs]||[]):[]).filter(function(x){return x&&typeof x==='object';});
-  allCustomers=idxCust>=0?(res[idxCust]||[]):[];
-  allSuppliers=idxSup>=0?(res[idxSup]||[]):[];
-  allAssets=idxAssets>=0?(res[idxAssets]||[]):[];
-  allFixedExp=idxFixed>=0?(res[idxFixed]||[]):[];
+  allInventory=pick(4, allInventory);
+  allTransactions=pick(idxTrans, allTransactions);
+  allPurchases=pick(idxPurch, allPurchases);
+  allInvoices=pick(idxInvs, allInvoices);
+  allCustomers=(idxCust>=0?pick(idxCust, allCustomers):allCustomers);
+  allSuppliers=(idxSup>=0?pick(idxSup, allSuppliers):allSuppliers);
+  allAssets=(idxAssets>=0?pick(idxAssets, allAssets):allAssets);
+  allFixedExp=(idxFixed>=0?pick(idxFixed, allFixedExp):allFixedExp);
 
   // Render
   renderDashboard();
@@ -7191,7 +7200,7 @@ async function checkNewChatMessages(){
   if(!_chatSeededOnce){ loadChatLastSeen(); }
   if(_myChatIds===null){ await refreshMyChatIds(); }
   try {
-    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender,created_at&order=created_at.desc&limit=300',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender,created_at&order=created_at.desc&limit=100',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
     if(!res.ok){ console.log('chat check HTTP', res.status); return; }
     var rows=await res.json();
     var totalUnread=0, perChat={};
@@ -7203,7 +7212,6 @@ async function checkNewChatMessages(){
       var seen=_chatLastSeen[m.chat_id]||0;           // stored as a timestamp (ms)
       if(t>seen){ perChat[m.chat_id]=(perChat[m.chat_id]||0)+1; totalUnread++; }
     });
-    console.log('chat check me=['+me+'] msgs='+rows.length+' unread='+totalUnread+' myChats='+(_myChatIds?Object.keys(_myChatIds).length:'?'));
     var prevTotal=Object.keys(_chatUnread).reduce(function(s,k){return s+(_chatUnread[k]||0);},0);
     _chatUnread=perChat;
     // play sound/vibrate only when a genuinely new message arrives after the first check
@@ -7232,7 +7240,7 @@ function startChatNotif(){
   _myChatIds=null;         // force a fresh membership lookup
   loadChatLastSeen();      // restore "seen" state from a previous session (survives refresh)
   checkNewChatMessages();
-  _chatNotifTimer=setInterval(function(){ if(!document.hidden) checkNewChatMessages(); }, 6000);
+  _chatNotifTimer=setInterval(function(){ if(!document.hidden) checkNewChatMessages(); }, 15000);
 }
 function stopChatNotif(){ if(_chatNotifTimer){ clearInterval(_chatNotifTimer); _chatNotifTimer=null; } }
 
