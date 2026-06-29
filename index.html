@@ -2314,7 +2314,7 @@ async function loadAll(isRefresh){
 
   // Core data everyone needs (orders + users + stages + job titles), all in parallel
   var core=[
-    api('GET','orders','','?select=*&order=created_at.desc'),
+    api('GET','orders','','?select=id,id_code,customer_name,customer_phone,product,delivery_date,total_price,item_price,item_qty,prepay,description,status,progress,current_stage,worker,assigned_worker,passed_by,materials,invoice_id,created_at&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
     api('GET','stages','','?select=*&order=order_num.asc'),
     api('GET','job_titles','','?select=*&order=id.asc'),
@@ -2322,8 +2322,8 @@ async function loadAll(isRefresh){
   ];
   // Heavy data only for those who can see it
   var idxTrans=-1, idxPurch=-1, idxInvs=-1, idxCust=-1, idxSup=-1, idxAssets=-1, idxFixed=-1;
-  if(seeFinance){ idxTrans=core.length; core.push(api('GET','transactions','','?select=*&order=created_at.desc')); }
-  if(seeFinance){ idxPurch=core.length; core.push(api('GET','purchases','','?select=*&order=created_at.desc')); }
+  if(seeFinance){ idxTrans=core.length; core.push(api('GET','transactions','','?select=id,type,amount,description,category,supplier_name,is_credit,paid,due_date,created_at,user_id&order=id.desc')); }
+  if(seeFinance){ idxPurch=core.length; core.push(api('GET','purchases','','?select=id,supplier,total_price,item_name,invoice_date,invoice_no,transaction_id,created_by,created_at&order=id.desc')); }
   idxInvs=core.length; core.push(api('GET','invoices','','?select=*&order=created_at.desc'));
   if(seeCustomers){ idxCust=core.length; core.push(api('GET','customers','','?select=*&order=created_at.desc')); }
   if(seeFinance){ idxSup=core.length; core.push(api('GET','suppliers','','?select=*')); }
@@ -2767,6 +2767,14 @@ async function finishWork(orderId){
 
 async function openOrderDetail(id){
   const o=allOrders.find(x=>x.id===id); if(!o) return;
+  // Images are NOT loaded in the main bulk query (to avoid DB timeouts).
+  // Fetch this single order's images on demand, then cache on the object.
+  if(o.images===undefined && o.invoice_image===undefined && o.contract_image===undefined){
+    try{
+      var imgRes=await api('GET','orders','','?id=eq.'+o.id+'&select=images,invoice_image,contract_image');
+      if(imgRes&&imgRes[0]){ o.images=imgRes[0].images; o.invoice_image=imgRes[0].invoice_image; o.contract_image=imgRes[0].contract_image; }
+    }catch(e){}
+  }
   // Items of the same invoice (so paid amount can be read at invoice level)
   const invoiceSiblings = o.invoice_id ? allOrders.filter(x=>String(x.invoice_id)===String(o.invoice_id)) : [o];
   const isMultiItem = invoiceSiblings.length>1;
@@ -4227,7 +4235,19 @@ function openPurchaseInvoices(){
   document.getElementById('pi-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
   renderPurchaseInvoices();
   openModal('purchInvoicesModal');
+  // Lazy-load invoice images (not in the main query) once, then re-render
+  if(!_purchImagesLoaded){
+    _purchImagesLoaded=true;
+    api('GET','purchases','','?select=id,invoice_image&order=id.desc').then(function(rows){
+      if(rows&&rows.length){
+        var map={}; rows.forEach(function(r){ map[r.id]=r.invoice_image; });
+        (allPurchases||[]).forEach(function(p){ if(map[p.id]!==undefined) p.invoice_image=map[p.id]; });
+        if(document.getElementById('purchInvoicesModal').classList.contains('open')) renderPurchaseInvoices();
+      }
+    }).catch(function(){ _purchImagesLoaded=false; });
+  }
 }
+var _purchImagesLoaded=false;
 function renderPurchaseInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('pi-search').value||'').toLowerCase();
@@ -4263,7 +4283,19 @@ function openExpenseInvoices(){
   document.getElementById('ei-search').placeholder=L('🔍 بحث','🔍 Search','🔍 جستجو');
   renderExpenseInvoices();
   openModal('expInvoicesModal');
+  // Lazy-load expense images (not in main query) once, then re-render
+  if(!_expImagesLoaded){
+    _expImagesLoaded=true;
+    api('GET','transactions','','?type=eq.expense&select=id,image&order=id.desc').then(function(rows){
+      if(rows&&rows.length){
+        var map={}; rows.forEach(function(r){ map[r.id]=r.image; });
+        (allTransactions||[]).forEach(function(t){ if(map[t.id]!==undefined) t.image=map[t.id]; });
+        if(document.getElementById('expInvoicesModal').classList.contains('open')) renderExpenseInvoices();
+      }
+    }).catch(function(){ _expImagesLoaded=false; });
+  }
 }
+var _expImagesLoaded=false;
 function renderExpenseInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('ei-search').value||'').toLowerCase();
