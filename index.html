@@ -6627,6 +6627,26 @@ function openStaffFile(id){
   document.getElementById('staff-file-content').innerHTML=
     photoHtml+
     dueInfo+
+    // ===== Role / department selector (manager only) =====
+    ((currentUser&&currentUser.role==='manager')?(
+      '<div class="form-group"><label class="form-label">🏷️ '+L('المسمى الوظيفي','Job title / role','سمت کاری')+'</label>'+
+      '<select class="form-control" id="sf-dept">'+
+        (function(){
+          var titles=(allJobTitles||[]).map(function(j){return j.name;});
+          // ensure common built-in roles are always available
+          ['فورمن','حسابدار','مسئول خرید','مسئول فروش','انباردار','راننده'].forEach(function(t){
+            if(titles.indexOf(t)<0) titles.push(t);
+          });
+          // make sure the worker's current dept is in the list even if not elsewhere
+          if(u.department && titles.indexOf(u.department)<0) titles.unshift(u.department);
+          return titles.map(function(t){
+            return '<option value="'+String(t).replace(/"/g,'&quot;')+'"'+(t===u.department?' selected':'')+'>'+t+'</option>';
+          }).join('');
+        })()+
+      '</select>'+
+      '<div style="font-size:11px;color:var(--text2);margin-top:4px">'+L('غيّر المسمى لتغيير صلاحيات الموظف','Changing the title changes the employee access','تغییر سمت، دسترسی‌های کارگر را عوض می‌کند')+'</div>'+
+      '</div>'
+    ):'')+
     '<div class="form-group"><label class="form-label">📧 '+L('البريد (لتسجيل الدخول)','Email (for login)','ایمیل (برای ورود)')+'</label><input class="form-control" type="text" id="sf-email" value="'+(u.email||'').replace(/"/g,'&quot;')+'"></div>'+
     fld('sf-phone',L('الهاتف','Phone','تلفن'),u.phone,'text')+
     fld('sf-qid',L('الرقم الشخصي QID','QID number','شماره QID'),u.qid,'text')+
@@ -6714,6 +6734,9 @@ async function saveStaffFile(){
     cbs.forEach(function(cb){ if(cb.checked) perms.push(cb.value); });
     body.permissions=JSON.stringify(perms);
   }
+  // Department / role (manager only — selector only shown to manager)
+  var deptSel=document.getElementById('sf-dept');
+  if(deptSel && deptSel.value){ body.department=deptSel.value; }
   await api('PATCH','users',body,'?id=eq.'+id);
   var u=allUsers.find(x=>String(x.id)===String(id)); if(u) Object.assign(u,body);
   closeModal('staffModal'); renderStaff();
