@@ -5342,7 +5342,23 @@ async function loadInventory(){
 function renderInventory(){
   // Add-to-inventory button: manager + warehouse staff (انباردار / مسئول انبار)
   var addBtn=document.getElementById('inv-add-btn');
-  var canAddInv=currentUser&&(currentUser.role==='manager'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار');
+  // Who can ADD/EDIT inventory items:
+  //  - manager
+  //  - warehouse roles (انباردار / مسئول انبار)
+  //  - accountant & purchasing (they manage stock too)
+  //  - anyone explicitly granted the 'inventory' permission
+  var dep=currentUser?currentUser.department:'';
+  var hasInvPerm=false;
+  try{
+    var pr=currentUser&&currentUser.permissions;
+    if(pr){ var pa=typeof pr==='string'?JSON.parse(pr):pr; if(Array.isArray(pa)) hasInvPerm=pa.indexOf('inventory')>=0; }
+  }catch(e){}
+  var canAddInv=currentUser&&(
+    currentUser.role==='manager' ||
+    dep==='انباردار' || dep==='مسئول انبار' ||
+    dep==='حسابدار' || dep==='مسئول خرید' ||
+    hasInvPerm
+  );
   if(addBtn) addBtn.style.display=canAddInv?'block':'none';
   var box=document.getElementById('inventory-list');
   if(!box) return;
