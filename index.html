@@ -1757,6 +1757,7 @@ function getUserPermissions(u){
   var tabs=['dashboard','notify','production'];
   if(dep==='حسابدار') tabs=tabs.concat(['orders','finance','customers','inventory','requests']);
   else if(dep==='مسئول خرید') tabs=tabs.concat(['finance','inventory','requests']);
+  else if(dep==='انباردار'||dep==='مسئول انبار') tabs=tabs.concat(['inventory','requests','orders']);
   else if(dep==='مسئول فروش') tabs=tabs.concat(['orders','customers']);
   else if(dep==='راننده') tabs=tabs.concat(['orders']);
   else tabs=tabs.concat(['orders','inventory','requests']); // workshop workers
@@ -5339,9 +5340,10 @@ async function loadInventory(){
 }
 
 function renderInventory(){
-  // Add-to-inventory button is for the manager only
+  // Add-to-inventory button: manager + warehouse staff (انباردار / مسئول انبار)
   var addBtn=document.getElementById('inv-add-btn');
-  if(addBtn) addBtn.style.display=(currentUser&&currentUser.role==='manager')?'block':'none';
+  var canAddInv=currentUser&&(currentUser.role==='manager'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار');
+  if(addBtn) addBtn.style.display=canAddInv?'block':'none';
   var box=document.getElementById('inventory-list');
   if(!box) return;
   // Usage-history button: manager & accountant only
@@ -5471,6 +5473,9 @@ function editInventory(id){
 }
 
 async function saveInventory(){
+  var _unlock=lockBtn(typeof event!=='undefined'&&event?event.target.closest('button'):null);
+  if(_unlock===null) return;
+  _unlock=_unlock||function(){};
   var id=document.getElementById('inv-edit-id').value;
   var body={
     name:document.getElementById('inv-name').value.trim(),
@@ -5480,12 +5485,18 @@ async function saveInventory(){
     unit_price:parseFloat(document.getElementById('inv-price').value)||0,
     image:invImageData||null
   };
-  if(!body.name){ showToast(T('err_fill'),'error'); return; }
-  if(id){ await api('PATCH','inventory',body,'?id=eq.'+id); }
-  else { await api('POST','inventory',body); }
-  closeModal('inventoryModal');
-  await loadInventory();
-  showToast(T('saved'),'success');
+  if(!body.name){ showToast(T('err_fill'),'error'); _unlock(); return; }
+  try {
+    if(id){ await api('PATCH','inventory',body,'?id=eq.'+id); }
+    else { await api('POST','inventory',body); }
+    closeModal('inventoryModal');
+    await loadInventory();
+    showToast(T('saved'),'success');
+  } catch(err){
+    showToast(lang==='ar'?'حدث خطأ':lang==='en'?'An error occurred':'خطایی رخ داد','error');
+  } finally {
+    _unlock();
+  }
 }
 
 async function addStock(id){
