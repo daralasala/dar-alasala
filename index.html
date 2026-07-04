@@ -1686,23 +1686,21 @@ async function populateRegDept(){
   sel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
 }
 
+var _authPass=''; // kept in memory during the session for manager-only secure actions
 function doLogin(){
   const email = document.getElementById('l-email').value.trim().toLowerCase();
   const pass = document.getElementById('l-pass').value;
   const err = document.getElementById('l-err');
-  // Manager hardcoded - simple check
-  if((email==='admin'||email==='admin@admin.com') && pass==='admin123'){
-    currentUser = {id:0, name:'Manager', email:'admin', role:'manager', department:'manager', status:'active'};
-    enterApp();
-    return;
-  }
-  // Try fetch for other users
-  fetch(SB_URL+'/rest/v1/users?email=eq.'+encodeURIComponent(email)+'&password=eq.'+encodeURIComponent(pass), {
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}
+  // Secure login: password is verified INSIDE the database (user_secrets), never exposed
+  fetch(SB_URL+'/rest/v1/rpc/app_login',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({p_email:email,p_password:pass})
   }).then(r=>r.json()).then(data=>{
-    if(!data||data.length===0){ err.style.display='block'; err.textContent=T('err_login'); return; }
+    if(!data||!Array.isArray(data)||data.length===0){ err.style.display='block'; err.textContent=T('err_login'); return; }
     err.style.display='none';
     currentUser=data[0];
+    _authPass=pass;
     if(currentUser.status==='pending'){
       document.getElementById('splash').style.opacity='0';
       setTimeout(()=>{ document.getElementById('splash').style.display='none'; document.getElementById('pending-screen').style.display='flex'; },380);
@@ -1721,10 +1719,15 @@ async function doRegister(){
   const err = document.getElementById('r-err');
   const msg = document.getElementById('r-msg');
   if(!name||!email||!pass){ err.style.display='block'; err.textContent=T('err_fill'); return; }
-  const existing = await api('GET','users','',`?email=eq.${encodeURIComponent(email)}`);
+  const existing = await api('GET','users','',`?email=eq.${encodeURIComponent(email)}&select=id`);
   if(existing && existing.length>0){ err.style.display='block'; err.textContent=T('err_email'); return; }
-  const res = await api('POST','users',{name,email,password:pass,role:'worker',department:dept,status:'pending',permissions:'[]'});
-  if(!res){ err.style.display='block'; err.textContent='خطا در ثبت‌نام'; return; }
+  // Secure registration: password goes to user_secrets via RPC, never into public users table
+  const r=await fetch(SB_URL+'/rest/v1/rpc/app_register',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({p_name:name,p_email:email,p_password:pass,p_department:dept})
+  });
+  if(!r.ok){ err.style.display='block'; err.textContent='خطا در ثبت‌نام'; return; }
   err.style.display='none';
   msg.style.display='block';
   msg.textContent=T('reg_success');
@@ -2240,13 +2243,18 @@ async function saveNewPassword(){
   if(!oldP||!newP){ showToast(L('املأ كل الحقول','Fill all fields','همه فیلدها را پر کن'),'error'); return; }
   if(newP.length<4){ showToast(L('كلمة المرور قصيرة جداً','Password too short','رمز خیلی کوتاه است'),'error'); return; }
   if(newP!==new2){ showToast(L('كلمتا المرور غير متطابقتين','Passwords do not match','رمزها یکسان نیستند'),'error'); return; }
-  // Verify current password matches what's stored
-  if(String(currentUser.password)!==String(oldP)){
-    showToast(L('كلمة المرور الحالية خاطئة','Current password is wrong','رمز فعلی اشتباه است'),'error'); return;
-  }
   try {
-    await api('PATCH','users',{password:newP},'?id=eq.'+currentUser.id);
-    currentUser.password=newP;
+    // Secure change: old password is verified INSIDE the database
+    var r=await fetch(SB_URL+'/rest/v1/rpc/app_change_password',{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_user_id:currentUser.id,p_old:oldP,p_new:newP})
+    });
+    var ok=false; try{ ok=await r.json(); }catch(e){}
+    if(!r.ok || ok!==true){
+      showToast(L('كلمة المرور الحالية خاطئة','Current password is wrong','رمز فعلی اشتباه است'),'error'); return;
+    }
+    _authPass=newP;
     try { localStorage.setItem('dar_user', JSON.stringify(currentUser)); } catch(e){}
     closeModal('changePassModal');
     showToast(L('تم تغيير كلمة المرور','Password changed','رمز عبور تغییر کرد'),'success');
@@ -6538,14 +6546,23 @@ async function addStaffMember(){
   var dept=document.getElementById('as-dept').value.trim();
   var err=document.getElementById('as-err');
   if(!name||!email||!pass){ err.style.display='block'; err.textContent=T('err_fill'); return; }
-  var existing=await api('GET','users','','?email=eq.'+encodeURIComponent(email));
+  var existing=await api('GET','users','','?email=eq.'+encodeURIComponent(email)+'&select=id');
   if(existing&&existing.length>0){ err.style.display='block'; err.textContent=L('البريد مستخدم','Email already used','این ایمیل قبلاً استفاده شده'); return; }
   var isFamily=document.getElementById('as-family').checked;
-  var newUser=isFamily
-    ? {name:name,email:email,password:pass,role:'family',department:'خانواده',status:'active',permissions:'["personal"]'}
-    : {name:name,email:email,password:pass,role:'worker',department:dept||'-',status:'active',permissions:'[]'};
-  var res=await api('POST','users',newUser);
-  if(!res){ err.style.display='block'; err.textContent='خطا'; return; }
+  // Secure creation: password stored in user_secrets via manager-verified RPC
+  var r=await fetch(SB_URL+'/rest/v1/rpc/app_admin_create_user',{
+    method:'POST',
+    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    body:JSON.stringify({
+      p_admin_email:(currentUser?currentUser.email:''), p_admin_password:_authPass,
+      p_name:name, p_email:email, p_password:pass,
+      p_role:isFamily?'family':'worker',
+      p_department:isFamily?'خانواده':(dept||'-'),
+      p_status:'active',
+      p_permissions:isFamily?'["personal"]':'[]'
+    })
+  });
+  if(!r.ok){ err.style.display='block'; err.textContent='خطا'; return; }
   closeModal('addStaffModal');
   var users=await api('GET','users','','?select=*&order=created_at.desc');
   allUsers=users||[];
@@ -6772,8 +6789,13 @@ async function resetStaffPassword(id){
   np=np.trim();
   if(np.length<4){ showToast(L('4 أحرف على الأقل','At least 4 characters','حداقل ۴ کاراکتر'),'error'); return; }
   try {
-    await api('PATCH','users',{password:np},'?id=eq.'+id);
-    u.password=np;
+    var r=await fetch(SB_URL+'/rest/v1/rpc/app_admin_reset_password',{
+      method:'POST',
+      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      body:JSON.stringify({p_admin_email:(currentUser?currentUser.email:''),p_admin_password:_authPass,p_user_id:id,p_new:np})
+    });
+    var ok=false; try{ ok=await r.json(); }catch(e){}
+    if(!r.ok||ok!==true){ showToast(L('فشل','Error','خطا'),'error'); return; }
     showToast(L('تم تغيير كلمة المرور','Password changed','رمز عوض شد')+' · '+u.email,'success');
   } catch(e){
     showToast(L('فشل','Error','خطا'),'error');
