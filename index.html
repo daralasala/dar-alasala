@@ -581,9 +581,13 @@ body.en .search-icon{right:auto;left:10px;}
     <div class="form-group"><label class="form-label">اسم المادة / نام جنس</label><input class="form-control" type="text" id="inv-name" placeholder="مثلا: چوب MDF، رنگ سفید، پیچ..."></div>
     <div class="form-group"><label class="form-label">الوحدة / واحد</label>
       <select class="form-control" id="inv-unit">
-        <option value="عدد">عدد / قطعة</option>
-        <option value="متر">متر</option>
-        <option value="کارتون">کارتون / كرتون</option>
+        <option value="عدد">عدد / قطعة / Piece</option>
+        <option value="متر">متر / Meter</option>
+        <option value="متر مربع">متر مربع / م² / Sq. meter</option>
+        <option value="کیلوگرم">کیلوگرم / كجم / Kg</option>
+        <option value="لیتر">لیتر / لتر / Liter</option>
+        <option value="ورق">ورق / صفحه / لوح / Sheet</option>
+        <option value="کارتون">کارتون / كرتون / Carton</option>
       </select>
     </div>
     <div class="form-group"><label class="form-label">الكمية الحالية / موجودی فعلی</label><input class="form-control" type="number" id="inv-qty" value="0"></div>
@@ -605,6 +609,9 @@ body.en .search-icon{right:auto;left:10px;}
     <input type="hidden" id="usage-inv-id" value="">
     <div id="usage-item-info" style="background:var(--surface2);padding:12px;border-radius:10px;margin-bottom:12px;font-size:13px"></div>
     <div class="form-group"><label class="form-label">الكمية المسحوبة / مقدار برداشت</label><input class="form-control" type="number" id="usage-qty" placeholder="مقدار"></div>
+    <div class="form-group"><label class="form-label">👷 <span id="usage-worker-lbl">العامل الذي سحب المادة / کارگری که برداشت کرد</span></label>
+      <select class="form-control" id="usage-worker"><option value="">-- اختر العامل / انتخاب کارگر / Select worker --</option></select>
+    </div>
     <div class="form-group"><label class="form-label">للطلب / برای سفارش</label>
       <select class="form-control" id="usage-order"><option value="">-- بدون سفارش / عمومی --</option></select>
     </div>
@@ -4995,7 +5002,7 @@ function renderPurchaseItems(){
       '<div style="display:flex;gap:5px">'+
         '<input class="form-control" id="pi-qty-'+i+'" type="number" style="flex:1" placeholder="'+L('كمية','Qty','تعداد')+'" value="'+(it.qty||'')+'" oninput="purchaseItems['+i+'].qty=parseFloat(this.value)||0;updatePurchaseTotal()">'+
         '<select class="form-control" id="pi-unit-'+i+'" style="flex:1" onchange="purchaseItems['+i+'].unit=this.value">'+
-          ['عدد','متر','کیلو','لیتر','بسته','متر مربع'].map(function(u){return '<option value="'+u+'"'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
+          ['عدد','متر','متر مربع','کیلوگرم','لیتر','ورق','کارتون'].map(function(u){return '<option value="'+u+'"'+(it.unit===u?' selected':'')+'>'+u+'</option>';}).join('')+
         '</select>'+
         '<input class="form-control" id="pi-price-'+i+'" type="number" style="flex:1.2" placeholder="'+L('سعر الوحدة','Unit price','قیمت واحد')+'" value="'+(it.price||'')+'" oninput="purchaseItems['+i+'].price=parseFloat(this.value)||0;updatePurchaseTotal()">'+
       '</div>'+
@@ -5545,27 +5552,48 @@ function openUsageModal(id){
   var activeOrders=allOrders.filter(o=>o.status==='building'||o.status==='ready');
   sel.innerHTML='<option value="">-- '+(lang==='ar'?'بدون طلب':lang==='en'?'No order':'بدون سفارش')+' --</option>'+
     activeOrders.map(function(o){return '<option value="'+o.id+'">'+(o.id_code||'')+' - '+o.product+'</option>';}).join('');
+  // Fill worker dropdown — real workers (not family), default to the logged-in user
+  var wsel=document.getElementById('usage-worker');
+  if(wsel){
+    var workers=(allUsers||[]).filter(function(u){ return u.status==='active' && u.role!=='family' && u.name; })
+      .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');});
+    var meName=currentUser?currentUser.name:'';
+    wsel.innerHTML='<option value="">-- '+(lang==='ar'?'اختر العامل':lang==='en'?'Select worker':'انتخاب کارگر')+' --</option>'+
+      workers.map(function(u){return '<option value="'+String(u.name).replace(/"/g,'&quot;')+'"'+(u.name===meName?' selected':'')+'>'+u.name+(u.department&&u.department!=='-'?(' ('+u.department+')'):'')+'</option>';}).join('');
+  }
   openModal('usageModal');
 }
 
 async function saveUsage(){
+  var _unlock=lockBtn(typeof event!=='undefined'&&event?event.target.closest('button'):null);
+  if(_unlock===null) return;
+  _unlock=_unlock||function(){};
   var invId=parseInt(document.getElementById('usage-inv-id').value);
   var qty=parseFloat(document.getElementById('usage-qty').value)||0;
   var orderId=document.getElementById('usage-order').value;
+  // Worker who actually received/used the material (chosen from dropdown).
+  // Falls back to the logged-in user if none selected.
+  var chosenWorker=(document.getElementById('usage-worker')||{}).value||'';
+  var workerName=chosenWorker||(currentUser?currentUser.name:'');
   var it=allInventory.find(x=>x.id===invId);
-  if(!it||qty<=0){ showToast(T('err_fill'),'error'); return; }
-  if(qty>(it.quantity||0)){ showToast(lang==='ar'?'الكمية أكبر من المتاح':lang==='en'?'Quantity exceeds available':'مقدار بیشتر از موجودی است','error'); return; }
-  var orderObj=orderId?allOrders.find(o=>String(o.id)===String(orderId)):null;
-  // Record usage
-  await api('POST','inventory_usage',{inventory_id:invId,item_name:it.name,quantity:qty,unit:it.unit,worker_name:currentUser.name,order_id:orderId?parseInt(orderId):null,order_code:orderObj?orderObj.id_code:null});
-  // Reduce stock
-  var newQty=(it.quantity||0)-qty;
-  await api('PATCH','inventory',{quantity:newQty},'?id=eq.'+invId);
-  it.quantity=newQty;
-  closeModal('usageModal');
-  renderInventory();
-  // Check low stock -> notification handled in renderNotifications
-  showToast(T('saved'),'success');
+  if(!it||qty<=0){ showToast(T('err_fill'),'error'); _unlock(); return; }
+  if(qty>(it.quantity||0)){ showToast(lang==='ar'?'الكمية أكبر من المتاح':lang==='en'?'Quantity exceeds available':'مقدار بیشتر از موجودی است','error'); _unlock(); return; }
+  try {
+    var orderObj=orderId?allOrders.find(o=>String(o.id)===String(orderId)):null;
+    // Record usage: worker_name = who used it; entered_by = who registered it in the app
+    await api('POST','inventory_usage',{inventory_id:invId,item_name:it.name,quantity:qty,unit:it.unit,worker_name:workerName,entered_by:(currentUser?currentUser.name:''),order_id:orderId?parseInt(orderId):null,order_code:orderObj?orderObj.id_code:null});
+    // Reduce stock
+    var newQty=(it.quantity||0)-qty;
+    await api('PATCH','inventory',{quantity:newQty},'?id=eq.'+invId);
+    it.quantity=newQty;
+    closeModal('usageModal');
+    renderInventory();
+    showToast(T('saved'),'success');
+  } catch(err){
+    showToast(lang==='ar'?'حدث خطأ':lang==='en'?'An error occurred':'خطایی رخ داد','error');
+  } finally {
+    _unlock();
+  }
 }
 
 // ===== USAGE HISTORY =====
@@ -5587,6 +5615,7 @@ function renderUsageList(rows,titleText){
         '<div style="font-size:13px;font-weight:800;color:var(--red)">−'+(r.quantity||0)+' '+(r.unit||'')+'</div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--text2);margin-top:3px">👷 '+(r.worker_name||'-')+orderTxt+'</div>'+
+      (r.entered_by&&r.entered_by!==r.worker_name?('<div style="font-size:10px;color:var(--text3);margin-top:2px">✍️ '+L('سجّله','Registered by','ثبت توسط')+': '+r.entered_by+'</div>'):'')+
       '<div style="font-size:11px;color:var(--text3);margin-top:2px">🕐 '+when+'</div>'+
     '</div>';
   }).join('');
