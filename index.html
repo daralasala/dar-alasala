@@ -4267,7 +4267,13 @@ var _purchImagesLoaded=false;
 function renderPurchaseInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('pi-search').value||'').toLowerCase();
-  var list=(allPurchases||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  var list=(allPurchases||[]).slice().sort(function(a,b){
+    // newest first — by registration date/time, then by id as tiebreaker
+    var da=a.created_at?new Date(a.created_at).getTime():0;
+    var db=b.created_at?new Date(b.created_at).getTime():0;
+    if(db!==da) return db-da;
+    return (b.id||0)-(a.id||0);
+  });
   if(q) list=list.filter(function(p){ return ((p.supplier||'')+(p.item_name||'')).toLowerCase().indexOf(q)>=0; });
   // total summary
   var grand=list.reduce(function(s,p){return s+(+p.total_price||0);},0);
@@ -4315,7 +4321,12 @@ var _expImagesLoaded=false;
 function renderExpenseInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('ei-search').value||'').toLowerCase();
-  var list=(allTransactions||[]).filter(function(t){return t&&t.type==='expense';}).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  var list=(allTransactions||[]).filter(function(t){return t&&t.type==='expense';}).slice().sort(function(a,b){
+    var da=a.created_at?new Date(a.created_at).getTime():0;
+    var db=b.created_at?new Date(b.created_at).getTime():0;
+    if(db!==da) return db-da;
+    return (b.id||0)-(a.id||0);
+  });
   if(q) list=list.filter(function(t){ return ((t.description||'')+(t.category||'')).toLowerCase().indexOf(q)>=0; });
   var grand=list.reduce(function(s,t){return s+(+t.amount||0);},0);
   var totEl=document.getElementById('ei-total');
@@ -4361,7 +4372,17 @@ function openAllInvoices(){
 function renderAllInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('ai-search').value||'').toLowerCase();
-  var list=(allInvoices||[]).slice().sort(function(a,b){return (b.id||0)-(a.id||0);});
+  var list=(allInvoices||[]).slice().sort(function(a,b){
+    // sort by invoice code (inv_code) — natural numeric order, newest/highest first
+    var ca=(a.inv_code||'').toString();
+    var cb=(b.inv_code||'').toString();
+    // extract the numeric part for a proper numeric compare (e.g. INV-102 vs INV-99)
+    var na=parseInt((ca.match(/\d+/g)||['0']).join(''),10)||0;
+    var nb=parseInt((cb.match(/\d+/g)||['0']).join(''),10)||0;
+    if(nb!==na) return nb-na;
+    // tiebreaker: by id (newest first)
+    return (b.id||0)-(a.id||0);
+  });
   if(q) list=list.filter(function(inv){ return ((inv.inv_code||'')+(inv.customer_name||'')+(inv.customer_phone||'')).toLowerCase().indexOf(q)>=0; });
   // total summary
   var grandTotal=list.reduce(function(s,inv){return s+(+inv.total_price||0);},0);
