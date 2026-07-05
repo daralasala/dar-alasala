@@ -4268,11 +4268,11 @@ function renderPurchaseInvoices(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var q=(document.getElementById('pi-search').value||'').toLowerCase();
   var list=(allPurchases||[]).slice().sort(function(a,b){
-    // newest first — by registration date/time, then by id as tiebreaker
-    var da=a.created_at?new Date(a.created_at).getTime():0;
-    var db=b.created_at?new Date(b.created_at).getTime():0;
+    // newest first — by the invoice's own date (invoice_date), falling back to created_at
+    var da=(a.invoice_date||a.created_at)?new Date(a.invoice_date||a.created_at).getTime():0;
+    var db=(b.invoice_date||b.created_at)?new Date(b.invoice_date||b.created_at).getTime():0;
     if(db!==da) return db-da;
-    return (b.id||0)-(a.id||0);
+    return (b.id||0)-(a.id||0); // same date -> newest entry first
   });
   if(q) list=list.filter(function(p){ return ((p.supplier||'')+(p.item_name||'')).toLowerCase().indexOf(q)>=0; });
   // total summary
