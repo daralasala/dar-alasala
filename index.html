@@ -6524,6 +6524,8 @@ async function renderStaff(){
   if(mtBtn) mtBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
   var asBtn=document.getElementById('all-salary-btn');
   if(asBtn) asBtn.style.display=(currentUser&&currentUser.role==='manager')?'':'none';
+  var asLbl=document.getElementById('all-salary-label');
+  if(asLbl) asLbl.textContent=(lang==='ar'?'سجل رواتب الجميع':lang==='en'?'All salary history':'تاریخچه‌ی حقوق همه');
   const sec=document.getElementById('pending-users-section');
   if(pending.length>0&&currentUser?.role==='manager'){
     sec.style.display='block';
