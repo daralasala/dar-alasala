@@ -4390,7 +4390,7 @@ function renderExpenseInvoices(){
     var shownDate=t.created_at?String(t.created_at).substring(0,10):'';
     return '<div style="background:var(--surface2);border-radius:10px;padding:11px;margin-bottom:8px;border-right:3px solid var(--red)">'+
       '<div style="display:flex;justify-content:space-between;align-items:center">'+
-        '<div style="font-weight:700;font-size:14px">'+(t.description||L('بدون عنوان','No title','بدون عنوان'))+'</div>'+
+        '<div style="font-weight:700;font-size:14px">'+(salaryDescLabel(t.description)||L('بدون عنوان','No title','بدون عنوان'))+'</div>'+
         '<div style="font-size:11px;color:var(--text2)">📅 '+shownDate+'</div>'+
       '</div>'+
       '<div style="font-size:11px;color:var(--text2);margin-top:3px">🏷️ '+catName(t.category)+'</div>'+
@@ -7018,6 +7018,24 @@ async function payStaffTicket(id){
 }
 
 // Show this worker's salary payment history (read from finance transactions, category=salary)
+// Translate a stored salary transaction description for DISPLAY only.
+// Descriptions were saved in whatever language was active at payment time
+// (e.g. "حقوق ali", "راتب Raja (بعد خصم السلفة)", "Salary atif (26 days of 30)").
+function salaryDescLabel(desc){
+  if(!desc) return '';
+  var s=String(desc);
+  var salWord=lang==='ar'?'راتب':lang==='en'?'Salary':'حقوق';
+  // leading salary word (any language) → current language
+  s=s.replace(/^\s*(حقوق|راتب|Salary)\s+/i,salWord+' ');
+  // loan deduction suffix (any wording/language) → current language
+  var loanTxt=lang==='ar'?'بعد خصم السلفة':lang==='en'?'after loan deduction':'پس از کسر وام';
+  s=s.replace(/\((?:پس از کسر (?:وام|قرض)|بعد خصم السلفة|after loan deduction)\)/g,'('+loanTxt+')');
+  // day-based suffix "(N روز از M)" / "(N يوم من M)" / "(N days of M)" → current language
+  s=s.replace(/\((\d+)\s*(?:روز از|يوم من|days of)\s*(\d+)\)/g,function(_,dw,dm){
+    return '('+dw+' '+(lang==='ar'?'يوم من':lang==='en'?'days of':'روز از')+' '+dm+')';
+  });
+  return s;
+}
 function showSalaryHistory(name){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
@@ -7038,7 +7056,7 @@ function showSalaryHistory(name){
       var dt=(t.created_at||t.date||'').slice(0,10);
       return '<div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:13px;padding:9px 4px;border-bottom:1px solid var(--border)">'+
         '<div><div style="font-weight:600">'+fmt(t.amount)+'</div>'+
-        '<div style="font-size:11px;color:var(--text3)">'+(t.description||'')+'</div></div>'+
+        '<div style="font-size:11px;color:var(--text3)">'+salaryDescLabel(t.description)+'</div></div>'+
         '<span style="font-size:12px;color:var(--text2);white-space:nowrap">'+dt+'</span></div>';
     }).join('');
   }
@@ -7082,7 +7100,7 @@ function showAllSalaryHistory(){
       body+='<div style="background:var(--surface2);border-radius:8px;padding:6px 10px;margin:10px 0 4px;display:flex;justify-content:space-between;font-weight:700;font-size:13px"><span>'+ym+'</span><span>'+fmt(mTotal)+'</span></div>';
       body+=groups[ym].map(function(x){
         return '<div style="display:flex;justify-content:space-between;align-items:flex-start;font-size:13px;padding:8px 4px;border-bottom:1px solid var(--border)">'+
-          '<div style="flex:1;min-width:0"><div style="font-weight:600">'+(x.t.description||'')+'</div></div>'+
+          '<div style="flex:1;min-width:0"><div style="font-weight:600">'+salaryDescLabel(x.t.description)+'</div></div>'+
           '<div style="text-align:left;white-space:nowrap;margin-right:8px"><div style="color:var(--green);font-weight:600">'+fmt(x.t.amount)+'</div><div style="font-size:10px;color:var(--text3)">'+x.dt+'</div></div></div>';
       }).join('');
     });
