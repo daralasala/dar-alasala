@@ -1146,8 +1146,35 @@ let allStages = [
 ];
 
 // Translate a Persian-stored stage name into the active language (data stays Persian in DB)
-function stageLabel(name){
-  if(!name) return '-';
+// ===== JOB TITLE / DEPARTMENT TRANSLATION (display only — stored values never change) =====
+var DEPT_DICT={
+  // normalized-key : [arabic, english, persian]
+  'نجار':['نجار','Carpenter','نجار'],
+  'جوشکار':['لحّام','Welder','جوشکار'],
+  'رنگکار':['دهّان','Painter','رنگ‌کار'],
+  'روکشکار':['منجّد','Upholsterer','روکش‌کار'],
+  'بازرس':['مفتش','Inspector','بازرس'],
+  'فورمن':['فورمان','Foreman','فورمن'],
+  'راننده':['سائق','Driver','راننده'],
+  'حسابدار':['محاسب','Accountant','حسابدار'],
+  'مسئولفروش':['مسؤول المبيعات','Sales manager','مسئول فروش'],
+  'مسئولخرید':['مسؤول المشتريات','Purchasing manager','مسئول خرید'],
+  'برقکار':['كهربائي','Electrician','برق‌کار'],
+  'کمککارگر':['عامل مساعد','Helper','کمک‌کارگر'],
+  'انباردار':['أمين المخزن','Storekeeper','انباردار'],
+  'مسئولانبار':['مسؤول المخزن','Warehouse manager','مسئول انبار'],
+  'خانواده':['عائلة','Family','خانواده'],
+  'مدیر':['مدير','Manager','مدیر']
+};
+function deptLabel(name){
+  if(!name) return '';
+  // normalize: remove spaces + ZWNJ, unify arabic/persian letters
+  var key=String(name).replace(/[\s\u200c]+/g,'').replace(/ي/g,'ی').replace(/ك/g,'ک');
+  var row=DEPT_DICT[key];
+  if(!row) return name; // unknown custom title → show as stored
+  return lang==='ar'?row[0]:lang==='en'?row[1]:row[2];
+}
+function stageLabel(name){  if(!name) return '-';
   // First: look up in dynamic stages loaded from DB (keyed by Persian name)
   if(typeof allStages!=='undefined' && allStages.length){
     var st=allStages.find(function(s){return (s.name_fa||s.name)===name.trim();});
@@ -1690,7 +1717,7 @@ async function populateRegDept(){
   var sel=document.getElementById('r-dept'); if(!sel) return;
   // Load titles from DB if not already loaded
   try { await loadJobTitles(); } catch(e){}
-  sel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+  sel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
 }
 
 var _authPass=''; // kept in memory during the session for manager-only secure actions
@@ -2747,7 +2774,7 @@ function openAssignModal(orderId){
   var workers=allUsers.filter(function(u){return u.status==='active'&&u.role!=='family'&&u.department!=='خانواده'&&u.role!=='manager';});
   var sel=document.getElementById('assign-worker');
   sel.innerHTML='<option value="">— '+L('بدون','None','هیچ‌کس')+' —</option>'+
-    workers.map(function(u){return '<option value="'+(u.name||'').replace(/"/g,'&quot;')+'"'+(o.assigned_worker===u.name?' selected':'')+'>'+u.name+(u.department?(' ('+u.department+')'):'')+'</option>';}).join('');
+    workers.map(function(u){return '<option value="'+(u.name||'').replace(/"/g,'&quot;')+'"'+(o.assigned_worker===u.name?' selected':'')+'>'+u.name+(u.department?(' ('+deptLabel(u.department)+')'):'')+'</option>';}).join('');
   openModal('assignModal');
 }
 async function confirmAssign(){
@@ -2915,7 +2942,7 @@ async function loadOrderWorkers(orderId){
     var when=r.started_at?r.started_at.slice(0,16).replace('T',' '):'';
     // Find this worker's job title from users
     var u=allUsers.find(function(x){return x&&x.name===r.worker_name;});
-    var job=u&&u.department?stageLabel(u.department):'';
+    var job=u&&u.department?deptLabel(u.department):'';
     var jobPrefix=job?(job+' '):'';
     // Full sentence: "[job] [name] → moved to stage [X]"
     var sentence=L(
@@ -5347,7 +5374,7 @@ function renderJobTitlesList(){
     var id=typeof t==='string'?'':t.id;
     var inUse=allUsers.filter(function(u){return u.department===name&&u.status!=='rejected';}).length;
     return '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:8px;margin-bottom:6px">'+
-      '<span style="flex:1;font-size:13px;font-weight:600">'+name+(inUse>0?' <span style="font-size:10px;color:var(--text2)">('+inUse+')</span>':'')+'</span>'+
+      '<span style="flex:1;font-size:13px;font-weight:600">'+name+(deptLabel(name)!==name?' <span style="font-size:10px;color:var(--text2)">— '+deptLabel(name)+'</span>':'')+(inUse>0?' <span style="font-size:10px;color:var(--text2)">('+inUse+')</span>':'')+'</span>'+
       '<button class="btn btn-red btn-sm" onclick="deleteJobTitle('+(id?id:'null')+',\''+name.replace(/'/g,"\\'")+'\')">🗑️</button>'+
     '</div>';
   }).join('');
@@ -6532,7 +6559,7 @@ async function renderStaff(){
     document.getElementById('pending-list').innerHTML=pending.map(u=>`
       <div class="worker-item">
         <div class="w-avatar" style="background:linear-gradient(135deg,var(--orange),var(--accent2))">${u.name[0]}</div>
-        <div class="w-info"><div class="w-name">${u.name}</div><div class="w-task">${u.department} · ${u.email}</div></div>
+        <div class="w-info"><div class="w-name">${u.name}</div><div class="w-task">${deptLabel(u.department)} · ${u.email}</div></div>
         <div style="display:flex;gap:5px">
           <button class="btn btn-green btn-sm" onclick="approveWithRole(${u.id})">✅ ${lang==='ar'?'قبول':lang==='en'?'Approve':'تایید'}</button>
           <button class="btn btn-red btn-sm" onclick="approveUser(${u.id},'rejected')">✕</button>
@@ -6547,7 +6574,7 @@ async function renderStaff(){
         ${u.photo?`<img src="${u.photo}" class="w-avatar" style="object-fit:cover">`:`<div class="w-avatar" style="background:${colors[i%colors.length]}">${u.name[0]}</div>`}
         <div class="w-info">
           <div class="w-name">${u.name} ${u.is_paused?'<span class="badge badge-orange" style="font-size:9px">'+(lang==='ar'?'موقوف · سفر':lang==='en'?'Paused · travel':'متوقف · سفر')+'</span>':''}</div>
-          <div class="w-task">${u.department}${u.salary?' · '+(u.salary||0).toLocaleString()+' QAR':''}</div>
+          <div class="w-task">${deptLabel(u.department)}${u.salary?' · '+(u.salary||0).toLocaleString()+' QAR':''}</div>
         </div>
         <div style="display:flex;gap:5px;align-items:center">
           ${currentUser?.role==='manager'?'<span style="font-size:16px;color:var(--text2)">📂</span>':`<span class="badge badge-gold">${u.department}</span>`}
@@ -6566,7 +6593,7 @@ function approveWithRole(id){
   document.getElementById('ar-uid').value=u.id;
   var sel=document.getElementById('ar-dept');
   var names=jobTitleNames();
-  sel.innerHTML=names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+((u.department===n)?' selected':'')+'>'+n+'</option>';}).join('');
+  sel.innerHTML=names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+((u.department===n)?' selected':'')+'>'+deptLabel(n)+'</option>';}).join('');
   openModal('approveRoleModal');
 }
 
@@ -6614,7 +6641,7 @@ function openAddStaffModal(){
   document.getElementById('as-email').value='';
   document.getElementById('as-pass').value='';
   var deptSel=document.getElementById('as-dept');
-  deptSel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+n+'</option>';}).join('');
+  deptSel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
   var famCb=document.getElementById('as-family'); if(famCb) famCb.checked=false;
   toggleFamilyMode();
   document.getElementById('as-err').style.display='none';
@@ -6764,7 +6791,7 @@ function openStaffFile(id){
           // make sure the worker's current dept is in the list even if not elsewhere
           if(u.department && titles.indexOf(u.department)<0) titles.unshift(u.department);
           return titles.map(function(t){
-            return '<option value="'+String(t).replace(/"/g,'&quot;')+'"'+(t===u.department?' selected':'')+'>'+t+'</option>';
+            return '<option value="'+String(t).replace(/"/g,'&quot;')+'"'+(t===u.department?' selected':'')+'>'+deptLabel(t)+'</option>';
           }).join('');
         })()+
       '</select>'+
@@ -7578,7 +7605,7 @@ async function openChatList(){
     var badge=unread>0?'<div style="background:#e0245e;color:#fff;border-radius:11px;min-width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;padding:0 5px">'+unread+'</div>':'<div style="font-size:18px">💬</div>';
     return '<div onclick="openPrivateChat(\''+(u.name||'').replace(/'/g,"\\'")+'\')" style="display:flex;align-items:center;gap:11px;background:var(--surface2);border-radius:12px;padding:11px;margin-bottom:8px;cursor:pointer">'+
       '<div style="width:42px;height:42px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px">'+initial+'</div>'+
-      '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+u.name+'</div>'+(u.department?('<div style="font-size:11px;color:var(--text2)">'+u.department+'</div>'):'')+'</div>'+
+      '<div style="flex:1"><div style="font-weight:600;font-size:14px">'+u.name+'</div>'+(u.department?('<div style="font-size:11px;color:var(--text2)">'+deptLabel(u.department)+'</div>'):'')+'</div>'+
       badge+
     '</div>';
   }).join('');
