@@ -2330,7 +2330,7 @@ async function loadAll(isRefresh){
 
   // Core data everyone needs (orders + users + stages + job titles), all in parallel
   var core=[
-    api('GET','orders','','?select=id,id_code,customer_name,customer_phone,product,delivery_date,total_price,item_price,item_qty,prepay,description,status,progress,current_stage,worker,assigned_worker,passed_by,materials,invoice_id,created_at&order=created_at.desc'),
+    api('GET','orders','','?select=id,id_code,customer_name,customer_phone,product,delivery_date,total_price,item_price,item_qty,prepay,description,status,progress,current_stage,worker,assigned_worker,passed_by,materials,invoice_id,created_at,work_started,work_done,thumb&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
     api('GET','stages','','?select=*&order=order_num.asc'),
     api('GET','job_titles','','?select=*&order=id.asc'),
@@ -2466,8 +2466,8 @@ function renderOrders(){
   const canSeeCust = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش');
 
   function orderCardThumb(o){
-    var firstImg='';
-    try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+    var firstImg=o.thumb||'';
+    try { if(!firstImg){ var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } } catch(e){}
     return firstImg
       ? '<img src="'+firstImg+'" style="width:60px;height:60px;object-fit:cover;border-radius:8px">'
       : '<div style="width:60px;height:60px;background:var(--surface2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:24px">🛋️</div>';
@@ -2542,8 +2542,8 @@ function renderOrders(){
   document.getElementById('orders-list').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">📋</div><div>${T('no_data')}</div></div>`
     : filtered.map(o=>{
-      var firstImg='';
-      try { var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } catch(e){}
+      var firstImg=o.thumb||'';
+      try { if(!firstImg){ var imgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[]; if(imgs&&imgs.length>0) firstImg=imgs[0]; } } catch(e){}
       var thumb = firstImg
         ? '<img src="'+firstImg+'" style="width:100%;height:140px;object-fit:cover;border-radius:10px;margin-bottom:10px">'
         : '<div style="width:100%;height:80px;background:var(--surface2);border-radius:10px;margin-bottom:10px;display:flex;align-items:center;justify-content:center;font-size:30px">🛋️</div>';
@@ -2789,6 +2789,17 @@ async function openOrderDetail(id){
     try{
       var imgRes=await api('GET','orders','','?id=eq.'+o.id+'&select=images,invoice_image,contract_image');
       if(imgRes&&imgRes[0]){ o.images=imgRes[0].images; o.invoice_image=imgRes[0].invoice_image; o.contract_image=imgRes[0].contract_image; }
+    }catch(e){}
+  }
+  // Backfill: old orders have images but no thumb → generate once and save (silent)
+  if(!o.thumb){
+    try{
+      var _bfImgs=o.images?(typeof o.images==='string'?JSON.parse(o.images):o.images):[];
+      if(_bfImgs&&_bfImgs.length>0){
+        makeThumbFromDataUrl(_bfImgs[0]).then(function(t){
+          if(t){ o.thumb=t; api('PATCH','orders',{thumb:t},'?id=eq.'+o.id); }
+        });
+      }
     }catch(e){}
   }
   // Items of the same invoice (so paid amount can be read at invoice level)
@@ -3434,7 +3445,12 @@ async function addOrderPhotos(orderId,input){
     var compressed=await compressImage(files[i],0.6,1000);
     existing.push(compressed);
   }
-  await api('PATCH','orders',{images:JSON.stringify(existing)},'?id=eq.'+orderId);
+  var patchBody={images:JSON.stringify(existing)};
+  // If this order still has no thumbnail, make one from the first image
+  if(!o.thumb&&existing.length>0){
+    try{ var _t=await makeThumbFromDataUrl(existing[0]); if(_t){ patchBody.thumb=_t; o.thumb=_t; } }catch(e){}
+  }
+  await api('PATCH','orders',patchBody,'?id=eq.'+orderId);
   o.images=JSON.stringify(existing);
   showToast(T('saved'),'success');
   openOrderDetail(orderId);
@@ -6421,6 +6437,30 @@ function resetBroadcast(){
 
 let broadcastImageData=null;
 // Reusable image compressor returning a Promise<dataURL>
+// Make a tiny thumbnail (default 150px, ~5-10KB) from an existing data-URL image.
+// Used for order list thumbnails so the bulk load stays light.
+function makeThumbFromDataUrl(dataUrl, maxDim, quality){
+  maxDim=maxDim||150; quality=quality||0.5;
+  return new Promise(function(resolve){
+    if(!dataUrl){ resolve(''); return; }
+    var img=new Image();
+    img.onload=function(){
+      try{
+        var w=img.width, h=img.height;
+        if(w>maxDim||h>maxDim){
+          if(w>h){ h=Math.round(h*maxDim/w); w=maxDim; }
+          else { w=Math.round(w*maxDim/h); h=maxDim; }
+        }
+        var canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',quality));
+      }catch(e){ resolve(''); }
+    };
+    img.onerror=function(){ resolve(''); };
+    img.src=dataUrl;
+  });
+}
 function compressImage(file, quality, maxDim){
   quality=quality||0.65; maxDim=maxDim||1000;
   return new Promise(function(resolve,reject){
@@ -6738,6 +6778,12 @@ function openStaffFile(id){
     '</div>'+
     fld('sf-hire',L('تاريخ بدء العمل','Hire date','تاریخ شروع کار'),u.hire_date,'date')+
     fld('sf-salary',L('الراتب الشهري (QAR)','Monthly salary (QAR)','حقوق ماهیانه (QAR)'),u.salary||0,'number')+
+    // ===== Day-based salary (worked days this month) =====
+    '<div style="display:flex;gap:6px">'+
+      '<div style="flex:1">'+fld('sf-days-month',L('أيام الشهر','Days in month','روزهای ماه'),30,'number')+'</div>'+
+      '<div style="flex:1">'+fld('sf-days-worked',L('أيام العمل الفعلية','Days actually worked','روزهای کارکرد'),30,'number')+'</div>'+
+    '</div>'+
+    '<div id="sf-days-calc" style="font-size:11px;color:var(--text2);margin:-4px 0 10px"></div>'+
     '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','وام و هزینه‌ها')+'</div>'+
     fld('sf-loan',L('رصيد السلفة المتبقي (QAR)','Remaining loan balance (QAR)','مانده وام (QAR)'),u.loan_balance||0,'number')+
     fld('sf-loan-deduct',L('خصم من السلفة هذا الشهر (QAR)','Loan deduction this month (QAR)','کسر وام این ماه (QAR)'),0,'number')+
@@ -6753,6 +6799,22 @@ function openStaffFile(id){
     '<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="toggleStaffPause('+u.id+')">'+(u.is_paused?'▶️ '+L('استئناف (عاد من السفر)','Resume (back from travel)','ادامه (برگشت از سفر)'):'⏸️ '+L('إيقاف مؤقت (سفر)','Pause (travel)','توقف موقت (سفر)'))+'</button>'+
     ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-block" style="margin-bottom:8px" onclick="resetStaffPassword('+u.id+')">🔑 '+L('تعيين كلمة مرور جديدة','Set new password','تعیین رمز جدید')+'</button>':'')+
     '<button class="btn btn-red btn-block" onclick="removeUser('+u.id+');closeModal(\'staffModal\')">🗑️ '+L('حذف الموظف','Remove employee','حذف کارگر')+'</button>';
+  // Live preview of the day-based (prorated) salary
+  var updDaysCalc=function(){
+    var el=document.getElementById('sf-days-calc'); if(!el) return;
+    var sal=parseFloat((document.getElementById('sf-salary')||{}).value)||0;
+    var dm=parseFloat((document.getElementById('sf-days-month')||{}).value)||30;
+    var dw=parseFloat((document.getElementById('sf-days-worked')||{}).value);
+    if(isNaN(dw)) dw=dm;
+    if(sal<=0||dm<=0){ el.textContent=''; return; }
+    if(dw>=dm){ el.textContent='💡 '+L('شهر كامل → الراتب كاملاً','Full month → full salary','ماه کامل → حقوق کامل')+' ('+sal.toLocaleString()+' QAR)'; return; }
+    var pro=Math.round(sal/dm*dw);
+    el.innerHTML='💡 '+sal.toLocaleString()+' ÷ '+dm+' × '+dw+' = <b style="color:var(--accent)">'+pro.toLocaleString()+' QAR</b>';
+  };
+  ['sf-salary','sf-days-month','sf-days-worked'].forEach(function(fid){
+    var e=document.getElementById(fid); if(e) e.addEventListener('input',updDaysCalc);
+  });
+  updDaysCalc();
   openModal('staffModal');
 }
 
@@ -6854,21 +6916,37 @@ async function payStaffSalary(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   var salary=u.salary||0;
   if(salary<=0){ showToast(lang==='ar'?'لا يوجد راتب':lang==='en'?'No salary set':'حقوقی تعیین نشده','error'); return; }
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  // ===== Day-based salary: prorate by worked days (read from the open form) =====
+  var dmEl=document.getElementById('sf-days-month');
+  var dwEl=document.getElementById('sf-days-worked');
+  var daysMonth=dmEl?(parseFloat(dmEl.value)||30):30;
+  var daysWorked=dwEl?parseFloat(dwEl.value):NaN;
+  if(isNaN(daysWorked)) daysWorked=daysMonth;
+  if(daysMonth<=0) daysMonth=30;
+  if(daysWorked<0) daysWorked=0;
+  if(daysWorked>daysMonth) daysWorked=daysMonth;
+  var isPartial=daysWorked<daysMonth;
+  var earned=isPartial?Math.round(salary/daysMonth*daysWorked):salary; // salary actually earned this month
   // Read loan deduction from the open form (default 0)
   var deductEl=document.getElementById('sf-loan-deduct');
   var loanDeduct=deductEl?(parseFloat(deductEl.value)||0):0;
   var loanBal=u.loan_balance||0;
   if(loanDeduct>loanBal) loanDeduct=loanBal; // can't deduct more than owed
-  var netPay=salary-loanDeduct; // actual amount handed to worker
+  var netPay=earned-loanDeduct; // actual amount handed to worker
   if(netPay<0) netPay=0;
-  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var msg=L('راتب','Salary','حقوق')+': '+salary.toLocaleString()+' QAR\n'+
+    (isPartial?(L('أيام العمل','Days worked','روزهای کارکرد')+': '+daysWorked+' / '+daysMonth+'\n'+
+      L('الراتب المستحق','Earned salary','حقوق محاسبه‌شده')+': '+earned.toLocaleString()+' QAR\n'):'')+
     (loanDeduct>0?(L('خصم السلفة','Loan deduction','کسر وام')+': -'+loanDeduct.toLocaleString()+' QAR\n'):'')+
     L('المدفوع للعامل','Paid to worker','پرداختی به کارگر')+': '+netPay.toLocaleString()+' QAR'+
     (loanDeduct>0?('\n'+L('رصيد السلفة الجديد','New loan balance','مانده وام جدید')+': '+(loanBal-loanDeduct).toLocaleString()+' QAR'):'');
   if(!confirm(u.name+'\n\n'+msg)) return;
   // Record NET pay as expense (deducts from finance balance)
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+(loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر وام')+')'):''),category:'salary'})});
+  var txDesc=(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+
+    (isPartial?(' ('+daysWorked+' '+L('يوم من','days of','روز از')+' '+daysMonth+')'):'')+
+    (loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر وام')+')'):'');
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:txDesc,category:'salary'})});
   // Update loan balance + last paid date
   var today=new Date().toISOString().slice(0,10);
   var patch={last_salary_paid:today};
@@ -8100,12 +8178,16 @@ async function saveOrder(){
   for(var k=0;k<validItems.length;k++){
     var it=validItems[k];
     var idCode='ORD-'+String(Date.now()).slice(-5)+'-'+(k+1);
+    // Tiny thumbnail from the first image (shows in the orders list without heavy loading)
+    var itemThumb='';
+    if(it.images.length>0){ try{ itemThumb=await makeThumbFromDataUrl(it.images[0]); }catch(e){ itemThumb=''; } }
     var body={
       customer_name:cname, customer_phone:phone, product:it.product, delivery_date:delivery,
       total_price:it.qty*it.price, item_price:it.price, item_qty:it.qty, prepay:0,
       description:desc, status:'pending_payment', progress:0, id_code:idCode,
       current_stage:null, worker:currentUser?.name||'',
-      invoice_id:inv.id, images: it.images.length>0?it.images:null
+      invoice_id:inv.id, images: it.images.length>0?it.images:null,
+      thumb: itemThumb||null
     };
     await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
   }
