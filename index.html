@@ -1166,13 +1166,27 @@ var DEPT_DICT={
   'خانواده':['عائلة','Family','خانواده'],
   'مدیر':['مدير','Manager','مدیر']
 };
+function deptKey(name){
+  // normalize: remove spaces + ZWNJ, unify arabic/persian letters
+  return String(name||'').replace(/[\s\u200c]+/g,'').replace(/ي/g,'ی').replace(/ك/g,'ک');
+}
 function deptLabel(name){
   if(!name) return '';
-  // normalize: remove spaces + ZWNJ, unify arabic/persian letters
-  var key=String(name).replace(/[\s\u200c]+/g,'').replace(/ي/g,'ی').replace(/ك/g,'ک');
-  var row=DEPT_DICT[key];
+  var row=DEPT_DICT[deptKey(name)];
   if(!row) return name; // unknown custom title → show as stored
   return lang==='ar'?row[0]:lang==='en'?row[1]:row[2];
+}
+// Canonical spelling for department values loaded from DB, so that spacing
+// variants (e.g. «انبار دار» vs «انباردار») don't break permission checks.
+var DEPT_CANON={};
+['حسابدار','مسئول خرید','انباردار','مسئول انبار','مسئول فروش','راننده','خانواده','روکش‌کار','فورمن','نجار','رنگ‌کار','جوشکار','برق‌کار','کمک‌کارگر','بازرس','مدیر'].forEach(function(c){ DEPT_CANON[deptKey(c)]=c; });
+function canonDept(name){
+  if(!name) return name;
+  return DEPT_CANON[deptKey(name)]||name;
+}
+function canonUsers(arr){
+  (arr||[]).forEach(function(u){ if(u&&u.department) u.department=canonDept(u.department); });
+  return arr||[];
 }
 function stageLabel(name){  if(!name) return '-';
   // First: look up in dynamic stages loaded from DB (keyed by Persian name)
@@ -1717,7 +1731,7 @@ async function populateRegDept(){
   var sel=document.getElementById('r-dept'); if(!sel) return;
   // Load titles from DB if not already loaded
   try { await loadJobTitles(); } catch(e){}
-  sel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
+  sel.innerHTML=(function(){var _sk={};return jobTitleNames().filter(function(n){var k=deptKey(n);if(_sk[k])return false;_sk[k]=1;return true;});})().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
 }
 
 var _authPass=''; // kept in memory during the session for manager-only secure actions
@@ -1733,7 +1747,7 @@ function doLogin(){
   }).then(r=>r.json()).then(data=>{
     if(!data||!Array.isArray(data)||data.length===0){ err.style.display='block'; err.textContent=T('err_login'); return; }
     err.style.display='none';
-    currentUser=data[0];
+    currentUser=data[0]; if(currentUser&&currentUser.department) currentUser.department=canonDept(currentUser.department);
     _authPass=pass;
     if(currentUser.status==='pending'){
       document.getElementById('splash').style.opacity='0';
@@ -2385,7 +2399,7 @@ async function loadAll(isRefresh){
   }
 
   allOrders=pick(0, allOrders);
-  allUsers=pick(1, allUsers);
+  allUsers=canonUsers(pick(1, allUsers));
   // stages
   var st=res[2]||[];
   if(st.length>0){ allStages=st.map(function(r){return {id:r.id,name:r.name_fa,name_fa:r.name_fa,name_ar:r.name_ar,name_en:r.name_en,order_num:r.order_num};}); }
@@ -6593,7 +6607,9 @@ function approveWithRole(id){
   document.getElementById('ar-uid').value=u.id;
   var sel=document.getElementById('ar-dept');
   var names=jobTitleNames();
-  sel.innerHTML=names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+((u.department===n)?' selected':'')+'>'+deptLabel(n)+'</option>';}).join('');
+  var _sk={}; names=names.filter(function(n){var k=deptKey(n); if(_sk[k]) return false; _sk[k]=1; return true;});
+  var _uk=deptKey(u.department);
+  sel.innerHTML=names.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+((deptKey(n)===_uk)?' selected':'')+'>'+deptLabel(n)+'</option>';}).join('');
   openModal('approveRoleModal');
 }
 
@@ -6604,7 +6620,7 @@ async function confirmApproveRole(){
   if(!role){ showToast(L('اختر المسمى','Select a title','سمت را انتخاب کن'),'error'); return; }
   await api('PATCH','users',{status:'active',department:role},'?id=eq.'+id);
   var users=await api('GET','users','','?select=*&order=created_at.desc');
-  allUsers=users||[];
+  allUsers=canonUsers(users||[]);
   closeModal('approveRoleModal');
   renderStaff();
   showToast(L('تم القبول · امنح الصلاحيات من ملفه','Approved · grant access in their file','تایید شد · از فایلش دسترسی بده'),'success');
@@ -6613,7 +6629,7 @@ async function confirmApproveRole(){
 async function approveUser(id, status){
   await api('PATCH','users',{status},`?id=eq.${id}`);
   const users=await api('GET','users','','?select=*&order=created_at.desc');
-  allUsers=users||[];
+  allUsers=canonUsers(users||[]);
   renderStaff();
   showToast(status==='active'?T('approve'):T('reject'),'success');
 }
@@ -6622,7 +6638,7 @@ async function removeUser(id){
   if(!confirm('Remove?')) return;
   await api('PATCH','users',{status:'rejected'},`?id=eq.${id}`);
   const users=await api('GET','users','','?select=*&order=created_at.desc');
-  allUsers=users||[];
+  allUsers=canonUsers(users||[]);
   renderStaff();
   showToast(T('saved'),'success');
 }
@@ -6641,7 +6657,7 @@ function openAddStaffModal(){
   document.getElementById('as-email').value='';
   document.getElementById('as-pass').value='';
   var deptSel=document.getElementById('as-dept');
-  deptSel.innerHTML=jobTitleNames().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
+  deptSel.innerHTML=(function(){var _sk={};return jobTitleNames().filter(function(n){var k=deptKey(n);if(_sk[k])return false;_sk[k]=1;return true;});})().map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'">'+deptLabel(n)+'</option>';}).join('');
   var famCb=document.getElementById('as-family'); if(famCb) famCb.checked=false;
   toggleFamilyMode();
   document.getElementById('as-err').style.display='none';
@@ -6683,7 +6699,7 @@ async function addStaffMember(){
   if(!r.ok){ err.style.display='block'; err.textContent='خطا'; return; }
   closeModal('addStaffModal');
   var users=await api('GET','users','','?select=*&order=created_at.desc');
-  allUsers=users||[];
+  allUsers=canonUsers(users||[]);
   renderStaff();
   showToast(isFamily
     ? L('تمت إضافة فرد العائلة','Family member added','عضو خانواده اضافه شد')
@@ -6789,9 +6805,12 @@ function openStaffFile(id){
             if(titles.indexOf(t)<0) titles.push(t);
           });
           // make sure the worker's current dept is in the list even if not elsewhere
-          if(u.department && titles.indexOf(u.department)<0) titles.unshift(u.department);
+          // Dedupe titles that differ only in spacing/spelling (e.g. «انبار دار» vs «انباردار»)
+          var seenK={}; titles=titles.filter(function(t){ var k=deptKey(t); if(seenK[k]) return false; seenK[k]=1; return true; });
+          if(u.department && !seenK[deptKey(u.department)]) titles.unshift(u.department);
+          var selK=deptKey(u.department);
           return titles.map(function(t){
-            return '<option value="'+String(t).replace(/"/g,'&quot;')+'"'+(t===u.department?' selected':'')+'>'+deptLabel(t)+'</option>';
+            return '<option value="'+String(t).replace(/"/g,'&quot;')+'"'+(deptKey(t)===selK?' selected':'')+'>'+deptLabel(t)+'</option>';
           }).join('');
         })()+
       '</select>'+
@@ -8436,7 +8455,7 @@ setLang(savedLang);
 try {
   var savedUser=localStorage.getItem('dar_user');
   if(savedUser){
-    currentUser=JSON.parse(savedUser);
+    currentUser=JSON.parse(savedUser); if(currentUser&&currentUser.department) currentUser.department=canonDept(currentUser.department);
     enterApp();
   }
 } catch(e){ console.log('session restore failed',e); }
