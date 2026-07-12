@@ -5464,6 +5464,8 @@ function renderInventory(){
     return;
   }
   var canManage=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول خرید');
+  // Warehouse staff: can set item photos + add stock quantity (not edit prices / delete)
+  var isWarehouse=currentUser&&(currentUser.department==='انباردار'||currentUser.department==='مسئول انبار');
   var q=(document.getElementById('inv-search')?document.getElementById('inv-search').value:'').toLowerCase().trim();
   var invList=allInventory.filter(function(it){
     if(!q) return true;
@@ -5487,10 +5489,10 @@ function renderInventory(){
       '</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
       '<button class="btn btn-primary btn-sm" onclick="openUsageModal('+it.id+')">📤 '+(lang==='ar'?'سحب':lang==='en'?'Withdraw':'برداشت')+'</button>'+
-      ((currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن'))?'<button class="btn btn-outline btn-sm" onclick="setInvItemImage('+it.id+')">📷 '+(lang==='ar'?'صورة':lang==='en'?'Photo':'عکس')+'</button>':'')+
+      ((currentUser&&(currentUser.role==='manager'||currentUser.department==='بازرس'||currentUser.department==='فورمن'))||isWarehouse?'<button class="btn btn-outline btn-sm" onclick="setInvItemImage('+it.id+')">📷 '+(lang==='ar'?'صورة':lang==='en'?'Photo':'عکس')+'</button>':'')+
       (canSeeUsage?'<button class="btn btn-outline btn-sm" onclick="openItemUsageHistory('+it.id+')">📋 '+(lang==='ar'?'السجل':lang==='en'?'History':'تاریخچه')+'</button>':'')+
-      (canManage?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>'+
-      '<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
+      (canManage||isWarehouse?'<button class="btn btn-outline btn-sm" onclick="addStock('+it.id+')">➕ '+(lang==='ar'?'إضافة كمية':lang==='en'?'Add quantity':'افزودن موجودی')+'</button>':'')+
+      (canManage?'<button class="btn btn-outline btn-sm" onclick="editInventory('+it.id+')">✏️</button>':'')+
       ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" onclick="deleteInventory('+it.id+')">🗑️</button>':'')+
       '</div>'+
     '</div>';
