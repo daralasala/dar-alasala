@@ -636,6 +636,7 @@ body.en .search-icon{right:auto;left:10px;}
       <select class="form-control" id="req-pick" onchange="onReqPickCatalog()" size="6" style="height:auto"></select>
     </div>
     <div class="form-group"><label class="form-label" id="rm-item">نام جنس / کالا</label><input class="form-control" type="text" id="req-item" placeholder="مثلا: چوب، رنگ، پیچ..."></div>
+    <div class="form-group"><label class="form-label" id="rm-for-worker">👷 این جنس را چه کارگری خواسته؟</label><select class="form-control" id="req-for-worker"></select></div>
     <div class="form-group"><label class="form-label" id="rm-qty">مقدار / تعداد</label><input class="form-control" type="text" id="req-qty" placeholder="مثلا: 10 متر، 5 کیلو..."></div>
     <div class="form-group"><label class="form-label" id="rm-notes">توضیحات</label><textarea class="form-control" id="req-notes"></textarea></div>
     <div class="form-group"><label class="form-label" id="rm-img-label">صورة / عکس</label>
@@ -7167,9 +7168,11 @@ async function renderRequests(){
   allRequests=(reqs||[]).filter(function(x){return x&&typeof x==='object';});
   const isManagerOrBuyer = currentUser&&(currentUser.role==='manager'||currentUser.department==='مسئول خرید');
   const isForeman = currentUser&&currentUser.department==='فورمن';
-  const canSeeAll = isManagerOrBuyer||isForeman;        // foreman also sees everyone's requests
-  const canApprove = isManagerOrBuyer||isForeman;       // foreman can approve/reject
-  const canBuy = isManagerOrBuyer||isForeman;           // foreman can also mark as bought
+  const isWarehouse = currentUser&&(currentUser.department==='انباردار'||currentUser.department==='مسئول انبار');
+  const canSeeAll = isManagerOrBuyer||isForeman||isWarehouse;   // warehouse staff also see everyone's requests
+  const canApprove = isManagerOrBuyer||isForeman;               // foreman can approve/reject
+  const canBuy = isManagerOrBuyer||isForeman||isWarehouse;      // warehouse staff can also mark as bought
+  const canDelete = (currentUser&&currentUser.role==='manager')||isWarehouse; // warehouse staff can delete requests
   var msBtn=document.getElementById('mat-shop-btn');
   if(msBtn) msBtn.style.display=(isManagerOrBuyer||(currentUser&&currentUser.department==='حسابدار'))?'':'none';
   // Workers see only their own requests; manager/buyer/foreman see all
@@ -7200,8 +7203,8 @@ async function renderRequests(){
           ${canBuy?`<button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button>`:''}
           <button class="btn btn-red btn-sm" onclick="updateRequest(${r.id},'rejected')">✕</button>
         </div>`:''}
-        ${canBuy&&r.status==='approved'?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button></div>`:''}
-        ${currentUser&&currentUser.role==='manager'?`<div style="margin-top:8px"><button class="btn btn-red btn-sm" onclick="deleteRequest(${r.id})">🗑️ ${lang==='ar'?'حذف':lang==='en'?'Delete':'حذف'}</button></div>`:''}
+        ${canBuy&&(r.status==='approved'||(r.status==='pending'&&!canApprove))?`<div style="margin-top:8px"><button class="btn btn-blue btn-sm" onclick="updateRequest(${r.id},'bought')">🛒 ${lang==='ar'?'تم الشراء':lang==='en'?'Purchased':'خریدم'}</button></div>`:''}
+        ${canDelete?`<div style="margin-top:8px"><button class="btn btn-red btn-sm" onclick="deleteRequest(${r.id})">🗑️ ${lang==='ar'?'حذف':lang==='en'?'Delete':'حذف'}</button></div>`:''}
       </div>`).join('');
 }
 
@@ -7242,6 +7245,18 @@ function openReqModal(){
   document.getElementById('req-item').value='';
   document.getElementById('req-qty').value='';
   document.getElementById('req-notes').value='';
+  // "Requested by which worker?" dropdown — default: myself
+  var fwLbl=document.getElementById('rm-for-worker');
+  if(fwLbl) fwLbl.textContent='👷 '+L('من طلب هذه المادة؟','Requested by which worker?','این جنس را چه کارگری خواسته؟');
+  var fwSel=document.getElementById('req-for-worker');
+  if(fwSel){
+    var opts='<option value="">'+L('أنا نفسي','Myself','خودم')+' ('+(currentUser?currentUser.name:'')+')</option>';
+    (allUsers||[]).filter(function(x){return x&&x.status==='active'&&x.department!=='خانواده'&&(!currentUser||x.id!==currentUser.id);})
+      .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
+      .forEach(function(x){ opts+='<option value="'+String(x.name).replace(/"/g,'&quot;')+'">'+x.name+(x.department?(' — '+deptLabel(x.department)):'')+'</option>'; });
+    fwSel.innerHTML=opts;
+    fwSel.value='';
+  }
   reqImageData='';
   var pv=document.getElementById('req-image-preview'); if(pv) pv.innerHTML='';
   // labels
@@ -7271,7 +7286,17 @@ async function savePurchaseRequest(){
   if(btnEl){ btnEl.disabled=true; btnEl.style.opacity='0.6'; }
   if(btn){ btn.textContent=(lang==='ar'?'جاري الإرسال...':lang==='en'?'Sending...':'در حال ارسال...'); }
   try {
-    var res=await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:currentUser.name+' ('+currentUser.department+')',notes:notes,status:'pending',image:reqImageData||null})});
+    // If a worker was picked, the request is registered under THEIR name (registrar noted after ·)
+    var forSel=document.getElementById('req-for-worker');
+    var forName=forSel?forSel.value:'';
+    var wname;
+    if(forName){
+      var fu=(allUsers||[]).find(function(x){return x&&x.name===forName;});
+      wname=forName+(fu&&fu.department?(' ('+fu.department+')'):'')+' · '+currentUser.name;
+    } else {
+      wname=currentUser.name+' ('+currentUser.department+')';
+    }
+    var res=await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:wname,notes:notes,status:'pending',image:reqImageData||null})});
     if(!res.ok){ var t=await res.text(); console.log('request save error:',t); showToast(T('error')||'خطا','error'); return; }
     closeModal('reqModal');
     document.getElementById('req-item').value='';
