@@ -6884,18 +6884,21 @@ function salaryDueInfo(u){
   // The pay day for the CURRENT month
   var thisCycle=mkDue(now.getFullYear(),now.getMonth());
   var due=thisCycle;
+  // Payments up to 15 days BEFORE the due date also count for this cycle
+  // (e.g. due on the 12th, paid on the 11th → still "paid").
+  var cutoff=new Date(thisCycle); cutoff.setDate(cutoff.getDate()-15); cutoff.setHours(0,0,0,0);
   // Has the worker already been paid for THIS cycle? Check last_salary_paid OR a salary tx.
   var paidThisCycle=false;
   if(u.last_salary_paid){
     var lp=new Date(u.last_salary_paid); lp.setHours(0,0,0,0);
-    if(lp>=thisCycle) paidThisCycle=true;
+    if(lp>=cutoff) paidThisCycle=true;
   }
   if(!paidThisCycle && typeof allTransactions!=='undefined'){
     paidThisCycle=(allTransactions||[]).some(function(t){
       if(t.type!=='expense'||t.category!=='salary') return false;
       if((t.description||'').indexOf(u.name)<0) return false;
       var td=new Date(t.created_at||t.date||0); td.setHours(0,0,0,0);
-      return td>=thisCycle;
+      return td>=cutoff;
     });
   }
   if(paidThisCycle){
@@ -6904,7 +6907,9 @@ function salaryDueInfo(u){
   // Never earlier than the first due date (one full month after hire)
   if(due<firstDue){ due=firstDue; }
   var daysLeft=Math.ceil((due-now)/(1000*60*60*24));
-  return {nextDate:due.toISOString().slice(0,10),daysLeft:daysLeft,overdue:daysLeft<0,paidThisCycle:paidThisCycle};
+  // Local date format (toISOString shifts a day back in Qatar's UTC+3)
+  var nd=due.getFullYear()+'-'+String(due.getMonth()+1).padStart(2,'0')+'-'+String(due.getDate()).padStart(2,'0');
+  return {nextDate:nd,daysLeft:daysLeft,overdue:daysLeft<0,paidThisCycle:paidThisCycle};
 }
 
 async function saveStaffFile(){
