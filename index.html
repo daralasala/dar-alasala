@@ -1341,9 +1341,17 @@ const TR = {
 function T(k){ return TR[lang][k]||k; }
 
 // ===== API =====
+// Central header builder: every request carries the session token (x-session).
+// The database checks this token once RLS is enabled on the tables.
+function sbHeaders(extra){
+  var h={'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+  try{ var t=localStorage.getItem('dar_session'); if(t) h['x-session']=t; }catch(e){}
+  if(extra){ for(var k in extra) h[k]=extra[k]; }
+  return h;
+}
 async function api(method, table, data=null, filters=''){
   const url = `${SB_URL}/rest/v1/${table}${filters}`;
-  const headers = {'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'};
+  const headers = sbHeaders({'Content-Type':'application/json'});
   if(method==='GET') headers['Accept']='application/json';
   if(method==='POST') headers['Prefer']='return=representation';
   const res = await fetch(url, {method, headers, body: data?JSON.stringify(data):null});
@@ -1740,15 +1748,39 @@ function doLogin(){
   const email = document.getElementById('l-email').value.trim().toLowerCase();
   const pass = document.getElementById('l-pass').value;
   const err = document.getElementById('l-err');
-  // Secure login: password is verified INSIDE the database (user_secrets), never exposed
-  fetch(SB_URL+'/rest/v1/rpc/app_login',{
-    method:'POST',
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
-    body:JSON.stringify({p_email:email,p_password:pass})
-  }).then(r=>r.json()).then(data=>{
-    if(!data||!Array.isArray(data)||data.length===0){ err.style.display='block'; err.textContent=T('err_login'); return; }
+  // Secure login: password is verified INSIDE the database, never exposed.
+  // New path: app_session_login also returns a session token (x-session) used by RLS.
+  (async function(){
+    var user=null;
+    try{
+      var r=await fetch(SB_URL+'/rest/v1/rpc/app_session_login',{
+        method:'POST',
+        headers:sbHeaders({'Content-Type':'application/json'}),
+        body:JSON.stringify({p_email:email,p_password:pass})
+      });
+      if(r.ok){
+        var d=await r.json();
+        if(d&&d.user){
+          user=d.user;
+          try{
+            if(d.token) localStorage.setItem('dar_session',d.token);
+            else localStorage.removeItem('dar_session');
+          }catch(e){}
+        }
+      } else if(r.status===404){
+        // SQL step not applied yet → fall back to the old login (no token)
+        var r2=await fetch(SB_URL+'/rest/v1/rpc/app_login',{
+          method:'POST',
+          headers:sbHeaders({'Content-Type':'application/json'}),
+          body:JSON.stringify({p_email:email,p_password:pass})
+        });
+        var arr=await r2.json();
+        if(arr&&Array.isArray(arr)&&arr.length>0) user=arr[0];
+      }
+    }catch(e){}
+    if(!user){ err.style.display='block'; err.textContent=T('err_login'); return; }
     err.style.display='none';
-    currentUser=data[0]; if(currentUser&&currentUser.department) currentUser.department=canonDept(currentUser.department);
+    currentUser=user; if(currentUser&&currentUser.department) currentUser.department=canonDept(currentUser.department);
     _authPass=pass;
     if(currentUser.status==='pending'){
       document.getElementById('splash').style.opacity='0';
@@ -1757,7 +1789,7 @@ function doLogin(){
     }
     if(currentUser.status==='rejected'){ err.style.display='block'; err.textContent='حساب رد شده'; return; }
     enterApp();
-  }).catch(e=>{ err.style.display='block'; err.textContent=T('err_login'); });
+  })();
 }
 
 async function doRegister(){
@@ -1773,7 +1805,7 @@ async function doRegister(){
   // Secure registration: password goes to user_secrets via RPC, never into public users table
   const r=await fetch(SB_URL+'/rest/v1/rpc/app_register',{
     method:'POST',
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    headers:sbHeaders({'Content-Type':'application/json'}),
     body:JSON.stringify({p_name:name,p_email:email,p_password:pass,p_department:dept})
   });
   if(!r.ok){ err.style.display='block'; err.textContent='خطا در ثبت‌نام'; return; }
@@ -2114,7 +2146,7 @@ async function backupAllData(){
   var backup={ _meta:{ created_at:new Date().toISOString(), by:(currentUser?currentUser.name:''), app:'dar-alasala' } };
   try{
     for(var i=0;i<tables.length;i++){
-      var rows=await fetch(SB_URL+'/rest/v1/'+tables[i]+'?select=*',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.ok?r.json():[];});
+      var rows=await fetch(SB_URL+'/rest/v1/'+tables[i]+'?select=*',{headers:sbHeaders()}).then(function(r){return r.ok?r.json():[];});
       backup[tables[i]]=rows||[];
     }
     var blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
@@ -2140,7 +2172,7 @@ async function recoverMissingPrepayIncome(){
   // think incomes were missing when they actually existed in the database.
   var existingIncome=[];
   try{
-    existingIncome=await fetch(SB_URL+'/rest/v1/transactions?select=description,amount&type=eq.income',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.json();})||[];
+    existingIncome=await fetch(SB_URL+'/rest/v1/transactions?select=description,amount&type=eq.income',{headers:sbHeaders()}).then(function(r){return r.json();})||[];
   }catch(e){
     showToast(L('خطأ في الاتصال','Connection error','خطای اتصال — دوباره تلاش کنید'),'error'); return;
   }
@@ -2171,7 +2203,7 @@ async function recoverMissingPrepayIncome(){
   var sum=toAdd.reduce(function(s,x){return s+x.amount;},0);
   if(!confirm(L('استرجاع '+toAdd.length+' دفعة بمجموع '+sum.toLocaleString()+' ر.ق؟','Recover '+toAdd.length+' payments totaling '+sum.toLocaleString()+' QAR?','بازسازی '+toAdd.length+' پیش‌پرداخت به جمع '+sum.toLocaleString()+' ریال؟'))) return;
   for(var i=0;i<toAdd.length;i++){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:toAdd[i].amount,description:toAdd[i].description,category:'prepay'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'income',amount:toAdd[i].amount,description:toAdd[i].description,category:'prepay'})});
   }
   await loadAll();
   renderFinance();
@@ -2198,7 +2230,7 @@ async function recoverMissingPurchaseExpenses(){
   if(!confirm(L('استرجاع '+toAdd.length+' فاتورة شراء بمجموع '+sum.toLocaleString()+' ر.ق؟','Recover '+toAdd.length+' purchases totaling '+sum.toLocaleString()+' QAR?','بازسازی '+toAdd.length+' فاکتور خرید به جمع '+sum.toLocaleString()+' ریال؟'))) return;
   for(var i=0;i<toAdd.length;i++){
     var x=toAdd[i];
-    var res=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:x.amount,description:x.description,category:'purchase',supplier_name:x.supplier,paid:true})});
+    var res=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'purchase',amount:x.amount,description:x.description,category:'purchase',supplier_name:x.supplier,paid:true})});
     // relink the purchase record to the new transaction
     try { var nt=await res.json(); if(nt&&nt[0]&&x.pid){ await api('PATCH','purchases',{transaction_id:nt[0].id},'?id=eq.'+x.pid); } } catch(e){}
   }
@@ -2224,7 +2256,7 @@ async function recoverMissingSalaries(){
   var sum=toAdd.reduce(function(s,x){return s+x.amount;},0);
   if(!confirm(L('استرجاع '+toAdd.length+' راتب بمجموع '+sum.toLocaleString()+' ر.ق؟','Recover '+toAdd.length+' salaries totaling '+sum.toLocaleString()+' QAR?','بازسازی '+toAdd.length+' حقوق به جمع '+sum.toLocaleString()+' ریال؟'))) return;
   for(var i=0;i<toAdd.length;i++){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:toAdd[i].amount,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+toAdd[i].name,category:'salary'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'expense',amount:toAdd[i].amount,description:(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+toAdd[i].name,category:'salary'})});
   }
   await loadAll();
   renderFinance();
@@ -2296,7 +2328,7 @@ async function saveNewPassword(){
     // Secure change: old password is verified INSIDE the database
     var r=await fetch(SB_URL+'/rest/v1/rpc/app_change_password',{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      headers:sbHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify({p_user_id:currentUser.id,p_old:oldP,p_new:newP})
     });
     var ok=false; try{ ok=await r.json(); }catch(e){}
@@ -2313,6 +2345,12 @@ async function saveNewPassword(){
 }
 
 function doLogout(){
+  // Invalidate the session server-side, then forget the token locally
+  try{
+    var tok=localStorage.getItem('dar_session');
+    if(tok){ fetch(SB_URL+'/rest/v1/rpc/app_session_logout',{method:'POST',headers:sbHeaders({'Content-Type':'application/json'}),body:JSON.stringify({p_token:tok})}).catch(function(){}); }
+    localStorage.removeItem('dar_session');
+  }catch(e){}
   try { localStorage.removeItem('dar_user'); } catch(e){}
   if(_autoRefreshTimer){ clearInterval(_autoRefreshTimer); _autoRefreshTimer=null; }
   currentUser=null; allOrders=[]; allUsers=[]; allTransactions=[];
@@ -3183,7 +3221,7 @@ async function startInvoiceProduction(invId){
     return t.category==='prepay' && t.description===prepayDesc;
   });
   if(advance>0 && !alreadyRecorded){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:advance,description:prepayDesc,category:'prepay'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'income',amount:advance,description:prepayDesc,category:'prepay'})});
   }
   var rcptNo='RV-'+invCode.replace(/[^0-9]/g,'')+'-'+String(new Date().getTime()).slice(-4);
   var today=new Date().toISOString().slice(0,10);
@@ -3949,7 +3987,7 @@ async function markDelivered(id){
   var rem=total-advance;
   await api('PATCH','orders',{status:'delivered',progress:100},`?id=eq.${id}`);
   if(rem>0){
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
     var rcptNo='RV-'+String(invCode).replace(/[^0-9]/g,'')+'-F'+String(new Date().getTime()).slice(-4);
     lastReceipt={no:rcptNo,date:new Date().toISOString().slice(0,10),cust:custName,phone:custPhone,invCode:invCode,amount:rem,total:total,balance:0,reason:'الدفعة الأخيرة عند التسليم - فاتورة '+invCode};
     closeModal('orderDetailModal'); await loadAll();
@@ -3986,7 +4024,7 @@ async function markInvoiceDelivered(invId){
   var rem=total-advance;
   if(rem>0&&!alreadyDelivered){
     var custName=inv?inv.customer_name:(items[0].customer_name||'');
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'income',amount:rem,description:'Final - '+custName,category:'payment'})});
     // Build a Receipt Voucher for the FINAL (remaining) payment
     var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
     var invCode=inv?inv.inv_code:'';
@@ -5167,7 +5205,7 @@ async function savePurchase(){
   // 1) Financial transaction
   _savingPurchase=true;
   try {
-  const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
+  const tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'purchase',amount:total,description:desc,category:'purchase',supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:isCredit?(due||null):null})});
   if(!tRes.ok){ var terr=await tRes.text(); console.log('purchase transaction error:',terr); showToast(L('فشل تسجيل الشراء: ','Save failed: ','ثبت خرید ناموفق: ')+terr,'error'); _savingPurchase=false; _unlock(); return; }
   const trans=await tRes.json();
   if(!(trans&&trans[0])){ showToast(L('فشل تسجيل الشراء','Save failed','ثبت خرید ناموفق'),'error'); _savingPurchase=false; _unlock(); return; }
@@ -6097,7 +6135,7 @@ async function payFixedExp(id){
   var amount=fe.amount||0;
   if(amount<=0){ showToast(T('err_fill'),'error'); return; }
   if(!confirm((lang==='ar'?'دفع ':lang==='en'?'Pay ':'پرداخت ')+fe.name+' · '+amount.toLocaleString()+' QAR؟')) return;
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'مصروف ثابت: ':lang==='en'?'Fixed expense: ':'هزینه ثابت: ')+fe.name,category:'fixed'})});
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'expense',amount:amount,description:(lang==='ar'?'مصروف ثابت: ':lang==='en'?'Fixed expense: ':'هزینه ثابت: ')+fe.name,category:'fixed'})});
   var today=new Date().toISOString().slice(0,10);
   await api('PATCH','fixed_expenses',{last_paid:today},'?id=eq.'+id);
   fe.last_paid=today;
@@ -6703,7 +6741,7 @@ async function addStaffMember(){
   // Secure creation: password stored in user_secrets via manager-verified RPC
   var r=await fetch(SB_URL+'/rest/v1/rpc/app_admin_create_user',{
     method:'POST',
-    headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+    headers:sbHeaders({'Content-Type':'application/json'}),
     body:JSON.stringify({
       p_admin_email:(currentUser?currentUser.email:''), p_admin_password:_authPass,
       p_name:name, p_email:email, p_password:pass,
@@ -6972,7 +7010,7 @@ async function resetStaffPassword(id){
   try {
     var r=await fetch(SB_URL+'/rest/v1/rpc/app_admin_reset_password',{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json'},
+      headers:sbHeaders({'Content-Type':'application/json'}),
       body:JSON.stringify({p_admin_email:(currentUser?currentUser.email:''),p_admin_password:_authPass,p_user_id:id,p_new:np})
     });
     var ok=false; try{ ok=await r.json(); }catch(e){}
@@ -7016,7 +7054,7 @@ async function payStaffSalary(id){
   var txDesc=(lang==='ar'?'راتب ':lang==='en'?'Salary ':'حقوق ')+u.name+
     (isPartial?(' ('+daysWorked+' '+L('يوم من','days of','روز از')+' '+daysMonth+')'):'')+
     (loanDeduct>0?(' ('+L('بعد خصم السلفة','after loan deduction','پس از کسر وام')+')'):'');
-  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:netPay,description:txDesc,category:'salary'})});
+  await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'expense',amount:netPay,description:txDesc,category:'salary'})});
   // Update loan balance + last paid date
   var today=new Date().toISOString().slice(0,10);
   var patch={last_salary_paid:today};
@@ -7042,12 +7080,12 @@ async function payStaffTicket(id){
     // DUPLICATE CHECK: was this exact ticket (same worker + amount) already logged in the last 24h?
     var desc=(lang==='ar'?'تذكرة سفر ':lang==='en'?'Travel ticket ':'بلیت سفر ')+u.name;
     var since=new Date(Date.now()-24*60*60*1000).toISOString();
-    var existing=await fetch(SB_URL+'/rest/v1/transactions?select=id&type=eq.expense&amount=eq.'+ticket+'&description=eq.'+encodeURIComponent(desc)+'&created_at=gte.'+since,{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}}).then(function(r){return r.ok?r.json():[];});
+    var existing=await fetch(SB_URL+'/rest/v1/transactions?select=id&type=eq.expense&amount=eq.'+ticket+'&description=eq.'+encodeURIComponent(desc)+'&created_at=gte.'+since,{headers:sbHeaders()}).then(function(r){return r.ok?r.json():[];});
     if(existing&&existing.length>0){
       showToast(L('التذكرة مسجلة بالفعل اليوم','Ticket already logged today','این بلیت امروز قبلاً ثبت شده'),'error');
       _payingTicket=false; return;
     }
-    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'expense',amount:ticket,description:desc,category:'حمل‌ونقل'})});
+    await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'expense',amount:ticket,description:desc,category:'حمل‌ونقل'})});
     closeModal('staffModal');
     await loadAll();
     showToast(L('تم تسجيل التذكرة كمصروف','Ticket logged as expense','بلیت به‌عنوان هزینه ثبت شد'),'success');
@@ -7323,7 +7361,7 @@ async function savePurchaseRequest(){
     } else {
       wname=currentUser.name+' ('+currentUser.department+')';
     }
-    var res=await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({item_name:item,quantity:qty,worker_name:wname,notes:notes,status:'pending',image:reqImageData||null})});
+    var res=await fetch(SB_URL+'/rest/v1/purchase_requests',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({item_name:item,quantity:qty,worker_name:wname,notes:notes,status:'pending',image:reqImageData||null})});
     if(!res.ok){ var t=await res.text(); console.log('request save error:',t); showToast(T('error')||'خطا','error'); return; }
     closeModal('reqModal');
     document.getElementById('req-item').value='';
@@ -7512,7 +7550,7 @@ async function confirmReqToInv(){
   var totalCost=qty*price;
   if(totalCost>0){
     try {
-      var tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({type:'purchase',amount:totalCost,description:(name||r.item_name||'')+' ('+qty+' '+unit+')',category:'purchase',paid:true})});
+      var tRes=await fetch(SB_URL+'/rest/v1/transactions',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({type:'purchase',amount:totalCost,description:(name||r.item_name||'')+' ('+qty+' '+unit+')',category:'purchase',paid:true})});
       if(tRes.ok){
         var trans=(await tRes.json())[0];
         await api('POST','purchases',{transaction_id:trans.id,supplier:r.worker_name||'',total_price:totalCost,item_name:(name||r.item_name||''),invoice_date:new Date().toISOString().slice(0,10),invoice_image:r2iInvoiceImage||null,created_by:(currentUser?currentUser.name:'')});
@@ -7599,7 +7637,7 @@ async function checkNewChatMessages(){
   if(!_chatSeededOnce){ loadChatLastSeen(); }
   if(_myChatIds===null){ await refreshMyChatIds(); }
   try {
-    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender,created_at&order=created_at.desc&limit=100',{headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Accept':'application/json'}});
+    var res=await fetch(SB_URL+'/rest/v1/chat_messages?select=id,chat_id,sender,created_at&order=created_at.desc&limit=100',{headers:sbHeaders({'Accept':'application/json'})});
     if(!res.ok){ console.log('chat check HTTP', res.status); return; }
     var rows=await res.json();
     var totalUnread=0, perChat={};
@@ -7722,7 +7760,7 @@ async function openPrivateChat(otherName){
   } catch(e){ console.log('find chat err',e); }
   if(!existing){
     try {
-      var created=await fetch(SB_URL+'/rest/v1/chats',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({name:key,is_group:false,created_by:me})});
+      var created=await fetch(SB_URL+'/rest/v1/chats',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({name:key,is_group:false,created_by:me})});
       if(!created.ok){ var et=await created.text(); console.log('create chat err',et); showToast(lang==='ar'?'فشل فتح المحادثة':lang==='en'?'Cannot open chat':'چت باز نشد: '+et,'error'); return; }
       var arr=await created.json();
       existing=arr&&arr[0]?arr[0]:null;
@@ -7823,7 +7861,7 @@ async function sendChatMessage(){
   try {
     var res=await fetch(SB_URL+'/rest/v1/chat_messages',{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+      headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),
       body:JSON.stringify({chat_id:chatCurrentId,sender:me,content:text,type:'text'})
     });
     if(!res.ok){
@@ -7872,7 +7910,7 @@ async function sendChatMedia(type, content){
   try {
     var res=await fetch(SB_URL+'/rest/v1/chat_messages',{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},
+      headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),
       body:JSON.stringify({chat_id:chatCurrentId,sender:me,content:content,type:type})
     });
     if(!res.ok){ var t=await res.text(); console.log('send media error:',t); showToast('خطا: '+t,'error'); return false; }
@@ -7893,7 +7931,7 @@ async function chatUploadImage(input){
     var path='chat/'+chatCurrentId+'/'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.'+ext;
     var up=await fetch(SB_URL+'/storage/v1/object/'+CHAT_BUCKET+'/'+path,{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':file.type||'image/jpeg','x-upsert':'true'},
+      headers:sbHeaders({'Content-Type':file.type||'image/jpeg','x-upsert':'true'}),
       body:file
     });
     if(!up.ok){ var t=await up.text(); console.log('storage upload error:',t); showToast(lang==='ar'?'فشل رفع الصورة':lang==='en'?'Upload failed':'آپلود عکس ناموفق بود','error'); return; }
@@ -7980,7 +8018,7 @@ async function _finishVoice(){
     var path='chat/'+chatCurrentId+'/voice_'+Date.now()+'_'+Math.random().toString(36).slice(2,8)+'.'+ext;
     var up=await fetch(SB_URL+'/storage/v1/object/'+CHAT_BUCKET+'/'+path,{
       method:'POST',
-      headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':type,'x-upsert':'true'},
+      headers:sbHeaders({'Content-Type':type,'x-upsert':'true'}),
       body:blob
     });
     if(!up.ok){ var t=await up.text(); console.log('voice upload error:',t); showToast(lang==='ar'?'فشل رفع الصوت':lang==='en'?'Voice upload failed':'آپلود صدا ناموفق بود','error'); return; }
@@ -8296,7 +8334,7 @@ async function saveOrder(){
   const invCode=manualInv?manualInv:('INV-'+String(Date.now()).slice(-5));
   try {
   // 1) Create invoice header
-  const invRes=await fetch(SB_URL+'/rest/v1/invoices',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({inv_code:invCode,customer_name:cname,customer_phone:phone,customer_id:cid,total_price:total,discount:discount,prepay:prepay,status:'pending_payment',notes:desc})});
+  const invRes=await fetch(SB_URL+'/rest/v1/invoices',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify({inv_code:invCode,customer_name:cname,customer_phone:phone,customer_id:cid,total_price:total,discount:discount,prepay:prepay,status:'pending_payment',notes:desc})});
   if(!invRes.ok){ showToast(await invRes.text(),'error'); _unlock(); return; }
   const inv=(await invRes.json())[0];
   // 2) Create one order per item
@@ -8314,7 +8352,7 @@ async function saveOrder(){
       invoice_id:inv.id, images: it.images.length>0?it.images:null,
       thumb: itemThumb||null
     };
-    await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify(body)});
+    await fetch(SB_URL+'/rest/v1/orders',{method:'POST',headers:sbHeaders({'Content-Type':'application/json','Prefer':'return=representation'}),body:JSON.stringify(body)});
   }
   // NOTE: prepay is NOT recorded as income here. It's only the EXPECTED amount.
   // It becomes income only when the manager confirms payment (startInvoiceProduction).
