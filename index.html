@@ -7235,7 +7235,7 @@ function filterReqPick(){
   var s=document.getElementById('req-pick-search');
   _fillReqPick(s?s.value:'');
 }
-function openReqModal(){
+async function openReqModal(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   _reqPickList=(allInventory||[]).slice();
   var ss=document.getElementById('req-pick-search'); if(ss) ss.value='';
@@ -7250,12 +7250,25 @@ function openReqModal(){
   if(fwLbl) fwLbl.textContent='👷 '+L('من طلب هذه المادة؟','Requested by which worker?','این جنس را چه کارگری خواسته؟');
   var fwSel=document.getElementById('req-for-worker');
   if(fwSel){
-    var opts='<option value="">'+L('أنا نفسي','Myself','خودم')+' ('+(currentUser?currentUser.name:'')+')</option>';
-    (allUsers||[]).filter(function(x){return x&&x.status==='active'&&x.department!=='خانواده'&&(!currentUser||x.id!==currentUser.id);})
-      .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
-      .forEach(function(x){ opts+='<option value="'+String(x.name).replace(/"/g,'&quot;')+'">'+x.name+(x.department?(' — '+deptLabel(x.department)):'')+'</option>'; });
-    fwSel.innerHTML=opts;
+    var buildOpts=function(list){
+      var opts='<option value="">'+L('أنا نفسي','Myself','خودم')+' ('+(currentUser?currentUser.name:'')+')</option>';
+      (list||[]).filter(function(x){return x&&x.status==='active'&&x.department!=='خانواده'&&(!currentUser||x.id!==currentUser.id);})
+        .sort(function(a,b){return (a.name||'').localeCompare(b.name||'');})
+        .forEach(function(x){ opts+='<option value="'+String(x.name).replace(/"/g,'&quot;')+'">'+x.name+(x.department?(' — '+deptLabel(x.department)):'')+'</option>'; });
+      return opts;
+    };
+    fwSel.innerHTML=buildOpts(allUsers);
     fwSel.value='';
+    // If the users list wasn't loaded yet (slow connection / failed fetch), fetch it now
+    if(fwSel.options.length<=1){
+      api('GET','users','','?select=id,name,department,status&order=name.asc').then(function(users){
+        if(users&&users.length){
+          allUsers=canonUsers(users);
+          fwSel.innerHTML=buildOpts(allUsers);
+          fwSel.value='';
+        }
+      });
+    }
   }
   reqImageData='';
   var pv=document.getElementById('req-image-preview'); if(pv) pv.innerHTML='';
