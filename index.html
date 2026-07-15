@@ -64,7 +64,7 @@ html{background:#0f1117;}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
 /* CARDS */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:10px;transition:border-color .2s;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:13px;margin-bottom:10px;transition:border-color .2s;-webkit-tap-highlight-color:transparent;}
 .card:hover{border-color:rgba(201,168,76,.3);}
 .card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:9px;gap:8px;}
 .card-title{font-size:14px;font-weight:700;}
@@ -2764,12 +2764,12 @@ function renderAssignment(o){
   }
   // Assigned worker: start button (not started yet)
   if(isAssignedToMe && !started && !done){
-    html+='<button class="btn btn-green btn-block" style="margin-top:8px;background:var(--green);color:#fff" onclick="startWork('+o.id+')">▶️ '+L('بدأت العمل','I started working','شروع کردم')+'</button>';
+    html+='<button class="btn btn-green btn-block" style="margin-top:8px;background:var(--green);color:#fff" onclick="event.stopPropagation();startWork('+o.id+',this)">▶️ '+L('بدأت العمل','I started working','شروع کردم')+'</button>';
   }
   // Assigned worker (or manager): mark work done (was working, not done yet)
   // Only the assigned worker can mark their own work done (not manager/foreman)
   if(isAssignedToMe && started && !done){
-    html+='<button class="btn btn-blue btn-block" style="margin-top:8px" onclick="finishWork('+o.id+')">✅ '+L('أنهيت العمل','I finished','کارم تمام شد')+'</button>';
+    html+='<button class="btn btn-blue btn-block" style="margin-top:8px" onclick="event.stopPropagation();finishWork('+o.id+',this)">✅ '+L('أنهيت العمل','I finished','کارم تمام شد')+'</button>';
   }
   // After done: hint to transfer to next stage
   if(done){
@@ -2807,20 +2807,34 @@ async function confirmAssign(){
   if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(parseInt(orderId));
   showToast(T('saved'),'success');
 }
-async function startWork(orderId){
-  await api('PATCH','orders',{work_started:true,work_done:false},'?id=eq.'+orderId);
+async function startWork(orderId,btn){
+  if(btn){ if(btn.disabled) return; btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='⏳'; }
+  var res=await api('PATCH','orders',{work_started:true,work_done:false},'?id=eq.'+orderId);
+  if(res===null){ // request failed — restore button so the worker can retry
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent='▶️'; }
+    showToast(lang==='ar'?'فشل الاتصال، حاول مجدداً':lang==='en'?'Connection failed, try again':'ارتباط برقرار نشد، دوباره بزن','error');
+    return;
+  }
   var o=allOrders.find(x=>x.id===orderId); if(o){ o.work_started=true; o.work_done=false; }
-  await loadAll();
-  // Refresh whichever view is open
-  if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(orderId);
+  // Instant feedback: toast + re-render from local state FIRST, heavy reload in background
   showToast(lang==='ar'?'بدأ العمل':lang==='en'?'Work started':'کار شروع شد','success');
-}
-async function finishWork(orderId){
-  await api('PATCH','orders',{work_done:true,work_started:false},'?id=eq.'+orderId);
-  var o=allOrders.find(x=>x.id===orderId); if(o){ o.work_done=true; o.work_started=false; }
-  await loadAll();
   if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(orderId);
+  else { try{ renderProduction(); renderOrders(); }catch(e){} }
+  loadAll(true);
+}
+async function finishWork(orderId,btn){
+  if(btn){ if(btn.disabled) return; btn.disabled=true; btn.style.opacity='0.6'; btn.textContent='⏳'; }
+  var res=await api('PATCH','orders',{work_done:true,work_started:false},'?id=eq.'+orderId);
+  if(res===null){
+    if(btn){ btn.disabled=false; btn.style.opacity='1'; btn.textContent='✅'; }
+    showToast(lang==='ar'?'فشل الاتصال، حاول مجدداً':lang==='en'?'Connection failed, try again':'ارتباط برقرار نشد، دوباره بزن','error');
+    return;
+  }
+  var o=allOrders.find(x=>x.id===orderId); if(o){ o.work_done=true; o.work_started=false; }
   showToast(lang==='ar'?'انتهى العمل':lang==='en'?'Work done':'کار تمام شد','success');
+  if(document.getElementById('orderDetailModal').classList.contains('open')) openOrderDetail(orderId);
+  else { try{ renderProduction(); renderOrders(); }catch(e){} }
+  loadAll(true);
 }
 
 async function openOrderDetail(id){
@@ -4170,12 +4184,12 @@ function renderProduction(){
           })():''}
           <div class="row" style="margin-bottom:0"><span class="row-label">📅</span><span class="row-value">${o.delivery_date||'-'}${daysLeftLabel(o.delivery_date)}</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${o.progress||0}%"></div></div>
-          ${(o.assigned_worker===currentUser.name&&!o.work_started&&!o.work_done)?`<button class="btn btn-green btn-block btn-sm" style="margin-top:8px;background:var(--green);color:#fff" onclick="startWork(${o.id})">▶️ ${lang==='ar'?'بدأت العمل':lang==='en'?'I started':'شروع کردم'}</button>`:''}
-          ${(o.assigned_worker===currentUser.name&&o.work_started&&!o.work_done)?`<button class="btn btn-blue btn-block btn-sm" style="margin-top:8px" onclick="finishWork(${o.id})">✅ ${lang==='ar'?'أنهيت العمل':lang==='en'?'I finished':'کارم تمام شد'}</button>`:''}
-          ${(currentUser.role==='manager'||currentUser.department==='فورمن')?`<button class="btn btn-outline btn-block btn-sm" style="margin-top:8px" onclick="openAssignModal(${o.id})">👷 ${o.assigned_worker?(lang==='ar'?'تغيير العامل':lang==='en'?'Change worker':'تغییر کارگر'):(lang==='ar'?'إسناد لعامل':lang==='en'?'Assign worker':'واگذاری به کارگر')}</button>`:''}
+          ${(o.assigned_worker===currentUser.name&&!o.work_started&&!o.work_done)?`<button class="btn btn-green btn-block btn-sm" style="margin-top:8px;background:var(--green);color:#fff" onclick="event.stopPropagation();startWork(${o.id},this)">▶️ ${lang==='ar'?'بدأت العمل':lang==='en'?'I started':'شروع کردم'}</button>`:''}
+          ${(o.assigned_worker===currentUser.name&&o.work_started&&!o.work_done)?`<button class="btn btn-blue btn-block btn-sm" style="margin-top:8px" onclick="event.stopPropagation();finishWork(${o.id},this)">✅ ${lang==='ar'?'أنهيت العمل':lang==='en'?'I finished':'کارم تمام شد'}</button>`:''}
+          ${(currentUser.role==='manager'||currentUser.department==='فورمن')?`<button class="btn btn-outline btn-block btn-sm" style="margin-top:8px" onclick="event.stopPropagation();openAssignModal(${o.id})">👷 ${o.assigned_worker?(lang==='ar'?'تغيير العامل':lang==='en'?'Change worker':'تغییر کارگر'):(lang==='ar'?'إسناد لعامل':lang==='en'?'Assign worker':'واگذاری به کارگر')}</button>`:''}
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
             <div class="progress-label">${o.progress||0}%</div>
-            ${canTransfer?`<button class="btn btn-primary btn-sm" onclick="openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
+            ${canTransfer?`<button class="btn btn-primary btn-sm" onclick="event.stopPropagation();openStageTransfer(${o.id})">🏭 ${T('transfer')}</button>`:''}
           </div>
         </div>`;
       }).join('');
