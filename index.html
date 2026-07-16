@@ -206,6 +206,12 @@ body.en .search-icon{right:auto;left:10px;}
 
 /* AI SCAN */
 .ai-badge{background:linear-gradient(135deg,#7b2ff7,#4a90d9);color:#fff;padding:3px 8px;border-radius:8px;font-size:10px;font-weight:700;}
+
+/* Password show/hide eye toggle */
+.pw-wrap{position:relative;}
+.pw-wrap input{padding-inline-end:44px;width:100%;box-sizing:border-box;}
+.pw-eye{position:absolute;inset-inline-end:8px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;font-size:17px;opacity:.6;padding:4px;line-height:1;}
+.pw-eye:hover,.pw-eye:active{opacity:1;}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 </head>
@@ -232,7 +238,7 @@ body.en .search-icon{right:auto;left:10px;}
     <!-- LOGIN -->
     <div id="login-form">
       <input class="form-input" type="text" id="l-email" placeholder="البريد الإلكتروني">
-      <input class="form-input" type="password" id="l-pass" placeholder="كلمة المرور">
+      <div class="pw-wrap"><input class="form-input" type="password" id="l-pass" placeholder="كلمة المرور"><button type="button" class="pw-eye" tabindex="-1" onclick="togglePw('l-pass',this)">👁️</button></div>
       <div class="auth-err" id="l-err">بيانات غير صحيحة</div>
       <button class="btn-auth" onclick="doLogin()" id="l-btn">دخول</button>
     </div>
@@ -240,7 +246,7 @@ body.en .search-icon{right:auto;left:10px;}
     <div id="register-form">
       <input class="form-input" type="text" id="r-name" placeholder="الاسم الكامل">
       <input class="form-input" type="email" id="r-email" placeholder="البريد الإلكتروني">
-      <input class="form-input" type="password" id="r-pass" placeholder="كلمة المرور">
+      <div class="pw-wrap"><input class="form-input" type="password" id="r-pass" placeholder="كلمة المرور"><button type="button" class="pw-eye" tabindex="-1" onclick="togglePw('r-pass',this)">👁️</button></div>
       <select class="form-select" id="r-dept"></select>
       <div class="auth-err" id="r-err"></div>
       <div class="auth-msg" id="r-msg"></div>
@@ -928,9 +934,9 @@ body.en .search-icon{right:auto;left:10px;}
 <div class="modal-overlay modal-top" id="changePassModal">
   <div class="modal">
     <div class="modal-header"><div class="modal-title">🔑 <span id="cp-title">تغییر رمز عبور</span></div><button class="modal-close" onclick="closeModal('changePassModal')">✕</button></div>
-    <div class="form-group"><label class="form-label" id="cp-old-lbl">رمز فعلی</label><input class="form-control" type="password" id="cp-old"></div>
-    <div class="form-group"><label class="form-label" id="cp-new-lbl">رمز جدید</label><input class="form-control" type="password" id="cp-new"></div>
-    <div class="form-group"><label class="form-label" id="cp-new2-lbl">تکرار رمز جدید</label><input class="form-control" type="password" id="cp-new2"></div>
+    <div class="form-group"><label class="form-label" id="cp-old-lbl">رمز فعلی</label><div class="pw-wrap"><input class="form-control" type="password" id="cp-old"><button type="button" class="pw-eye" tabindex="-1" onclick="togglePw('cp-old',this)">👁️</button></div></div>
+    <div class="form-group"><label class="form-label" id="cp-new-lbl">رمز جدید</label><div class="pw-wrap"><input class="form-control" type="password" id="cp-new"><button type="button" class="pw-eye" tabindex="-1" onclick="togglePw('cp-new',this)">👁️</button></div></div>
+    <div class="form-group"><label class="form-label" id="cp-new2-lbl">تکرار رمز جدید</label><div class="pw-wrap"><input class="form-control" type="password" id="cp-new2"><button type="button" class="pw-eye" tabindex="-1" onclick="togglePw('cp-new2',this)">👁️</button></div></div>
     <button class="btn btn-primary btn-block" onclick="saveNewPassword()">💾 <span id="cp-save">ذخیره</span></button>
   </div>
 </div>
@@ -1744,6 +1750,12 @@ async function populateRegDept(){
 }
 
 var _authPass=''; // kept in memory during the session for manager-only secure actions
+// Show/hide password (eye toggle)
+function togglePw(id,btn){
+  var el=document.getElementById(id); if(!el) return;
+  if(el.type==='password'){ el.type='text'; btn.textContent='🙈'; }
+  else { el.type='password'; btn.textContent='👁️'; }
+}
 function doLogin(){
   const email = document.getElementById('l-email').value.trim().toLowerCase();
   const pass = document.getElementById('l-pass').value;
