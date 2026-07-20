@@ -1108,6 +1108,16 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<div class="modal-overlay modal-top" id="cancelInvoiceModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">🚫 <span id="ci-title">کنسل کردن فاکتور</span></div>
+      <button class="modal-close" onclick="closeModal('cancelInvoiceModal')">✕</button>
+    </div>
+    <div id="cancel-invoice-body"></div>
+  </div>
+</div>
+
 <!-- LIGHTBOX -->
 <div id="lightbox" style="position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;overflow:hidden;touch-action:none" onclick="if(event.target.id==='lightbox')closeLightbox()">
   <img id="lightbox-img" style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;transform-origin:center center;transform:translate(0px,0px) scale(1);transition:transform .05s;will-change:transform">
@@ -1296,7 +1306,7 @@ const TR = {
     approve:'موافقة',reject:'رفض',remove:'حذف',
     pending_approval:'في انتظار موافقة المدير.',
     fab:'طلب جديد',order_detail:'تفاصيل الطلب',stage_transfer:'نقل المرحلة',
-    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع النهائي',status_paid:'مدفوع · جاهز للإنتاج',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',
+    dept_label:'التخصص',status_pending_payment:'في انتظار الدفع النهائي',status_paid:'مدفوع · جاهز للإنتاج',status_building:'قيد الانشاء',status_ready:'جاهز',status_delivered:'تم التسليم',status_cancelled:'ملغاة',
     notify_sent:'تم الارسال',saved:'تم الحفظ',err_fill:'يرجى ملء الحقول',
     err_login:'بيانات غير صحيحة',err_email:'البريد مسجل مسبقا',
     reg_success:'تم التسجيل! انتظر موافقة المدير.',no_data:'لا توجد بيانات',
@@ -1317,7 +1327,7 @@ const TR = {
     approve:'تایید',reject:'رد',remove:'حذف',
     pending_approval:'حساب شما ثبت شد و منتظر تایید مدیر است.',
     fab:'ساخت فاکتور',order_detail:'جزئیات سفارش',stage_transfer:'انتقال مرحله',
-    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت نهایی',status_paid:'تأیید شده · آماده تولید',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',
+    dept_label:'تخصص',status_pending_payment:'در انتظار پرداخت نهایی',status_paid:'تأیید شده · آماده تولید',status_building:'در حال ساخت',status_ready:'آماده',status_delivered:'تحویل',status_cancelled:'کنسل شده',
     notify_sent:'پیام ارسال شد',saved:'ذخیره شد',err_fill:'لطفا فیلدها را پر کنید',
     err_login:'اطلاعات اشتباه است',err_email:'ایمیل قبلا ثبت شده',
     reg_success:'ثبت نام انجام شد! منتظر تایید مدیر باشید.',no_data:'داده ای یافت نشد',
@@ -1338,7 +1348,7 @@ const TR = {
     approve:'Approve',reject:'Reject',remove:'Remove',
     pending_approval:'Your account is awaiting manager approval.',
     fab:'New Order',order_detail:'Order Details',stage_transfer:'Stage Transfer',
-    dept_label:'Department',status_pending_payment:'Awaiting Final Payment',status_paid:'Paid · Ready to Build',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',
+    dept_label:'Department',status_pending_payment:'Awaiting Final Payment',status_paid:'Paid · Ready to Build',status_building:'In Progress',status_ready:'Ready',status_delivered:'Delivered',status_cancelled:'Cancelled',
     notify_sent:'Notification sent',saved:'Saved',err_fill:'Please fill required fields',
     err_login:'Invalid credentials',err_email:'Email already registered',
     reg_success:'Registered! Awaiting manager approval.',no_data:'No data found',
@@ -3111,11 +3121,28 @@ function openInvoiceFolder(invId){
     ? '<button class="btn btn-red btn-block" style="margin-top:12px" onclick="deleteInvoiceAll(\''+invId+'\')">🗑️ '+(lang==='ar'?'حذف الفاتورة بالكامل':lang==='en'?'Delete whole invoice':'حذف کل فاکتور')+'</button>'
     : '';
 
+  // ===== CANCEL / RESTORE =====
+  var isCancelled=inv&&inv.cancelled;
+  var cancelBanner=isCancelled
+    ? '<div style="background:rgba(224,82,82,.13);border:1.5px solid var(--red);border-radius:10px;padding:11px;margin-bottom:10px;text-align:center">'+
+        '<div style="color:var(--red);font-weight:800;font-size:15px">🚫 '+(lang==='ar'?'فاتورة ملغاة':lang==='en'?'Invoice Cancelled':'فاکتور کنسل شده')+'</div>'+
+        (inv.cancelled_at?'<div style="font-size:11px;color:var(--text2);margin-top:3px">'+new Date(inv.cancelled_at).toLocaleDateString()+'</div>':'')+
+        ((inv.cancel_refund>0)?'<div style="font-size:12px;color:var(--text2);margin-top:3px">'+(lang==='ar'?'المبلغ المُعاد للعميل':lang==='en'?'Refunded to customer':'برگشتی به مشتری')+': <b>'+(inv.cancel_refund||0).toLocaleString()+' QAR</b>'+((inv.cancel_deduct_pct>0)?' ('+(lang==='ar'?'خصم':lang==='en'?'deduction':'کسر')+' '+inv.cancel_deduct_pct+'%)':'')+'</div>':'')+
+      '</div>'
+    : '';
+  var cancelBtn='';
+  if(isManager){
+    cancelBtn=isCancelled
+      ? '<button class="btn btn-outline btn-block" style="margin-top:8px;border-color:var(--orange);color:var(--orange)" onclick="restoreInvoice(\''+invId+'\')">↩️ '+(lang==='ar'?'إلغاء الإلغاء (استعادة)':lang==='en'?'Restore invoice':'برگرداندن از کنسلی')+'</button>'
+      : '<button class="btn btn-outline btn-block" style="margin-top:8px;border-color:var(--red);color:var(--red)" onclick="openCancelInvoice(\''+invId+'\')">🚫 '+(lang==='ar'?'إلغاء الفاتورة':lang==='en'?'Cancel invoice':'کنسل کردن فاکتور')+'</button>';
+  }
+
   document.getElementById('invoice-folder-content').innerHTML=
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">'+
-      '<div><div style="font-size:17px;font-weight:800">'+custName+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+invCode+'</div></div>'+
+      '<div><div style="font-size:17px;font-weight:800">'+custName+(isCancelled?' <span class="badge badge-red" style="font-size:9px">'+(lang==='ar'?'ملغاة':lang==='en'?'Cancelled':'کنسل')+'</span>':'')+'</div><div style="font-size:11px;color:var(--text2);margin-top:2px">'+invCode+'</div></div>'+
       '<span style="font-size:12px;color:var(--text2)">'+items.length+' '+(lang==='ar'?'صنف':lang==='en'?'item':'جنس')+'</span>'+
     '</div>'+
+    cancelBanner+
     '<div class="card" style="margin-bottom:10px">'+
       '<div class="row"><span class="row-label">📱</span><span class="row-value">'+(custPhone||'-')+'</span></div>'+
       '<div class="row"><span class="row-label">💰 '+(lang==='ar'?'الإجمالي':lang==='en'?'Total':'کل')+'</span><span class="row-value" style="color:var(--accent)">'+total.toLocaleString()+' QAR</span></div>'+
@@ -3131,6 +3158,106 @@ function openInvoiceFolder(invId){
     itemsHtml+
     delInvoiceBtn;
   openModal('invoiceFolderModal');
+}
+
+// ===== CANCEL INVOICE =====
+// Open the cancel form: shows prepay, lets manager set deduction %, previews refund
+function openCancelInvoice(invId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var custName=inv?inv.customer_name:(items[0]?items[0].customer_name:'');
+  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
+  var paid=advance>0;
+  var body=
+    '<div style="font-size:14px;font-weight:700;margin-bottom:4px">'+custName+'</div>'+
+    '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">'+(inv?inv.inv_code:'')+'</div>';
+  if(!paid){
+    body+='<div style="background:var(--surface2);border-radius:10px;padding:12px;font-size:13px;color:var(--text2);margin-bottom:14px">✅ '+
+      L('لم يتم دفع أي مبلغ — لا شيء يُخصم من المالية. سيتم فقط ختم الفاتورة كملغاة.',
+        'No payment was made — nothing is deducted from finance. The invoice will just be stamped as cancelled.',
+        'مبلغی پرداخت نشده — چیزی از مالی کم نمی‌شود. فقط فاکتور مهر «کنسل» می‌خورد.')+'</div>';
+  } else {
+    body+='<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label">💰 '+
+      L('المبلغ المدفوع','Amount paid','مبلغ پرداختی')+'</span><span class="row-value" style="color:var(--green)">'+advance.toLocaleString()+' QAR</span></div></div>'+
+      '<div class="form-group"><label class="form-label">'+L('نسبة الخصم %','Deduction %','درصد کسر %')+'</label>'+
+      '<input class="form-control" type="number" id="ci-pct" min="0" max="100" value="0" oninput="updateCancelPreview()" placeholder="0">'+
+      '<div style="font-size:11px;color:var(--text3);margin-top:4px">'+L('مثال: بعد 7 أيام = 60 · خلال 2-3 أيام = 0',
+        'e.g. after 7 days = 60 · within 2-3 days = 0','مثلاً بعد از ۷ روز = ۶۰ · تو ۲-۳ روز = ۰')+'</div></div>'+
+      '<div class="card" style="margin-bottom:14px">'+
+        '<div class="row"><span class="row-label">'+L('يُخصم (يبقى للمصنع)','Kept by factory','کسر (برای کارخانه)')+'</span><span class="row-value" id="ci-keep" style="color:var(--text2)">0 QAR</span></div>'+
+        '<div class="row" style="margin-bottom:0"><span class="row-label" style="font-weight:700">'+L('يُعاد للعميل','Refund to customer','برگشتی به مشتری')+'</span><span class="row-value" id="ci-refund" style="color:var(--red);font-size:16px;font-weight:800">'+advance.toLocaleString()+' QAR</span></div>'+
+      '</div>';
+  }
+  body+='<button class="btn btn-red btn-block" onclick="confirmCancelInvoice(\''+invId+'\','+advance+')">🚫 '+
+    L('تأكيد إلغاء الفاتورة','Confirm cancel','تأیید کنسل کردن')+'</button>';
+  document.getElementById('ci-title').textContent=L('إلغاء الفاتورة','Cancel invoice','کنسل کردن فاکتور');
+  document.getElementById('cancel-invoice-body').innerHTML=body;
+  document.getElementById('cancel-invoice-body').dataset.advance=advance;
+  closeModal('invoiceFolderModal');
+  openModal('cancelInvoiceModal');
+}
+
+function updateCancelPreview(){
+  var advance=parseFloat(document.getElementById('cancel-invoice-body').dataset.advance)||0;
+  var pct=Math.min(100,Math.max(0,parseFloat((document.getElementById('ci-pct')||{}).value)||0));
+  var keep=Math.round(advance*pct/100);
+  var refund=advance-keep;
+  var k=document.getElementById('ci-keep'); if(k) k.textContent=keep.toLocaleString()+' QAR';
+  var r=document.getElementById('ci-refund'); if(r) r.textContent=refund.toLocaleString()+' QAR';
+}
+
+async function confirmCancelInvoice(invId, advance){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  var pct=advance>0?Math.min(100,Math.max(0,parseFloat((document.getElementById('ci-pct')||{}).value)||0)):0;
+  var refund=advance>0?(advance-Math.round(advance*pct/100)):0;
+  if(!confirm(L('تأكيد إلغاء الفاتورة؟','Confirm cancelling this invoice?','کنسل کردن فاکتور تأیید شود؟')+(refund>0?'\n'+L('سيُعاد للعميل','Refund to customer','برگشتی به مشتری')+': '+refund.toLocaleString()+' QAR':''))) return;
+  try {
+    // 1) Mark invoice cancelled
+    if(inv){
+      await api('PATCH','invoices',{cancelled:true,cancelled_at:new Date().toISOString(),cancel_deduct_pct:pct,cancel_refund:refund},'?id=eq.'+inv.id);
+      inv.cancelled=true; inv.cancelled_at=new Date().toISOString(); inv.cancel_deduct_pct=pct; inv.cancel_refund=refund;
+    }
+    // 2) Mark all its orders cancelled (out of production line)
+    for(var i=0;i<items.length;i++){
+      await api('PATCH','orders',{status:'cancelled'},'?id=eq.'+items[i].id);
+      items[i].status='cancelled';
+    }
+    // 3) Refund transaction (expense/red) so finance decreases
+    if(refund>0){
+      await api('POST','transactions',{type:'expense',amount:refund,
+        description:L('إعادة مبلغ فاتورة ملغاة ','Refund cancelled invoice ','برگشت بیعانه فاکتور کنسل‌شده ')+(inv?inv.inv_code:'')+(pct>0?(' ('+L('خصم','deduction','کسر')+' '+pct+'%)'):''),
+        category:'refund',user_id:currentUser?currentUser.id:null});
+    }
+    closeModal('cancelInvoiceModal');
+    await loadAll();
+    showToast(L('تم إلغاء الفاتورة','Invoice cancelled','فاکتور کنسل شد'),'success');
+  } catch(e){
+    showToast(L('فشل الإلغاء: ','Cancel failed: ','کنسل نشد: ')+(e.message||''),'error');
+  }
+}
+
+async function restoreInvoice(invId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  if(!confirm(L('استعادة الفاتورة من الإلغاء؟ (لن يُعاد أي قيد مالي تلقائياً)','Restore invoice from cancelled? (finance entries are not auto-reversed)','برگرداندن فاکتور از کنسلی؟ (تراکنش مالی خودکار برنمی‌گردد)'))) return;
+  try {
+    if(inv){
+      await api('PATCH','invoices',{cancelled:false,cancelled_at:null,cancel_deduct_pct:null,cancel_refund:null},'?id=eq.'+inv.id);
+      inv.cancelled=false; inv.cancelled_at=null; inv.cancel_deduct_pct=null; inv.cancel_refund=null;
+    }
+    for(var i=0;i<items.length;i++){
+      await api('PATCH','orders',{status:'pending_payment'},'?id=eq.'+items[i].id);
+      items[i].status='pending_payment';
+    }
+    await loadAll();
+    showToast(L('تمت الاستعادة','Restored','برگردانده شد'),'success');
+  } catch(e){
+    showToast(L('فشل: ','Failed: ','ناموفق: ')+(e.message||''),'error');
+  }
 }
 
 // Delete an entire invoice: all its orders + the invoice record
@@ -3669,6 +3796,15 @@ function buildInvoiceHTML(orderId, withButton){
     return '<tr><td class="desc">'+it.desc+'</td><td class="ctr">'+it.qty+'</td><td class="ctr">'+it.price.toLocaleString()+'</td><td class="ctr">'+(it.qty*it.price).toLocaleString()+'</td></tr>';
   }).join('');
   var btn=withButton?'<div style="text-align:center;margin-top:30px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ Print / طباعة</button></div>':'';
+  // Cancelled state → red diagonal watermark + banner
+  var invObjW=o.invoice_id?allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}):null;
+  var isCancW=invObjW&&invObjW.cancelled;
+  var cancMark=isCancW
+    ? '<div style="position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:999"><div style="transform:rotate(-30deg);border:7px solid #e05252;color:#e05252;font-size:74px;font-weight:900;letter-spacing:8px;padding:16px 48px;border-radius:14px;opacity:.5;font-family:Arial,sans-serif">CANCELLED · ملغاة</div></div>'
+    : '';
+  var cancBanner=isCancW
+    ? '<div style="background:#fdecec;border:2px solid #e05252;color:#b02a2a;text-align:center;padding:12px;border-radius:8px;margin-bottom:18px;font-size:15px;font-weight:bold">🚫 هذه الفاتورة ملغاة / This invoice is CANCELLED'+(invObjW.cancelled_at?' — '+new Date(invObjW.cancelled_at).toLocaleDateString():'')+'</div>'
+    : '';
   var html='<!DOCTYPE html><html dir="ltr"><head><meta charset="UTF-8"><title>'+invNo+'</title>'+
     '<style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;max-width:850px;margin:0 auto}'+
     '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:30px}'+
