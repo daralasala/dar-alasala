@@ -3740,18 +3740,76 @@ function renderInvoiceEditor(o){
     itemsRows+
     '<button class="btn btn-outline btn-sm btn-block" style="margin-bottom:12px" onclick="invoiceItems.push({desc:\'\',qty:1,price:0});renderInvoiceEditor(allOrders.find(x=>x.id==='+o.id+'))">+ '+L('إضافة صنف','Add item','افزودن قلم')+'</button>'+
     '<div class="form-group"><label class="form-label">'+L('الخصم','Discount','تخفیف')+' (QAR)</label><input class="form-control" type="number" id="inv-discount" value="'+(invObj?(invObj.discount||0):0)+'" oninput="updateInvTotals()"></div>'+
-    '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">'+L('الإجمالي','Total','مبلغ کل')+'</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">'+L('بعد الخصم','After discount','بعد از تخفیف')+'</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div></div>'+
-    '<button class="btn btn-primary btn-block" onclick="downloadInvoicePDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
+    '<div class="form-group"><label class="form-label">'+L('الدفعة المقدمة / العربون','Down payment','بیعانه / پیش‌پرداخت')+' (QAR)</label><input class="form-control" type="number" id="inv-prepay" value="'+(invObj?(invObj.prepay||0):0)+'" oninput="updateInvTotals()"></div>'+
+    '<div class="card" style="margin-bottom:12px"><div class="row"><span class="row-label">'+L('الإجمالي','Total','مبلغ کل')+'</span><span class="row-value" id="inv-subtotal">'+total.toLocaleString()+' QAR</span></div><div class="row"><span class="row-label">'+L('بعد الخصم','After discount','بعد از تخفیف')+'</span><span class="row-value" style="color:var(--accent);font-size:16px" id="inv-total">'+total.toLocaleString()+' QAR</span></div><div class="row" style="margin-bottom:0"><span class="row-label">'+L('المتبقي','Remaining','باقی‌مانده')+'</span><span class="row-value" style="color:var(--red)" id="inv-remaining">'+total.toLocaleString()+' QAR</span></div></div>'+
+    '<button class="btn btn-green btn-block" onclick="saveInvoiceEdits('+o.id+')">💾 '+L('حفظ التعديلات','Save changes','ذخیره تغییرات')+'</button>'+
+    '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="downloadInvoicePDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
     '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E;color:#fff" onclick="sendInvoiceWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
 }
 
 function updateInvTotals(){
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
   var disc=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var prep=parseFloat((document.getElementById('inv-prepay')||{}).value)||0;
   var sub=document.getElementById('inv-subtotal');
   var el=document.getElementById('inv-total');
+  var rem=document.getElementById('inv-remaining');
   if(sub) sub.textContent=total.toLocaleString()+' QAR';
   if(el) el.textContent=(total-disc).toLocaleString()+' QAR';
+  if(rem) rem.textContent=Math.max(0,(total-disc-prep)).toLocaleString()+' QAR';
+}
+
+// Persist edited items + discount + prepay back to the database.
+// Items map 1:1 to `orders` rows of this invoice. If the user added more
+// items than existing orders, new order rows are created; if fewer, the
+// extra order rows are deleted.
+async function saveInvoiceEdits(orderId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var o=allOrders.find(function(x){return x.id===orderId;}); if(!o) return;
+  var invId=o.invoice_id;
+  if(!invId){ showToast(L('لا يمكن حفظ فاتورة بدون رقم','Cannot save an invoice without an ID','فاکتور بدون شناسه قابل ذخیره نیست'),'error'); return; }
+  var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
+  var discount=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var prepay=parseFloat((document.getElementById('inv-prepay')||{}).value)||0;
+  var cust=(document.getElementById('inv-cust')||{}).value||'';
+  var contact=(document.getElementById('inv-contact')||{}).value||'';
+  var items=invoiceItems.filter(function(it){return it.desc&&it.desc.trim();});
+  if(items.length===0){ showToast(L('أضف صنفاً واحداً على الأقل','Add at least one item','حداقل یک جنس اضافه کنید'),'error'); return; }
+  var subtotal=items.reduce(function(s,it){return s+(it.qty*it.price);},0);
+  var total=Math.max(0,subtotal-discount);
+  if(!confirm(L('حفظ تعديلات الفاتورة؟','Save invoice changes?','ذخیره تغییرات فاکتور؟'))) return;
+  try {
+    var existing=allOrders.filter(function(x){return String(x.invoice_id)===String(invId);});
+    // 1) Update / create an order row per edited item
+    for(var i=0;i<items.length;i++){
+      var it=items[i];
+      var body={product:it.desc,item_price:it.price,item_qty:it.qty,total_price:it.qty*it.price,
+        customer_name:cust,customer_phone:contact};
+      if(existing[i]){
+        await api('PATCH','orders',body,'?id=eq.'+existing[i].id);
+      } else {
+        var idCode='ORD-'+String(Date.now()).slice(-5)+'-'+(i+1);
+        body.delivery_date=existing[0]?existing[0].delivery_date:new Date().toISOString().slice(0,10);
+        body.status=existing[0]?existing[0].status:'pending_payment';
+        body.progress=0; body.prepay=0; body.id_code=idCode; body.invoice_id=invId;
+        await api('POST','orders',body);
+      }
+    }
+    // 2) Delete leftover order rows if items were removed
+    if(existing.length>items.length){
+      for(var j=items.length;j<existing.length;j++){
+        await api('DELETE','orders',null,'?id=eq.'+existing[j].id);
+      }
+    }
+    // 3) Update the invoice header (total, discount, prepay, customer)
+    await api('PATCH','invoices',{total_price:total,discount:discount,prepay:prepay,
+      customer_name:cust,customer_phone:contact},'?id=eq.'+invId);
+    closeModal('invoiceModal');
+    await loadAll();
+    showToast(L('تم حفظ التعديلات','Changes saved','تغییرات ذخیره شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحفظ: ','Save failed: ','ذخیره نشد: ')+(e.message||''),'error');
+  }
 }
 
 // Convert number to Arabic words (for amounts)
