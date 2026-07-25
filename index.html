@@ -2401,7 +2401,7 @@ function showTab(tab){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('page-'+tab).classList.add('active');
   document.getElementById('tab-'+tab).classList.add('active');
-  document.getElementById('fab').classList.toggle('visible', tab==='orders' && (currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش')));
+  document.getElementById('fab').classList.toggle('visible', tab==='orders' && (currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار'||currentUser.department==='مسئول فروش'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار')));
   if(tab==='production') renderProduction();
   if(tab==='finance') renderFinance();
   if(tab==='staff') renderStaff();
