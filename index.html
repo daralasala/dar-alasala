@@ -459,6 +459,7 @@ body.en .search-icon{right:auto;left:10px;}
   <!-- INVENTORY -->
   <div class="page" id="page-inventory">
     <button class="btn btn-primary btn-block" onclick="openInventoryModal()" id="inv-add-btn" style="margin-bottom:12px;display:none">➕ <span id="inv-add-label">إضافة مادة / افزودن جنس به انبار</span></button>
+    <button class="btn btn-blue btn-block" onclick="openPurchaseModal()" id="inv-buy-btn" style="margin-bottom:12px;display:none">🛒 <span id="inv-buy-label">فاتورة شراء / فاکتور خرید</span></button>
     <button class="btn btn-outline btn-block" onclick="openUsageHistory()" id="usage-history-btn" style="margin-bottom:12px;display:none">📋 <span id="usage-history-label">سجل السحب / تاریخچه برداشت‌ها</span></button>
     <input class="form-control" id="inv-search" placeholder="🔍 جستجو در انبار" oninput="renderInventory()" style="margin-bottom:12px">
     <div id="inventory-list"><div class="loading"><div class="spinner"></div></div></div>
@@ -1587,6 +1588,7 @@ function refreshStaticLabels(l){
   safeSet('as-family-lbl',P('فرد العائلة (مصاريف شخصية فقط)','Family member (personal expenses only)','عضو خانواده (فقط مخارج شخصی)'));
   var supNew=document.getElementById('sup-new-btn'); if(supNew) supNew.textContent='+ '+P('جديد','New','جدید');
   safeSet('inv-add-label',P('إضافة مادة','Add material','افزودن جنس به انبار'));
+  safeSet('inv-buy-label',P('فاتورة شراء','Purchase invoice','فاکتور خرید'));
   var invS=document.getElementById('inv-search'); if(invS) invS.placeholder=P('🔍 بحث في المخزون','🔍 Search inventory','🔍 جستجو در انبار');
   safeSet('cust-add-label',P('إضافة عميل','Add customer','افزودن مشتری'));
   safeSet('cust-sync-label',P('استيراد','Import / Sync','همگام‌سازی'));
@@ -1720,6 +1722,7 @@ function setLang(l){
   // Fixed assets button + section titles (were stuck in Persian/Arabic)
   // Fixed assets/expenses labels handled in refreshStaticLabels
   safeSet('inv-add-label', l==='en'?'Add material':l==='ar'?'إضافة مادة':'افزودن جنس به انبار');
+  safeSet('inv-buy-label', l==='en'?'Purchase invoice':l==='ar'?'فاتورة شراء':'فاکتور خرید');
   safeSet('cust-add-label', l==='en'?'Add customer':l==='ar'?'إضافة عميل':'افزودن مشتری');
   safeSet('cust-sync-label', l==='en'?'Import / Sync':l==='ar'?'استيراد / مزامنة':'همگام‌سازی');
   safeSet('cust-broadcast-label', l==='en'?'Send announcement to all':l==='ar'?'إرسال إعلان للجميع':'ارسال تبلیغ به همه');
@@ -5716,6 +5719,9 @@ function renderInventory(){
     hasInvPerm
   );
   if(addBtn) addBtn.style.display=canAddInv?'block':'none';
+  // Purchase-invoice button: same roles that can add inventory
+  var buyBtn=document.getElementById('inv-buy-btn');
+  if(buyBtn) buyBtn.style.display=canAddInv?'block':'none';
   var box=document.getElementById('inventory-list');
   if(!box) return;
   // Usage-history button: manager & accountant only
