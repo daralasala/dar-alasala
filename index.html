@@ -2447,6 +2447,8 @@ async function loadAll(isRefresh){
   if(seeFinance){ idxSup=core.length; core.push(api('GET','suppliers','','?select=*')); }
   if(seeFinance){ idxAssets=core.length; core.push(api('GET','assets','','?select=*&order=created_at.desc')); }
   if(seeFinance){ idxFixed=core.length; core.push(api('GET','fixed_expenses','','?select=*&order=created_at.desc')); }
+  var idxAbs=-1;
+  if(seeFinance){ idxAbs=core.length; core.push(api('GET','absences','','?select=*&order=absent_date.desc')); }
 
   var res=await Promise.all(core);
 
@@ -2475,6 +2477,7 @@ async function loadAll(isRefresh){
   allSuppliers=(idxSup>=0?pick(idxSup, allSuppliers):allSuppliers);
   allAssets=(idxAssets>=0?pick(idxAssets, allAssets):allAssets);
   allFixedExp=(idxFixed>=0?pick(idxFixed, allFixedExp):allFixedExp);
+  allAbsences=(idxAbs>=0?pick(idxAbs, allAbsences):allAbsences);
 
   // Render
   renderDashboard();
@@ -5984,6 +5987,7 @@ async function loadAssets(){
 
 // ===== FIXED EXPENSES (هزینه‌های ثابت ماهانه) =====
 var allFixedExp=[];
+var allAbsences=[];
 var feImageData='';
 // ===== PERSONAL EXPENSES (separate from factory finance) =====
 var allPersonalExp=[];
@@ -7091,9 +7095,11 @@ function openStaffFile(id){
     // ===== Day-based salary (worked days this month) =====
     '<div style="display:flex;gap:6px">'+
       '<div style="flex:1">'+fld('sf-days-month',L('أيام الشهر','Days in month','روزهای ماه'),30,'number')+'</div>'+
-      '<div style="flex:1">'+fld('sf-days-worked',L('أيام العمل الفعلية','Days actually worked','روزهای کارکرد'),30,'number')+'</div>'+
+      '<div style="flex:1">'+fld('sf-days-worked',L('أيام العمل الفعلية','Days actually worked','روزهای کارکرد'),Math.max(0,30-unsettledAbsenceDays(u.id)),'number')+'</div>'+
     '</div>'+
     '<div id="sf-days-calc" style="font-size:11px;color:var(--text2);margin:-4px 0 10px"></div>'+
+    // ===== Absence tracking =====
+    absenceSection(u)+
     '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">'+L('السلف والتكاليف','Loans & costs','وام و هزینه‌ها')+'</div>'+
     fld('sf-loan',L('رصيد السلفة المتبقي (QAR)','Remaining loan balance (QAR)','مانده وام (QAR)'),u.loan_balance||0,'number')+
     fld('sf-loan-deduct',L('خصم من السلفة هذا الشهر (QAR)','Loan deduction this month (QAR)','کسر وام این ماه (QAR)'),0,'number')+
@@ -7227,6 +7233,108 @@ async function resetStaffPassword(id){
     showToast(L('فشل','Error','خطا'),'error');
   }
 }
+// ===== ABSENCE TRACKING =====
+// How many days a given date counts as: Thursday(4) or Saturday(6) → 2 (bridges the Friday off-day), else 1
+function absenceDaysFor(dateStr){
+  var d=new Date(dateStr+'T00:00:00');
+  var dow=d.getDay(); // 0=Sun ... 4=Thu, 5=Fri, 6=Sat
+  return (dow===4||dow===6)?2:1;
+}
+
+// Sum of unsettled absence days for a worker
+function unsettledAbsenceDays(userId){
+  return (allAbsences||[]).filter(function(a){return String(a.user_id)===String(userId)&&!a.settled;})
+    .reduce(function(s,a){return s+(parseFloat(a.days_counted)||0);},0);
+}
+
+// Build the absence panel inside the staff file
+function absenceSection(u){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var today=new Date().toISOString().slice(0,10);
+  var list=(allAbsences||[]).filter(function(a){return String(a.user_id)===String(u.id)&&!a.settled;})
+    .sort(function(a,b){return a.absent_date<b.absent_date?1:-1;});
+  var rows=list.map(function(a){
+    var d=new Date(a.absent_date+'T00:00:00');
+    var dn=['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'];
+    var dnFa=['یکشنبه','دوشنبه','سه‌شنبه','چهارشنبه','پنجشنبه','جمعه','شنبه'];
+    var dnEn=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var dayName=lang==='ar'?dn[d.getDay()]:lang==='en'?dnEn[d.getDay()]:dnFa[d.getDay()];
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface2);border-radius:7px;margin-bottom:5px">'+
+      '<span style="font-size:12px">'+a.absent_date+' · '+dayName+'</span>'+
+      '<span style="display:flex;align-items:center;gap:8px">'+
+        '<span class="badge '+(a.days_counted>1?'badge-orange':'badge-blue')+'" style="font-size:10px">'+a.days_counted+' '+L('يوم','day','روز')+'</span>'+
+        '<button onclick="deleteAbsence(\''+a.id+'\','+u.id+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:14px">🗑️</button>'+
+      '</span>'+
+    '</div>';
+  }).join('');
+  var totalDays=unsettledAbsenceDays(u.id);
+  return '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">📅 '+L('الغياب','Absences','غیبت‌ها')+'</div>'+
+    '<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">'+
+      '<div style="flex:2"><label class="form-label" style="font-size:11px">'+L('تاريخ الغياب','Absence date','تاریخ غیبت')+'</label>'+
+        '<input class="form-control" type="date" id="sf-abs-date" value="'+today+'" onchange="previewAbsenceDays()"></div>'+
+      '<div style="flex:1"><label class="form-label" style="font-size:11px">'+L('أيام','Days','روز')+'</label>'+
+        '<input class="form-control" type="number" id="sf-abs-days" min="1" step="1" value="'+absenceDaysFor(today)+'"></div>'+
+      '<button class="btn btn-primary" style="flex:1;white-space:nowrap" onclick="addAbsence('+u.id+')">➕ '+L('تسجيل','Log','ثبت')+'</button>'+
+    '</div>'+
+    '<div id="sf-abs-hint" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>'+
+    (list.length?('<div style="margin-bottom:6px">'+rows+'</div>'+
+      '<div style="font-size:12px;font-weight:700;text-align:center;color:var(--orange);margin-bottom:10px">'+L('إجمالي أيام الغياب غير المحتسبة','Total unsettled absence days','مجموع روزهای غیبت تسویه‌نشده')+': '+totalDays+'</div>')
+      :'<div style="font-size:11px;color:var(--text2);margin-bottom:10px">'+L('لا يوجد غياب مسجل','No absences recorded','غیبتی ثبت نشده')+'</div>');
+}
+
+// Live hint when the manager picks a Thu/Sat date
+function previewAbsenceDays(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var dateEl=document.getElementById('sf-abs-date');
+  var daysEl=document.getElementById('sf-abs-days');
+  var hint=document.getElementById('sf-abs-hint');
+  if(!dateEl||!daysEl) return;
+  var auto=absenceDaysFor(dateEl.value);
+  daysEl.value=auto;
+  if(hint){
+    hint.textContent = auto>1
+      ? '💡 '+L('خميس/سبت → يُحتسب يومين (بسبب عطلة الجمعة)','Thu/Sat → counts as 2 days (Friday off-day)','پنجشنبه/شنبه → ۲ روز حساب می‌شود (به‌خاطر تعطیلی جمعه)')
+      : '';
+  }
+}
+
+// Save a new absence record
+async function addAbsence(userId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var dateEl=document.getElementById('sf-abs-date');
+  var daysEl=document.getElementById('sf-abs-days');
+  var date=dateEl?dateEl.value:'';
+  var days=daysEl?(parseFloat(daysEl.value)||1):1;
+  if(!date){ showToast(L('اختر تاريخاً','Pick a date','تاریخ را انتخاب کنید'),'error'); return; }
+  if(days<=0) days=1;
+  // Prevent duplicate: same worker + same date already logged and unsettled
+  var dup=(allAbsences||[]).some(function(a){return String(a.user_id)===String(userId)&&a.absent_date===date&&!a.settled;});
+  if(dup){ showToast(L('هذا اليوم مسجل مسبقاً','This day is already logged','این روز قبلاً ثبت شده'),'error'); return; }
+  try {
+    await api('POST','absences',{user_id:userId,absent_date:date,days_counted:days,settled:false});
+    await loadAll();
+    var u=allUsers.find(function(x){return x.id===userId;});
+    if(u) openStaffFile(userId); // re-open to refresh the panel
+    showToast(L('تم تسجيل الغياب','Absence logged','غیبت ثبت شد'),'success');
+  } catch(e){
+    showToast(L('فشل: ','Failed: ','ناموفق: ')+(e.message||''),'error');
+  }
+}
+
+// Delete an absence record
+async function deleteAbsence(absId, userId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  if(!confirm(L('حذف هذا الغياب؟','Delete this absence?','این غیبت حذف شود؟'))) return;
+  try {
+    await api('DELETE','absences',null,'?id=eq.'+absId);
+    await loadAll();
+    openStaffFile(userId);
+    showToast(L('تم الحذف','Deleted','حذف شد'),'success');
+  } catch(e){
+    showToast(L('فشل: ','Failed: ','ناموفق: ')+(e.message||''),'error');
+  }
+}
+
 async function payStaffSalary(id){
   var u=allUsers.find(x=>x.id===id); if(!u) return;
   var salary=u.salary||0;
@@ -7236,9 +7344,18 @@ async function payStaffSalary(id){
   var dmEl=document.getElementById('sf-days-month');
   var dwEl=document.getElementById('sf-days-worked');
   var daysMonth=dmEl?(parseFloat(dmEl.value)||30):30;
-  var daysWorked=dwEl?parseFloat(dwEl.value):NaN;
-  if(isNaN(daysWorked)) daysWorked=daysMonth;
   if(daysMonth<=0) daysMonth=30;
+  // Unsettled absence days recorded for this worker
+  var absDays=unsettledAbsenceDays(id);
+  var dwRaw=dwEl?parseFloat(dwEl.value):NaN;
+  var daysWorked;
+  if(isNaN(dwRaw)){
+    daysWorked=daysMonth-absDays; // default: full month minus recorded absences
+  } else if(dwRaw>=daysMonth && absDays>0){
+    daysWorked=daysMonth-absDays; // field still at full month → apply absences
+  } else {
+    daysWorked=dwRaw-absDays; // manager entered fewer days → subtract absences on top
+  }
   if(daysWorked<0) daysWorked=0;
   if(daysWorked>daysMonth) daysWorked=daysMonth;
   var isPartial=daysWorked<daysMonth;
@@ -7251,6 +7368,7 @@ async function payStaffSalary(id){
   var netPay=earned-loanDeduct; // actual amount handed to worker
   if(netPay<0) netPay=0;
   var msg=L('راتب','Salary','حقوق')+': '+salary.toLocaleString()+' QAR\n'+
+    (absDays>0?(L('أيام الغياب','Absence days','روزهای غیبت')+': '+absDays+' '+L('يوم','day','روز')+'\n'):'')+
     (isPartial?(L('أيام العمل','Days worked','روزهای کارکرد')+': '+daysWorked+' / '+daysMonth+'\n'+
       L('الراتب المستحق','Earned salary','حقوق محاسبه‌شده')+': '+earned.toLocaleString()+' QAR\n'):'')+
     (loanDeduct>0?(L('خصم السلفة','Loan deduction','کسر وام')+': -'+loanDeduct.toLocaleString()+' QAR\n'):'')+
@@ -7268,6 +7386,10 @@ async function payStaffSalary(id){
   if(loanDeduct>0) patch.loan_balance=loanBal-loanDeduct;
   await api('PATCH','users',patch,'?id=eq.'+id);
   Object.assign(u,patch);
+  // Mark this worker's unsettled absences as settled so they aren't deducted again next cycle
+  if(absDays>0){
+    try { await api('PATCH','absences',{settled:true},'?user_id=eq.'+id+'&settled=eq.false'); } catch(e){}
+  }
   closeModal('staffModal');
   await loadAll();
   showToast(lang==='ar'?'تم دفع الراتب':lang==='en'?'Salary paid':'حقوق پرداخت شد','success');
