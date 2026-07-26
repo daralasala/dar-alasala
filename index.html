@@ -5019,6 +5019,9 @@ function renderFinance(){
   const icons={income:'💚',expense:'❤️',purchase:'🛒'};
   // Filter transactions for purchasing - only show expense/purchase
   var txList=isPurchasing?allTransactions.filter(t=>(t.type==='purchase'||t.type==='expense')&&t.category!=='fixed'):allTransactions;
+  // Unpaid credit purchases live in the Debts section only; they enter the
+  // purchases list once actually paid. This avoids showing the same buy twice.
+  txList=txList.filter(function(t){ return !(t.is_credit&&!t.paid); });
   document.getElementById('transactions-list').innerHTML = txList.length===0
     ? `<div class="empty-state"><div class="empty-icon">💰</div><div>${T('no_data')}</div></div>`
     : txList.slice(0,20).map(t=>{
@@ -5046,6 +5049,10 @@ function renderFinance(){
         // Payment voucher button: for any settled purchase/expense
         var pvBtn=(t.type!=='income'&&t.paid)?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="paymentVoucherForTx('+t.id+')">📤 '+(lang==='ar'?'سند صرف':lang==='en'?'Payment Voucher':'سند صرف')+'</button>':'';
         var delBtn=(currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" style="margin-top:8px;margin-right:6px" onclick="deleteTransaction('+t.id+')">🗑️</button>':'';
+        // Fix wrong pay type (manager only, purchases only): flip cash <-> credit
+        var toggleBtn=(currentUser&&currentUser.role==='manager'&&t.type==='purchase')
+          ?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="togglePurchasePayType('+t.id+')">🔄 '+(t.is_credit?(lang==='ar'?'إلى نقدي':lang==='en'?'To cash':'به نقدی'):(lang==='ar'?'إلى آجل':lang==='en'?'To credit':'به قرضی'))+'</button>'
+          :'';
         return `
       <div class="card" style="padding:11px;margin-bottom:8px">
         <div style="display:flex;align-items:center;justify-content:space-between">
@@ -5058,6 +5065,7 @@ function renderFinance(){
         ${invImg}
         ${payBtn}
         ${pvBtn}
+        ${toggleBtn}
         ${delBtn}
       </div>`;
       }).join('');
@@ -5079,6 +5087,40 @@ async function deleteTransaction(id){
   } catch(e){
     showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
   }
+}
+
+// Fix a purchase logged with the wrong pay type: flip cash <-> credit.
+// Cash purchase (paid, not credit)  ->  credit/unpaid debt (asks for due date)
+// Credit purchase                   ->  cash (paid now)
+async function togglePurchasePayType(transId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var t=allTransactions.find(x=>x.id===transId);
+  if(!t){ return; }
+  var amt=(t.amount||0).toLocaleString();
+  var isCurrentlyCredit=t.is_credit;
+  if(isCurrentlyCredit){
+    // -> make it cash (paid)
+    if(!confirm(L('تحويل الفاتورة إلى نقدي (مدفوعة)؟','Convert invoice to cash (paid)?','تبدیل فاکتور به نقدی (پرداخت‌شده)؟')+' — '+amt+' QAR')) return;
+    await api('PATCH','transactions',{is_credit:false,paid:true,due_date:null},'?id=eq.'+transId);
+    if(t){ t.is_credit=false; t.paid=true; t.due_date=null; }
+    // strip the "(credit)" tag from description if present
+    var cleanDesc=(t.description||'').replace(/\s*\((آجل|Credit|قرضی)\)\s*$/,'').trim();
+    if(cleanDesc!==t.description){ await api('PATCH','transactions',{description:cleanDesc},'?id=eq.'+transId); t.description=cleanDesc; }
+    showToast(L('أصبحت نقدية','Now cash','نقدی شد'),'success');
+  } else {
+    // -> make it credit (unpaid debt)
+    var due=prompt(L('تاريخ استحقاق الدين (YYYY-MM-DD) — اتركه فارغاً لو لا يوجد',
+      'Debt due date (YYYY-MM-DD) — leave blank if none',
+      'تاریخ سررسید بدهی (YYYY-MM-DD) — خالی بذار اگه نداره'), new Date().toISOString().slice(0,10));
+    if(due===null) return; // cancelled
+    due=(due||'').trim();
+    if(!confirm(L('تحويل الفاتورة إلى آجل (دين غير مدفوع)؟','Convert invoice to credit (unpaid debt)?','تبدیل فاکتور به قرضی (بدهی پرداخت‌نشده)؟')+' — '+amt+' QAR')) return;
+    await api('PATCH','transactions',{is_credit:true,paid:false,due_date:due||null},'?id=eq.'+transId);
+    if(t){ t.is_credit=true; t.paid=false; t.due_date=due||null; }
+    showToast(L('أصبحت آجلة (دين)','Now credit (debt)','قرضی شد'),'success');
+  }
+  await loadAll();
+  renderFinance();
 }
 
 async function markCreditPaid(transId){
