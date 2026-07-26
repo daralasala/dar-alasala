@@ -321,6 +321,7 @@ body.en .search-icon{right:auto;left:10px;}
       <button class="btn btn-outline btn-sm" onclick="setFilter('building')" id="f-building">در حال ساخت</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('ready')" id="f-ready">آماده</button>
       <button class="btn btn-outline btn-sm" onclick="setFilter('delivered')" id="f-delivered">📚 تاریخچه</button>
+      <button class="btn btn-outline btn-sm" onclick="setFilter('cancelled')" id="f-cancelled">🚫 ملغاة</button>
     </div>
     <div id="orders-list"><div class="loading"><div class="spinner"></div></div></div>
   </div>
@@ -1718,6 +1719,7 @@ function setLang(l){
   document.getElementById('f-building').textContent=T('status_building');
   document.getElementById('f-ready').textContent=T('status_ready');
   document.getElementById('f-delivered').textContent='📚 '+(l==='ar'?'الأرشيف':l==='en'?'History':'تاریخچه');
+  var fc=document.getElementById('f-cancelled'); if(fc) fc.textContent='🚫 '+(l==='ar'?'ملغاة':l==='en'?'Cancelled':'کنسلی');
   document.getElementById('order-search').placeholder=l==='en'?'Search...':'البحث... / جستجو...';
   // Fixed assets button + section titles (were stuck in Persian/Arabic)
   // Fixed assets/expenses labels handled in refreshStaticLabels
@@ -2554,14 +2556,18 @@ function deptStageMatch(dept){
 function renderOrders(){
   const q=(document.getElementById('order-search').value||'').toLowerCase();
   let filtered=allOrders;
-  if(currentFilter==='delivered'){
-    // History view: only delivered orders
+  if(currentFilter==='cancelled'){
+    // Cancelled view: only cancelled orders
+    filtered=filtered.filter(o=>o.status==='cancelled');
+  } else if(currentFilter==='delivered'){
+    // History view: only delivered orders (never cancelled)
     filtered=filtered.filter(o=>o.status==='delivered');
   } else if(currentFilter==='all'){
-    // Active list: hide delivered (they live in History now)
-    filtered=filtered.filter(o=>o.status!=='delivered');
+    // Active list: hide delivered (History) and cancelled (their own tab)
+    filtered=filtered.filter(o=>o.status!=='delivered'&&o.status!=='cancelled');
   } else {
-    filtered=filtered.filter(o=>o.status===currentFilter);
+    // Any specific status filter still excludes cancelled
+    filtered=filtered.filter(o=>o.status===currentFilter&&o.status!=='cancelled');
   }
   if(q) filtered=filtered.filter(o=>(o.customer_name+o.product+(o.id_code||'')).toLowerCase().includes(q));
   // Workers see only their orders - but accountant/sales/manager see ALL
@@ -2607,7 +2613,8 @@ function renderOrders(){
       var anyPending=items.some(function(it){return it.status==='pending_payment';});
       var pendingCount=items.filter(function(it){return it.status==='pending_payment';}).length;
       var allPaidOrPending=items.every(function(it){return it.status==='paid'||it.status==='pending_payment';});
-      var grpBadge=allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':allPaidOrPending?'<span class="badge badge-blue">'+T('status_paid')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
+      var allCancelled=items.every(function(it){return it.status==='cancelled';});
+      var grpBadge=allCancelled?'<span class="badge badge-red">'+T('status_cancelled')+'</span>':allDelivered?'<span class="badge badge-purple">'+T('status_delivered')+'</span>':anyPending?'<span class="badge badge-orange">'+T('status_pending_payment')+'</span>':allPaidOrPending?'<span class="badge badge-blue">'+T('status_paid')+'</span>':'<span class="badge badge-blue">'+T('status_building')+'</span>';
       var canStart = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
       // Single button to start production for the WHOLE invoice + auto receipt voucher
       var startAllBtn=(anyPending&&canStart)
