@@ -5333,6 +5333,18 @@ function updatePurchaseTotal(){
   var hidden=document.getElementById('p-total');
   if(hidden) hidden.value=total;
 }
+// Live-filter the item dropdown of row i by the search box text.
+// Rebuilds the <select> options to only those matching, keeps "New item" on top,
+// and auto-selects when exactly one item matches.
+function filterPurchaseCatalog(i){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var q=((document.getElementById('pi-search-'+i)||{}).value||'').trim().toLowerCase();
+  var sel=document.getElementById('pi-cat-'+i); if(!sel) return;
+  var matches=(allInventory||[]).filter(function(it){return (it.name||'').toLowerCase().indexOf(q)>-1;});
+  var html='<option value="__new__">➕ '+L('مادة جديدة','New item','جنس جدید')+'</option>';
+  html+=matches.map(function(it){return '<option value="'+it.id+'">'+(it.name||'')+'</option>';}).join('');
+  sel.innerHTML=html;
+}
 function onPurchaseItemCatalog(i){
   // Preserve any qty/price the user already typed in this row before re-render
   syncPurchaseRowFromDOM(i);
@@ -5398,6 +5410,7 @@ function renderPurchaseItems(){
         '<span style="font-size:11px;color:var(--text2)">'+L('صنف','Item','قلم')+' '+(i+1)+'</span>'+
         '<button class="btn btn-red btn-sm" onclick="removePurchaseItem('+i+')">✕</button>'+
       '</div>'+
+      '<input class="form-control" id="pi-search-'+i+'" style="margin-bottom:4px;font-size:13px" placeholder="🔍 '+L('ابحث عن صنف...','Search item...','جستجوی جنس...')+'" oninput="filterPurchaseCatalog('+i+')">'+
       '<select class="form-control" id="pi-cat-'+i+'" style="margin-bottom:5px" onchange="onPurchaseItemCatalog('+i+')">'+catalogOpts(it.invId)+'</select>'+
       newFields+
       '<div style="display:flex;gap:5px">'+
