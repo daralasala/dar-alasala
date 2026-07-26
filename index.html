@@ -3174,16 +3174,22 @@ function openCancelInvoice(invId){
   var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
   var inv=allInvoices.find(function(x){return String(x.id)===String(invId);});
   var custName=inv?inv.customer_name:(items[0]?items[0].customer_name:'');
-  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
-  var paid=advance>0;
+  // REAL payment = orders actually marked "paid" (manager pressed Confirm payment).
+  // A recorded prepay/بیعانه is only an EXPECTED amount and is NOT money received,
+  // so it must not count as paid here.
+  var paidItems=items.filter(function(o){return o.status==='paid'||o.status==='building'||o.status==='ready'||o.status==='delivered';});
+  var paid=paidItems.length>0;
+  // Amount actually received = total of the paid items (fallback to invoice total if unclear)
+  var advance=paidItems.reduce(function(s,it){return s+((it.total_price)||((it.item_price||0)*(it.item_qty||1)));},0);
+  if(paid && advance<=0 && inv){ advance=(inv.total_price||0)-(inv.discount||0); }
   var body=
     '<div style="font-size:14px;font-weight:700;margin-bottom:4px">'+custName+'</div>'+
     '<div style="font-size:11px;color:var(--text2);margin-bottom:12px">'+(inv?inv.inv_code:'')+'</div>';
   if(!paid){
     body+='<div style="background:var(--surface2);border-radius:10px;padding:12px;font-size:13px;color:var(--text2);margin-bottom:14px">✅ '+
-      L('لم يتم دفع أي مبلغ — لا شيء يُخصم من المالية. سيتم فقط ختم الفاتورة كملغاة.',
-        'No payment was made — nothing is deducted from finance. The invoice will just be stamped as cancelled.',
-        'مبلغی پرداخت نشده — چیزی از مالی کم نمی‌شود. فقط فاکتور مهر «کنسل» می‌خورد.')+'</div>';
+      L('لم يتم تأكيد أي دفعة — لا شيء يُخصم من المالية. سيتم فقط ختم الفاتورة كملغاة.',
+        'No payment was confirmed — nothing is deducted from finance. The invoice will just be stamped as cancelled.',
+        'هیچ پرداختی تأیید نشده — چیزی از مالی کم نمی‌شود. فقط فاکتور مهر «کنسل» می‌خورد.')+'</div>';
   } else {
     body+='<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:0"><span class="row-label">💰 '+
       L('المبلغ المدفوع','Amount paid','مبلغ پرداختی')+'</span><span class="row-value" style="color:var(--green)">'+advance.toLocaleString()+' QAR</span></div></div>'+
@@ -3235,7 +3241,7 @@ async function confirmCancelInvoice(invId, advance){
     // 3) Refund transaction (expense/red) so finance decreases
     if(refund>0){
       await api('POST','transactions',{type:'expense',amount:refund,
-        description:L('إعادة مبلغ فاتورة ملغاة ','Refund cancelled invoice ','برگشت بیعانه فاکتور کنسل‌شده ')+(inv?inv.inv_code:'')+(pct>0?(' ('+L('خصم','deduction','کسر')+' '+pct+'%)'):''),
+        description:L('إعادة مبلغ فاتورة ملغاة ','Refund cancelled invoice ','برگشت مبلغ فاکتور کنسل‌شده ')+(inv?inv.inv_code:'')+(pct>0?(' ('+L('خصم','deduction','کسر')+' '+pct+'%)'):''),
         category:'refund',user_id:currentUser?currentUser.id:null});
     }
     closeModal('cancelInvoiceModal');
