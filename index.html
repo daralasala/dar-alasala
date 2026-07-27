@@ -1110,6 +1110,16 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<div class="modal-overlay modal-top" id="editPurchaseModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✏️ <span id="ep-title">ویرایش فاکتور خرید</span></div>
+      <button class="modal-close" onclick="closeModal('editPurchaseModal')">✕</button>
+    </div>
+    <div id="edit-purchase-body"></div>
+  </div>
+</div>
+
 <div class="modal-overlay modal-top" id="cancelInvoiceModal">
   <div class="modal">
     <div class="modal-header">
@@ -2016,6 +2026,7 @@ function renderDebts(){
         '</div>'+
         '<div style="display:flex;gap:6px;margin-top:8px">'+
           '<button class="btn btn-green btn-sm" onclick="markCreditPaid('+t.id+');setTimeout(function(){loadDebts().then(renderDebts);},400)">✅ '+L('تم الدفع','Mark paid','پرداخت شد')+'</button>'+
+          (function(){var pp=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(t.id);});return (pp&&pp.invoice_image)?'<button class="btn btn-outline btn-sm" onclick="viewPurchaseImage(\''+t.id+'\')">🧾 '+L('صورة الفاتورة','Invoice image','عکس فاکتور')+'</button>':'';})()+
         '</div>'+
       '</div>';
     }).join('');
@@ -5049,9 +5060,9 @@ function renderFinance(){
         // Payment voucher button: for any settled purchase/expense
         var pvBtn=(t.type!=='income'&&t.paid)?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="paymentVoucherForTx('+t.id+')">📤 '+(lang==='ar'?'سند صرف':lang==='en'?'Payment Voucher':'سند صرف')+'</button>':'';
         var delBtn=(currentUser&&currentUser.role==='manager')?'<button class="btn btn-red btn-sm" style="margin-top:8px;margin-right:6px" onclick="deleteTransaction('+t.id+')">🗑️</button>':'';
-        // Fix wrong pay type (manager only, purchases only): flip cash <-> credit
+        // Full edit (manager only, purchases only)
         var toggleBtn=(currentUser&&currentUser.role==='manager'&&t.type==='purchase')
-          ?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="togglePurchasePayType('+t.id+')">🔄 '+(t.is_credit?(lang==='ar'?'إلى نقدي':lang==='en'?'To cash':'به نقدی'):(lang==='ar'?'إلى آجل':lang==='en'?'To credit':'به قرضی'))+'</button>'
+          ?'<button class="btn btn-outline btn-sm" style="margin-top:8px;margin-right:6px" onclick="openEditPurchase('+t.id+')">✏️ '+(lang==='ar'?'تعديل':lang==='en'?'Edit':'ویرایش')+'</button>'
           :'';
         return `
       <div class="card" style="padding:11px;margin-bottom:8px">
@@ -5089,38 +5100,112 @@ async function deleteTransaction(id){
   }
 }
 
-// Fix a purchase logged with the wrong pay type: flip cash <-> credit.
-// Cash purchase (paid, not credit)  ->  credit/unpaid debt (asks for due date)
-// Credit purchase                   ->  cash (paid now)
-async function togglePurchasePayType(transId){
+// Show a purchase's invoice image in a full-screen overlay
+function viewPurchaseImage(transId){
+  var p=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(transId);});
+  if(!p||!p.invoice_image){ return; }
+  var ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  ov.onclick=function(){ document.body.removeChild(ov); };
+  ov.innerHTML='<img src="'+p.invoice_image+'" style="max-width:100%;max-height:100%;border-radius:8px">';
+  document.body.appendChild(ov);
+}
+
+// Full edit of a purchase transaction + its linked purchase record (amount,
+// supplier, date, pay type, due date, invoice image). Manager only.
+var _epImage=undefined; // undefined = keep existing, null = removed, string = new image
+function openEditPurchase(transId){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  var t=allTransactions.find(x=>x.id===transId);
-  if(!t){ return; }
-  var amt=(t.amount||0).toLocaleString();
-  var isCurrentlyCredit=t.is_credit;
-  if(isCurrentlyCredit){
-    // -> make it cash (paid)
-    if(!confirm(L('تحويل الفاتورة إلى نقدي (مدفوعة)؟','Convert invoice to cash (paid)?','تبدیل فاکتور به نقدی (پرداخت‌شده)؟')+' — '+amt+' QAR')) return;
-    await api('PATCH','transactions',{is_credit:false,paid:true,due_date:null},'?id=eq.'+transId);
-    if(t){ t.is_credit=false; t.paid=true; t.due_date=null; }
-    // strip the "(credit)" tag from description if present
-    var cleanDesc=(t.description||'').replace(/\s*\((آجل|Credit|قرضی)\)\s*$/,'').trim();
-    if(cleanDesc!==t.description){ await api('PATCH','transactions',{description:cleanDesc},'?id=eq.'+transId); t.description=cleanDesc; }
-    showToast(L('أصبحت نقدية','Now cash','نقدی شد'),'success');
-  } else {
-    // -> make it credit (unpaid debt)
-    var due=prompt(L('تاريخ استحقاق الدين (YYYY-MM-DD) — اتركه فارغاً لو لا يوجد',
-      'Debt due date (YYYY-MM-DD) — leave blank if none',
-      'تاریخ سررسید بدهی (YYYY-MM-DD) — خالی بذار اگه نداره'), new Date().toISOString().slice(0,10));
-    if(due===null) return; // cancelled
-    due=(due||'').trim();
-    if(!confirm(L('تحويل الفاتورة إلى آجل (دين غير مدفوع)؟','Convert invoice to credit (unpaid debt)?','تبدیل فاکتور به قرضی (بدهی پرداخت‌نشده)؟')+' — '+amt+' QAR')) return;
-    await api('PATCH','transactions',{is_credit:true,paid:false,due_date:due||null},'?id=eq.'+transId);
-    if(t){ t.is_credit=true; t.paid=false; t.due_date=due||null; }
-    showToast(L('أصبحت آجلة (دين)','Now credit (debt)','قرضی شد'),'success');
+  var t=allTransactions.find(x=>x.id===transId); if(!t) return;
+  var p=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(transId);});
+  _epImage=undefined;
+  var supplier=t.supplier_name||(p?p.supplier:'')||'';
+  var amount=t.amount||0;
+  var date=(p&&p.invoice_date)||(t.created_at||'').slice(0,10)||'';
+  var invNo=(p&&p.invoice_no)||'';
+  var isCredit=!!t.is_credit;
+  var due=t.due_date||'';
+  var img=(p&&p.invoice_image)||'';
+  var body=
+    '<div class="form-group"><label class="form-label">'+L('الشركة / المورّد','Supplier','تأمین‌کننده')+'</label>'+
+      '<input class="form-control" id="ep-supplier" value="'+(supplier||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('المبلغ','Amount','مبلغ')+' (QAR)</label>'+
+      '<input class="form-control" type="number" id="ep-amount" value="'+amount+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('رقم الفاتورة','Invoice no.','شماره فاکتور')+'</label>'+
+      '<input class="form-control" id="ep-invno" value="'+(invNo||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('تاريخ الفاتورة','Invoice date','تاریخ فاکتور')+'</label>'+
+      '<input class="form-control" type="date" id="ep-date" value="'+date+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('نوع الدفع','Pay type','نوع پرداخت')+'</label>'+
+      '<select class="form-control" id="ep-paytype" onchange="epToggleDue()">'+
+        '<option value="cash"'+(!isCredit?' selected':'')+'>'+L('نقدي','Cash','نقدی')+'</option>'+
+        '<option value="credit"'+(isCredit?' selected':'')+'>'+L('آجل','Credit','قرضی')+'</option>'+
+      '</select></div>'+
+    '<div class="form-group" id="ep-due-wrap" style="'+(isCredit?'':'display:none')+'"><label class="form-label">'+L('تاريخ الاستحقاق','Due date','تاریخ سررسید')+'</label>'+
+      '<input class="form-control" type="date" id="ep-due" value="'+due+'"></div>'+
+    '<div class="form-group"><label class="form-label">🧾 '+L('صورة الفاتورة','Invoice image','عکس فاکتور')+'</label>'+
+      '<div id="ep-img-box" style="margin-bottom:6px">'+(img?'<img src="'+img+'" style="max-width:100%;border-radius:8px">':'<span style="font-size:12px;color:var(--text3)">'+L('لا توجد صورة','No image','عکسی نیست')+'</span>')+'</div>'+
+      '<button class="btn btn-outline btn-sm" onclick="pickEditPurchaseImage()">📷 '+L('تغيير/إضافة','Change/Add','تغییر/افزودن')+'</button>'+
+      (img?' <button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="removeEditPurchaseImage()">🗑️ '+L('حذف الصورة','Remove image','حذف عکس')+'</button>':'')+
+    '</div>'+
+    '<button class="btn btn-primary btn-block" style="margin-top:6px" onclick="saveEditPurchase('+transId+')">💾 '+L('حفظ التعديلات','Save changes','ذخیره تغییرات')+'</button>';
+  document.getElementById('ep-title').textContent=L('تعديل فاتورة الشراء','Edit purchase invoice','ویرایش فاکتور خرید');
+  document.getElementById('edit-purchase-body').innerHTML=body;
+  openModal('editPurchaseModal');
+}
+function epToggleDue(){
+  var isC=(document.getElementById('ep-paytype')||{}).value==='credit';
+  var w=document.getElementById('ep-due-wrap'); if(w) w.style.display=isC?'':'none';
+}
+function pickEditPurchaseImage(){
+  var input=document.createElement('input'); input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        _epImage=await compressImage(input.files[0],0.6,1000);
+        var box=document.getElementById('ep-img-box');
+        if(box) box.innerHTML='<img src="'+_epImage+'" style="max-width:100%;border-radius:8px">';
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+function removeEditPurchaseImage(){
+  _epImage=null;
+  var box=document.getElementById('ep-img-box');
+  if(box) box.innerHTML='<span style="font-size:12px;color:var(--text3)">'+(lang==='ar'?'لا توجد صورة':lang==='en'?'No image':'عکسی نیست')+'</span>';
+}
+async function saveEditPurchase(transId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var t=allTransactions.find(x=>x.id===transId); if(!t) return;
+  var p=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(transId);});
+  var supplier=(document.getElementById('ep-supplier')||{}).value||'';
+  var amount=parseFloat((document.getElementById('ep-amount')||{}).value)||0;
+  var invNo=(document.getElementById('ep-invno')||{}).value||'';
+  var date=(document.getElementById('ep-date')||{}).value||null;
+  var isCredit=(document.getElementById('ep-paytype')||{}).value==='credit';
+  var due=isCredit?((document.getElementById('ep-due')||{}).value||null):null;
+  if(amount<=0){ showToast(L('أدخل مبلغاً صحيحاً','Enter a valid amount','مبلغ معتبر وارد کنید'),'error'); return; }
+  if(!confirm(L('حفظ تعديلات الفاتورة؟','Save invoice changes?','ذخیره تغییرات فاکتور؟'))) return;
+  try {
+    // rebuild description with correct credit tag
+    var desc=supplier+(isCredit?(lang==='ar'?' (آجل)':lang==='en'?' (Credit)':' (قرضی)'):'');
+    await api('PATCH','transactions',{amount:amount,description:desc,supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:due},'?id=eq.'+transId);
+    Object.assign(t,{amount:amount,description:desc,supplier_name:supplier,is_credit:isCredit,paid:!isCredit,due_date:due});
+    if(p){
+      var pPatch={supplier:supplier,total_price:amount,invoice_date:date,invoice_no:invNo};
+      if(_epImage!==undefined) pPatch.invoice_image=_epImage; // only touch image if changed
+      await api('PATCH','purchases',pPatch,'?id=eq.'+p.id);
+      Object.assign(p,pPatch);
+    }
+    closeModal('editPurchaseModal');
+    await loadAll();
+    renderFinance();
+    showToast(L('تم حفظ التعديلات','Changes saved','تغییرات ذخیره شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحفظ: ','Save failed: ','ذخیره نشد: ')+(e.message||''),'error');
   }
-  await loadAll();
-  renderFinance();
 }
 
 async function markCreditPaid(transId){
