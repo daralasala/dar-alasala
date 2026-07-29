@@ -1878,7 +1878,7 @@ function getUserPermissions(u){
   var tabs=['dashboard','notify','production'];
   if(dep==='حسابدار') tabs=tabs.concat(['orders','finance','customers','inventory','requests']);
   else if(dep==='مسئول خرید') tabs=tabs.concat(['finance','inventory','requests']);
-  else if(dep==='انباردار'||dep==='مسئول انبار') tabs=tabs.concat(['inventory','requests','orders']);
+  else if(dep==='انباردار'||dep==='مسئول انبار') tabs=tabs.concat(['inventory','requests','orders','finance']);
   else if(dep==='مسئول فروش') tabs=tabs.concat(['orders','customers']);
   else if(dep==='راننده') tabs=tabs.concat(['orders']);
   else tabs=tabs.concat(['orders','inventory','requests']); // workshop workers
@@ -2435,7 +2435,7 @@ async function loadAll(isRefresh){
   var dep=currentUser?currentUser.department:'';
   var perms=currentUser?getUserPermissions(currentUser):[];
   // What this user can actually see
-  var seeFinance=isManager||perms.indexOf('finance')>=0||dep==='حسابدار'||dep==='مسئول خرید';
+  var seeFinance=isManager||perms.indexOf('finance')>=0||dep==='حسابدار'||dep==='مسئول خرید'||dep==='انباردار'||dep==='مسئول انبار';
   var seeCustomers=isManager||perms.indexOf('customers')>=0||dep==='حسابدار'||dep==='مسئول فروش';
   var isFamily=currentUser&&(currentUser.role==='family'||currentUser.department==='خانواده');
 
@@ -4848,7 +4848,7 @@ function renderFinReport(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var d=finReportData();
   // Foreman & purchasing (non-managers): only expenses & purchases — no income/sales, no profit
-  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
+  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار')&&currentUser.role!=='manager';
   var fmt=function(n){ return (n||0).toLocaleString()+' '+L('ر.ق','QAR','ریال'); };
   var catRows=function(obj){
     var keys=Object.keys(obj);
@@ -4920,7 +4920,7 @@ function printFinReport(){
     }).join('');
   };
   var dir=lang==='en'?'ltr':'rtl';
-  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
+  var expenseOnly = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار')&&currentUser.role!=='manager';
   var profitColor=d.profit>=0?'#1a7f37':'#c0392b';
   var summaryBox = expenseOnly ?
     ('<div class="box">'+
@@ -4960,7 +4960,7 @@ function printFinReport(){
 }
 
 function renderFinance(){
-  const isPurchasing = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن')&&currentUser.role!=='manager';
+  const isPurchasing = currentUser&&(currentUser.department==='مسئول خرید'||currentUser.department==='فورمن'||currentUser.department==='انباردار'||currentUser.department==='مسئول انبار')&&currentUser.role!=='manager';
   const income=allTransactions.filter(t=>t.type==='income').reduce((s,t)=>s+(t.amount||0),0);
   // Expense: count everything EXCEPT unpaid credit purchases (money not yet paid)
   const expense=allTransactions.filter(t=>t.type!=='income'&&!(t.is_credit&&!t.paid)).reduce((s,t)=>s+(t.amount||0),0);
