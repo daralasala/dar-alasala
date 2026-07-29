@@ -2953,11 +2953,9 @@ async function openOrderDetail(id){
   var sumItemPrepay = invoiceSiblings.reduce(function(s,x){return s+(x.prepay||0);},0);
   var totalPrepay = invLevelPrepay>0 ? invLevelPrepay : sumItemPrepay;
   var invTotal = invObj ? (invObj.total_price||0) : invoiceSiblings.reduce(function(s,x){return s+(x.total_price||0);},0);
-  var paidThis = (o.prepay||0);
-  if(!paidThis && totalPrepay>0){
-    // share proportional to this order's value within the invoice
-    paidThis = invTotal>0 ? Math.round(totalPrepay*((o.total_price||0)/invTotal)) : totalPrepay;
-  }
+  // "Paid" here means confirmed payment (status paid+), not a recorded prepay.
+  var isConfirmedPaid = (o.status==='paid'||o.status==='building'||o.status==='ready'||o.status==='delivered');
+  var paidThis = isConfirmedPaid ? (o.total_price||0) : 0;
   const rem=(o.total_price||0)-paidThis;
   const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const stepsHtml = allStages.map(s=>{
@@ -3083,8 +3081,20 @@ function openInvoiceFolder(invId){
   var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
   var invCode=inv?inv.inv_code:'';
   var total=inv?(inv.total_price||0):items.reduce(function(s,it){return s+(it.total_price||0);},0);
-  var advance=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
-  var balance=total-advance;
+  // "Paid" = money actually confirmed. An item counts as paid once its status is
+  // paid/building/ready/delivered (manager pressed Confirm payment). A recorded
+  // prepay/بیعانه alone is only an EXPECTED amount and does NOT count as paid.
+  var paidItems=items.filter(function(it){return it.status==='paid'||it.status==='building'||it.status==='ready'||it.status==='delivered';});
+  var allConfirmedPaid=items.length>0 && paidItems.length===items.length;
+  var advance;
+  if(allConfirmedPaid){
+    advance=total;
+  } else if(paidItems.length>0){
+    advance=Math.min(total, paidItems.reduce(function(s,it){return s+(it.total_price||0);},0));
+  } else {
+    advance=0;
+  }
+  var balance=Math.max(0, total-advance);
   var isManager=currentUser&&currentUser.role==='manager';
   var canStart=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
   var anyPending=items.some(function(it){return it.status==='pending_payment';});
@@ -4428,8 +4438,8 @@ function renderProduction(){
     } catch(e){ return true; }
   };
   const filtered = (currentStageFilter==='all'
-    ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
-    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid')
+    ? allOrders.filter(o=>o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid'&&o.status!=='cancelled')
+    : allOrders.filter(o=>o.current_stage===currentStageFilter&&o.status!=='delivered'&&o.status!=='pending_payment'&&o.status!=='paid'&&o.status!=='cancelled')
   ).filter(notPassedByMe);
   document.getElementById('production-orders').innerHTML = filtered.length===0
     ? `<div class="empty-state"><div class="empty-icon">🏭</div><div>${T('no_data')}</div></div>`
