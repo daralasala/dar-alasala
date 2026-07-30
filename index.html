@@ -7440,13 +7440,13 @@ function absenceSection(u){
   }).join('');
   var totalDays=unsettledAbsenceDays(u.id);
   return '<div style="border-top:1px solid var(--border);margin:10px 0;padding-top:10px;font-size:12px;font-weight:700;color:var(--text2)">📅 '+L('الغياب','Absences','غیبت‌ها')+'</div>'+
-    '<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:8px">'+
+    '<div style="display:flex;gap:8px;margin-bottom:8px">'+
       '<div style="flex:2"><label class="form-label" style="font-size:11px">'+L('تاريخ الغياب','Absence date','تاریخ غیبت')+'</label>'+
         '<input class="form-control" type="date" id="sf-abs-date" value="'+today+'" onchange="previewAbsenceDays()"></div>'+
       '<div style="flex:1"><label class="form-label" style="font-size:11px">'+L('أيام','Days','روز')+'</label>'+
         '<input class="form-control" type="number" id="sf-abs-days" min="1" step="1" value="'+absenceDaysFor(today)+'"></div>'+
-      '<button class="btn btn-primary" style="flex:1;white-space:nowrap" onclick="addAbsence('+u.id+')">➕ '+L('تسجيل','Log','ثبت')+'</button>'+
     '</div>'+
+    '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="addAbsence('+u.id+')">➕ '+L('تسجيل غياب','Log absence','ثبت غیبت')+'</button>'+
     '<div id="sf-abs-hint" style="font-size:11px;color:var(--text2);margin-bottom:8px"></div>'+
     (list.length?('<div style="margin-bottom:6px">'+rows+'</div>'+
       '<div style="font-size:12px;font-weight:700;text-align:center;color:var(--orange);margin-bottom:10px">'+L('إجمالي أيام الغياب غير المحتسبة','Total unsettled absence days','مجموع روزهای غیبت تسویه‌نشده')+': '+totalDays+'</div>')
