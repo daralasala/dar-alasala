@@ -2448,7 +2448,7 @@ async function loadAll(isRefresh){
 
   // Core data everyone needs (orders + users + stages + job titles), all in parallel
   var core=[
-    api('GET','orders','','?select=id,id_code,customer_name,customer_phone,product,delivery_date,total_price,item_price,item_qty,prepay,description,status,progress,current_stage,worker,assigned_worker,passed_by,materials,invoice_id,created_at,work_started,work_done,thumb&order=created_at.desc'),
+    api('GET','orders','','?select=id,id_code,customer_name,customer_phone,product,delivery_date,total_price,item_price,item_qty,prepay,description,status,progress,current_stage,worker,assigned_worker,passed_by,materials,invoice_id,created_at,work_started,work_done,thumb,is_paid&order=created_at.desc'),
     api('GET','users','','?select=*&order=created_at.desc'),
     api('GET','stages','','?select=*&order=order_num.asc'),
     api('GET','job_titles','','?select=*&order=id.asc'),
@@ -2953,8 +2953,9 @@ async function openOrderDetail(id){
   var sumItemPrepay = invoiceSiblings.reduce(function(s,x){return s+(x.prepay||0);},0);
   var totalPrepay = invLevelPrepay>0 ? invLevelPrepay : sumItemPrepay;
   var invTotal = invObj ? (invObj.total_price||0) : invoiceSiblings.reduce(function(s,x){return s+(x.total_price||0);},0);
-  // "Paid" here means confirmed payment (status paid+), not a recorded prepay.
-  var isConfirmedPaid = (o.status==='paid'||o.status==='building'||o.status==='ready'||o.status==='delivered');
+  // "Paid" here means confirmed payment via the Confirm-payment button (is_paid),
+  // not a production status and not a mere prepay.
+  var isConfirmedPaid = (o.is_paid===true||o.status==='paid');
   var paidThis = isConfirmedPaid ? (o.total_price||0) : 0;
   const rem=(o.total_price||0)-paidThis;
   const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
@@ -3081,10 +3082,11 @@ function openInvoiceFolder(invId){
   var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
   var invCode=inv?inv.inv_code:'';
   var total=inv?(inv.total_price||0):items.reduce(function(s,it){return s+(it.total_price||0);},0);
-  // "Paid" = money actually confirmed. An item counts as paid once its status is
-  // paid/building/ready/delivered (manager pressed Confirm payment). A recorded
-  // prepay/بیعانه alone is only an EXPECTED amount and does NOT count as paid.
-  var paidItems=items.filter(function(it){return it.status==='paid'||it.status==='building'||it.status==='ready'||it.status==='delivered';});
+  // "Paid" = money actually confirmed via the Confirm-payment button (is_paid flag).
+  // Production statuses (building/ready/delivered) do NOT imply payment — an item
+  // can enter production on just a prepay. Fallback to status only for legacy rows
+  // that predate the is_paid flag and were explicitly marked 'paid'.
+  var paidItems=items.filter(function(it){return it.is_paid===true||it.status==='paid';});
   var allConfirmedPaid=items.length>0 && paidItems.length===items.length;
   var advance;
   if(allConfirmedPaid){
@@ -3381,8 +3383,15 @@ async function startInvoiceProduction(invId){
   // Mark every pending item of this invoice as PAID (not building yet)
   for(var i=0;i<pendingItems.length;i++){
     var o=pendingItems[i];
-    await api('PATCH','orders',{status:'paid'},'?id=eq.'+o.id);
-    o.status='paid';
+    await api('PATCH','orders',{status:'paid',is_paid:true},'?id=eq.'+o.id);
+    o.status='paid'; o.is_paid=true;
+  }
+  // Also flag any already-progressed items of this invoice as paid (they were confirmed now)
+  for(var k=0;k<allInvItems.length;k++){
+    if(!allInvItems[k].is_paid){
+      await api('PATCH','orders',{is_paid:true},'?id=eq.'+allInvItems[k].id);
+      allInvItems[k].is_paid=true;
+    }
   }
   // Build receipt voucher data
   var custName=inv?inv.customer_name:allInvItems[0].customer_name;
