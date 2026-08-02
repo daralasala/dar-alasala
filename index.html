@@ -2953,10 +2953,14 @@ async function openOrderDetail(id){
   var sumItemPrepay = invoiceSiblings.reduce(function(s,x){return s+(x.prepay||0);},0);
   var totalPrepay = invLevelPrepay>0 ? invLevelPrepay : sumItemPrepay;
   var invTotal = invObj ? (invObj.total_price||0) : invoiceSiblings.reduce(function(s,x){return s+(x.total_price||0);},0);
-  // "Paid" here means confirmed payment via the Confirm-payment button (is_paid),
-  // not a production status and not a mere prepay.
-  var isConfirmedPaid = (o.is_paid===true||o.status==='paid');
-  var paidThis = isConfirmedPaid ? (o.total_price||0) : 0;
+  // Paid = this item's share of the invoice prepay, once payment is confirmed.
+  // Customer pays the prepay (not full price), so an item's "paid" is its slice of it.
+  var isConfirmedPaid = (o.is_paid===true||o.status==='paid'||o.status==='building'||o.status==='ready'||o.status==='delivered');
+  var paidThis = 0;
+  if(isConfirmedPaid && totalPrepay>0){
+    paidThis = invTotal>0 ? Math.round(totalPrepay*((o.total_price||0)/invTotal)) : totalPrepay;
+    if(paidThis>(o.total_price||0)) paidThis=(o.total_price||0);
+  }
   const rem=(o.total_price||0)-paidThis;
   const sm={pending_payment:'badge-orange',paid:'badge-blue',building:'badge-blue',ready:'badge-green',delivered:'badge-purple',waiting:'badge-orange'};
   const stepsHtml = allStages.map(s=>{
@@ -3082,20 +3086,13 @@ function openInvoiceFolder(invId){
   var custPhone=(inv&&inv.customer_phone)?inv.customer_phone:(items[0].customer_phone||'');
   var invCode=inv?inv.inv_code:'';
   var total=inv?(inv.total_price||0):items.reduce(function(s,it){return s+(it.total_price||0);},0);
-  // "Paid" = money actually confirmed via the Confirm-payment button (is_paid flag).
-  // Production statuses (building/ready/delivered) do NOT imply payment — an item
-  // can enter production on just a prepay. Fallback to status only for legacy rows
-  // that predate the is_paid flag and were explicitly marked 'paid'.
-  var paidItems=items.filter(function(it){return it.is_paid===true||it.status==='paid';});
-  var allConfirmedPaid=items.length>0 && paidItems.length===items.length;
-  var advance;
-  if(allConfirmedPaid){
-    advance=total;
-  } else if(paidItems.length>0){
-    advance=Math.min(total, paidItems.reduce(function(s,it){return s+(it.total_price||0);},0));
-  } else {
-    advance=0;
-  }
+  var prepay=inv?(inv.prepay||0):items.reduce(function(s,it){return s+(it.prepay||0);},0);
+  // Payment flow: customer pays the PREPAY written on the invoice, manager presses
+  // "Confirmed paid" → that flips is_paid=true and records the prepay in finance.
+  // So "Paid" = the prepay amount once payment is confirmed; 0 while still pending.
+  // (If the whole invoice was later fully settled, prepay may equal total.)
+  var isConfirmed=items.some(function(it){return it.is_paid===true||it.status==='paid'||it.status==='building'||it.status==='ready'||it.status==='delivered';});
+  var advance=isConfirmed?Math.min(total,prepay):0;
   var balance=Math.max(0, total-advance);
   var isManager=currentUser&&currentUser.role==='manager';
   var canStart=currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
