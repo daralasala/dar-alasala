@@ -2629,7 +2629,7 @@ function renderOrders(){
       var canStart = currentUser&&(currentUser.role==='manager'||currentUser.department==='حسابدار');
       // Single button to start production for the WHOLE invoice + auto receipt voucher
       var startAllBtn=(anyPending&&canStart)
-        ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد دفع الفاتورة كاملة':lang==='en'?'Confirm payment for whole invoice':'تأیید پرداخت کل فاکتور')+' ('+pendingCount+' '+(lang==='ar'?'صنف':lang==='en'?'item':'جنس')+')</button>'
+        ? '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="event.stopPropagation();startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد استلام العربون':lang==='en'?'Confirm prepay received':'تأیید دریافت بیعانه')+' ('+pendingCount+' '+(lang==='ar'?'صنف':lang==='en'?'item':'جنس')+')</button>'
         : '';
       html+='<div class="card" style="margin-bottom:12px">'+
         '<div class="card-header" style="margin-bottom:10px;cursor:pointer" onclick="openInvoiceFolder(\''+invId+'\')">'+
@@ -3125,7 +3125,7 @@ function openInvoiceFolder(invId){
   var anyPaid=items.some(function(it){return it.status==='paid';});
   var paidCount=items.filter(function(it){return it.status==='paid';}).length;
   var startAllBtn=(anyPending&&canStart)
-    ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد دفع الفاتورة كاملة':lang==='en'?'Confirm payment for whole invoice':'تأیید پرداخت کل فاکتور')+' ('+pendingCount+')</button>'
+    ? '<button class="btn btn-primary btn-block" style="margin-bottom:8px" onclick="closeModal(\'invoiceFolderModal\');startInvoiceProduction(\''+invId+'\')">💰 '+(lang==='ar'?'تأكيد استلام العربون':lang==='en'?'Confirm prepay received':'تأیید دریافت بیعانه')+' ('+pendingCount+')</button>'
     : '';
   // Hint when items are paid but not yet sent to production
   var paidHint=(anyPaid&&canStart)
@@ -3791,6 +3791,7 @@ function renderInvoiceEditor(o){
     '<button class="btn btn-green btn-block" onclick="saveInvoiceEdits('+o.id+')">💾 '+L('حفظ التعديلات','Save changes','ذخیره تغییرات')+'</button>'+
     '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="downloadInvoicePDF('+o.id+')">🖨️ '+L('طباعة وحفظ PDF','Print & Save PDF','چاپ و ذخیره PDF')+'</button>'+
     '<button class="btn btn-green btn-block" style="margin-top:8px;background:#128C7E;color:#fff" onclick="sendInvoiceWhatsApp('+o.id+')">💬 '+L('رسالة واتساب','WhatsApp message','پیام واتساپ')+'</button>';
+  updateInvTotals(); // recompute the Remaining row immediately using the saved prepay/discount
 }
 
 function updateInvTotals(){
