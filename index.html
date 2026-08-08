@@ -3141,7 +3141,8 @@ function openInvoiceFolder(invId){
     }
   }
   // View-invoice button: available to everyone who can open this folder
-  var viewInvBtn='<div style="margin-bottom:10px"><button class="btn btn-outline btn-block" style="border-color:var(--green);color:var(--green)" onclick="viewInvoiceDoc(\''+invId+'\')">🧾 '+(lang==='ar'?'عرض الفاتورة':lang==='en'?'View invoice':'مشاهده فاکتور')+'</button></div>';
+  var viewInvBtn='<div style="margin-bottom:10px"><button class="btn btn-outline btn-block" style="border-color:var(--green);color:var(--green)" onclick="viewInvoiceDoc(\''+invId+'\')">🧾 '+(lang==='ar'?'عرض الفاتورة':lang==='en'?'View invoice':'مشاهده فاکتور')+'</button>'+
+    '<button class="btn btn-outline btn-block" style="margin-top:6px;border-color:var(--accent);color:var(--accent)" onclick="viewContractDoc(\''+invId+'\')">📜 '+(lang==='ar'?'عرض العقد':lang==='en'?'View contract':'مشاهده قرارداد')+'</button></div>';
   var docBtns=(isManager||currentUser.department==='حسابدار')
     ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'+
         '<button class="btn btn-primary btn-sm" onclick="closeModal(\'invoiceFolderModal\');createInvoice('+firstId+')">🧾 '+(lang==='ar'?'تعديل/إنشاء فاتورة':lang==='en'?'Edit/Create invoice':'ویرایش/ساخت فاکتور')+'</button>'+
@@ -3989,6 +3990,17 @@ function downloadInvoicePDF(orderId){
   pdfRender(styles, bodyContent, r.invNo);
 }
 
+// View the generated contract directly (no editor) — used from the customer file
+function viewContractDoc(invId){
+  var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
+  var firstId = items.length ? items[0].id : null;
+  if(firstId===null){ showToast(lang==='ar'?'لا توجد أصناف':lang==='en'?'No items':'جنسی نیست','error'); return; }
+  var o=allOrders.find(function(x){return x.id===firstId;}); if(!o) return;
+  // Fill the contract work-items list from this invoice's orders
+  contractItems=items.map(function(it){return it.item_qty>1?(it.product+' (عدد '+it.item_qty+')'):it.product;});
+  downloadContractPDF(firstId);
+}
+
 // View the generated invoice directly (no editor) — used from the customer file / finance list
 function viewInvoiceDoc(invId){
   var items=allOrders.filter(function(o){return String(o.invoice_id)===String(invId);});
@@ -4124,16 +4136,23 @@ function updateContractPay(){
 }
 
 function buildContractHTML(orderId, withButton){
-  var no=document.getElementById('c-no').value;
-  var date=document.getElementById('c-date').value;
-  var cust=document.getElementById('c-cust').value;
-  var pid=document.getElementById('c-id').value;
-  var phone=document.getElementById('c-phone').value;
-  var loc=document.getElementById('c-loc').value;
-  var total=parseFloat(document.getElementById('c-total').value)||0;
-  var prepay=parseFloat(document.getElementById('c-prepay').value)||0;
+  // The contract editor may NOT be open (direct "View contract" from the customer
+  // file), so every field falls back to the stored order/invoice data.
+  var ord=allOrders.find(function(x){return x.id===orderId;});
+  var invC=(ord&&ord.invoice_id)?allInvoices.find(function(x){return String(x.id)===String(ord.invoice_id);}):null;
+  var cv=function(id){ var el=document.getElementById(id); return el?el.value:null; };
+  var fallbackTotal=invC?(invC.total_price||0):(ord?(ord.total_price||0):0);
+  var fallbackPrepay=invC?(invC.prepay||0):(ord?(ord.prepay||0):0);
+  var no=cv('c-no')||((ord&&ord.id_code)?ord.id_code.replace('ORD-','C-'):'C-'+String(Date.now()).slice(-5));
+  var date=cv('c-date')||new Date().toISOString().slice(0,10);
+  var cust=cv('c-cust')||(ord?(ord.customer_name||''):'');
+  var pid=cv('c-id')||'';
+  var phone=cv('c-phone')||(ord?(ord.customer_phone||''):'');
+  var loc=cv('c-loc')||'';
+  var total=cv('c-total')!==null?(parseFloat(cv('c-total'))||0):fallbackTotal;
+  var prepay=cv('c-prepay')!==null?(parseFloat(cv('c-prepay'))||0):fallbackPrepay;
   var rem=total-prepay;
-  var duration=document.getElementById('c-duration').value;
+  var duration=cv('c-duration')||('40 : 50 '+(lang==='ar'?'يوم عمل':lang==='en'?'working days':'روز کاری'));
   var itemsList=contractItems.filter(function(x){return x&&x.trim();}).map(function(it,i){
     return '<div style="margin-bottom:6px">'+(i+1)+'- '+it+'</div>';
   }).join('');
