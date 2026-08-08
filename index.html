@@ -3888,12 +3888,18 @@ function numToArabicWords(num){
 
 function buildInvoiceHTML(orderId, withButton){
   var o=allOrders.find(x=>x.id===orderId);
-  var invNo=document.getElementById('inv-no').value;
-  var cust=document.getElementById('inv-cust').value;
-  var contact=document.getElementById('inv-contact').value;
-  var date=document.getElementById('inv-date').value;
+  if(!o) return {html:'', invNo:''};
+  // The editor form may NOT be open (e.g. "View invoice" from the customer file),
+  // so every field falls back to the stored invoice/order data instead of throwing.
+  var invRec=o.invoice_id?allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}):null;
+  var fv=function(id){ var el=document.getElementById(id); return el?el.value:''; };
+  var invNo=fv('inv-no')||(invRec?invRec.inv_code:'')||o.id_code||'';
+  var cust=fv('inv-cust')||(invRec?invRec.customer_name:'')||o.customer_name||'';
+  var contact=fv('inv-contact')||(invRec?invRec.customer_phone:'')||o.customer_phone||'';
+  var date=fv('inv-date')||((o.created_at||'').slice(0,10))||new Date().toISOString().slice(0,10);
   var total=invoiceItems.reduce(function(s,it){return s+(it.qty*it.price);},0);
-  var discount=parseFloat((document.getElementById('inv-discount')||{}).value)||0;
+  var discEl=document.getElementById('inv-discount');
+  var discount=discEl?(parseFloat(discEl.value)||0):(invRec?(invRec.discount||0):0);
   var grandTotal=total-discount;
   var advance=o.prepay||0;
   if(o.invoice_id){ var inv=allInvoices.find(function(x){return String(x.id)===String(o.invoice_id);}); if(inv) advance=inv.prepay||0; }
