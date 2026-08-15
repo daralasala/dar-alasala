@@ -1961,6 +1961,15 @@ async function saveDebt(){
 function renderDebts(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
+  // Invoice images aren't in the main purchases query — load them once so the
+  // "Invoice image" button can appear on credit-purchase cards, then re-render.
+  // Guarded by _purchImagesLoaded so this can't loop.
+  if(!_purchImagesLoaded){
+    ensurePurchaseImages(function(){
+      var m=document.getElementById('debtsModal');
+      if(m&&m.classList.contains('open')) renderDebts();
+    });
+  }
   // --- Credit purchases: unpaid (owed) and paid (settled) ---
   var creditBuys=(allTransactions||[]).filter(function(t){ return t.is_credit && !t.paid; });
   var creditPaid=(allTransactions||[]).filter(function(t){ return t.is_credit && t.paid; });
@@ -4643,16 +4652,22 @@ function openPurchaseInvoices(){
   renderPurchaseInvoices();
   openModal('purchInvoicesModal');
   // Lazy-load invoice images (not in the main query) once, then re-render
-  if(!_purchImagesLoaded){
-    _purchImagesLoaded=true;
-    api('GET','purchases','','?select=id,invoice_image&order=id.desc').then(function(rows){
-      if(rows&&rows.length){
-        var map={}; rows.forEach(function(r){ map[r.id]=r.invoice_image; });
-        (allPurchases||[]).forEach(function(p){ if(map[p.id]!==undefined) p.invoice_image=map[p.id]; });
-        if(document.getElementById('purchInvoicesModal').classList.contains('open')) renderPurchaseInvoices();
-      }
-    }).catch(function(){ _purchImagesLoaded=false; });
-  }
+  ensurePurchaseImages(function(){
+    if(document.getElementById('purchInvoicesModal').classList.contains('open')) renderPurchaseInvoices();
+  });
+}
+// Purchase invoice images are excluded from the main query for speed. Load them
+// once on demand, then run the callback so the caller can re-render.
+function ensurePurchaseImages(cb){
+  if(_purchImagesLoaded){ if(cb) cb(); return; }
+  _purchImagesLoaded=true;
+  api('GET','purchases','','?select=id,invoice_image&order=id.desc').then(function(rows){
+    if(rows&&rows.length){
+      var map={}; rows.forEach(function(r){ map[r.id]=r.invoice_image; });
+      (allPurchases||[]).forEach(function(p){ if(map[p.id]!==undefined) p.invoice_image=map[p.id]; });
+    }
+    if(cb) cb();
+  }).catch(function(){ _purchImagesLoaded=false; });
 }
 var _purchImagesLoaded=false;
 function renderPurchaseInvoices(){
