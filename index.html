@@ -887,8 +887,10 @@ body.en .search-icon{right:auto;left:10px;}
       <div style="font-weight:700;font-size:14px" id="dbt-list-title">📋 بدهی‌های باز</div>
       <div style="font-weight:700;color:var(--red)" id="dbt-total"></div>
     </div>
+    <select class="form-control" id="dbt-supplier" onchange="setDebtsSupplier(this.value)" style="margin-bottom:10px"></select>
     <div id="dbt-list"></div>
     <div style="margin-top:12px"><button class="btn btn-outline btn-block" onclick="toggleDebtsPaid()" id="dbt-toggle-paid">👁️ نمایش پرداخت‌شده‌ها</button></div>
+    <div style="margin-top:8px"><button class="btn btn-outline btn-block" style="border-color:var(--accent);color:var(--accent)" onclick="printDebtsStatement()" id="dbt-statement-btn">🖨️ کشف حساب / چاپ</button></div>
   </div>
 </div>
 
@@ -1920,6 +1922,8 @@ function applyInvoiceVisibility(){
 // ===== DEBTS (money the company owes to others) — manager only =====
 var allDebts=[];
 var _debtsShowPaid=false;
+var _debtsSupplier=''; // '' = show all companies
+function setDebtsSupplier(v){ _debtsSupplier=v||''; renderDebts(); }
 async function loadDebts(){
   try { allDebts=await api('GET','debts','','?select=*&order=due_date.asc')||[]; }
   catch(e){ allDebts=[]; }
@@ -1930,6 +1934,7 @@ async function openDebtsModal(){
   var setTxt=function(id,t){ var el=document.getElementById(id); if(el) el.textContent=t; };
   var setPh=function(id,t){ var el=document.getElementById(id); if(el) el.placeholder=t; };
   setTxt('dbt-title',L('الديون (الدائنون)','Debts (creditors)','بدهی‌ها (طلبکارها)'));
+  setTxt('dbt-statement-btn','🖨️ '+L('كشف الحساب','Statement','کشف حساب'));
   setTxt('dbt-add-title','➕ '+L('إضافة دين جديد','Add new debt','افزودن بدهی جدید'));
   setPh('dbt-creditor',L('اسم الدائن','Creditor name','نام طلبکار'));
   setPh('dbt-amount',L('المبلغ (QAR)','Amount (QAR)','مبلغ (QAR)'));
@@ -1958,6 +1963,68 @@ async function saveDebt(){
     showToast(lang==='ar'?'تم تسجيل الدين':lang==='en'?'Debt saved':'بدهی ثبت شد','success');
   } catch(e){ showToast('خطا: '+(e.message||e),'error'); }
 }
+// Printable statement of credit purchases + manual debts.
+// Respects the currently selected supplier filter (_debtsSupplier).
+function printDebtsStatement(){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var dir=(lang==='en')?'ltr':'rtl';
+  var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
+  var supName=function(t){ return (t.supplier_name||t.description||'').trim(); };
+  var match=function(n){ return !_debtsSupplier || n===_debtsSupplier; };
+  var openBuys=(allTransactions||[]).filter(function(t){ return t.is_credit&&!t.paid&&match(supName(t)); });
+  var paidBuys=(allTransactions||[]).filter(function(t){ return t.is_credit&&t.paid&&match(supName(t)); });
+  var openDebts=(allDebts||[]).filter(function(d){ return !d.is_paid&&match((d.creditor||'').trim()); });
+  var paidDebts=(allDebts||[]).filter(function(d){ return d.is_paid&&match((d.creditor||'').trim()); });
+  var sum=function(arr,k){ return arr.reduce(function(s,x){return s+(x[k]||0);},0); };
+  var openTot=sum(openBuys,'amount')+sum(openDebts,'amount');
+  var paidTot=sum(paidBuys,'amount')+sum(paidDebts,'amount');
+  var th=function(t,align){ return '<th style="padding:6px 8px;text-align:'+(align||(dir==='rtl'?'right':'left'))+';font-size:12px;background:#f5f5f5">'+t+'</th>'; };
+  var td=function(t,align,extra){ return '<td style="padding:6px 8px;border-bottom:1px solid #eee;font-size:13px;text-align:'+(align||(dir==='rtl'?'right':'left'))+';'+(extra||'')+'">'+t+'</td>'; };
+  // Rows for credit purchases
+  var buyRows=function(arr){
+    if(!arr.length) return '<tr><td colspan="4" style="padding:10px;text-align:center;color:#999;font-size:13px">—</td></tr>';
+    return arr.slice().sort(function(a,b){return new Date(b.created_at||0)-new Date(a.created_at||0);}).map(function(t){
+      var pp=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(t.id);});
+      return '<tr>'+td((t.created_at||'').slice(0,10))+td(supName(t))+
+        td(pp&&pp.invoice_no?pp.invoice_no:'—')+
+        td(fmt(t.amount),'left','font-weight:700')+'</tr>';
+    }).join('');
+  };
+  // Rows for manual debts
+  var debtRows=function(arr){
+    if(!arr.length) return '';
+    return arr.map(function(d){
+      return '<tr>'+td(d.due_date||'—')+td(d.creditor||'')+td(d.notes||'—')+
+        td(fmt(d.amount),'left','font-weight:700')+'</tr>';
+    }).join('');
+  };
+  var title=_debtsSupplier?(L('كشف حساب','Statement','کشف حساب')+' — '+_debtsSupplier)
+    :L('كشف حساب الديون','Debts statement','کشف حساب قرضی‌ها');
+  var html='<!DOCTYPE html><html dir="'+dir+'"><head><meta charset="UTF-8"><title>'+title+'</title>'+
+    '<style>body{font-family:Arial,sans-serif;padding:24px;color:#222;max-width:900px;margin:0 auto}'+
+    'h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;color:#444}'+
+    'table{width:100%;border-collapse:collapse;margin-bottom:10px}'+
+    '.box{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:14px}'+
+    '.row{display:flex;justify-content:space-between;padding:5px 0;font-size:14px}'+
+    '.big{font-weight:800;font-size:16px}@media print{.noprint{display:none}}</style></head><body>'+
+    '<h1>دار الأصالة للمفروشات — '+title+'</h1>'+
+    '<div style="font-size:13px;color:#666;margin-bottom:14px">'+L('تاريخ الطباعة','Printed','تاریخ چاپ')+': '+new Date().toLocaleDateString()+'</div>'+
+    '<div class="box">'+
+      '<div class="row"><span style="color:#c0392b;font-weight:700">'+L('المتبقي (غير مدفوع)','Remaining (unpaid)','مانده (پرداخت‌نشده)')+'</span><span style="color:#c0392b;font-weight:700">'+fmt(openTot)+'</span></div>'+
+      '<div class="row"><span style="color:#27795b">'+L('المدفوع','Paid','پرداخت‌شده')+'</span><span style="color:#27795b">'+fmt(paidTot)+'</span></div>'+
+      '<div class="row big" style="border-top:2px solid #333;margin-top:6px;padding-top:8px"><span>'+L('الإجمالي','Total','جمع کل')+'</span><span>'+fmt(openTot+paidTot)+'</span></div>'+
+    '</div>'+
+    '<h2 style="color:#c0392b">'+L('مشتريات آجلة غير مدفوعة','Unpaid credit purchases','خریدهای قرضی پرداخت‌نشده')+'</h2>'+
+    '<table><thead><tr>'+th(L('التاريخ','Date','تاریخ'))+th(L('الشركة','Company','شرکت'))+th(L('رقم الفاتورة','Invoice no.','شماره فاکتور'))+th(L('المبلغ','Amount','مبلغ'),'left')+'</tr></thead><tbody>'+buyRows(openBuys)+debtRows(openDebts)+'</tbody></table>'+
+    '<h2 style="color:#27795b">'+L('مدفوعة','Paid','پرداخت‌شده‌ها')+'</h2>'+
+    '<table><thead><tr>'+th(L('التاريخ','Date','تاریخ'))+th(L('الشركة','Company','شرکت'))+th(L('رقم الفاتورة','Invoice no.','شماره فاکتور'))+th(L('المبلغ','Amount','مبلغ'),'left')+'</tr></thead><tbody>'+buyRows(paidBuys)+debtRows(paidDebts)+'</tbody></table>'+
+    '<div class="noprint" style="text-align:center;margin-top:26px"><button onclick="window.print()" style="padding:12px 30px;background:#5a5f7a;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer">🖨️ '+L('طباعة','Print','چاپ')+'</button></div>'+
+    '</body></html>';
+  var w=window.open('','_blank');
+  if(!w){ showToast(L('اسمح بالنوافذ المنبثقة','Allow pop-ups','اجازه پاپ‌آپ بده'),'error'); return; }
+  w.document.write(html); w.document.close();
+}
+
 function renderDebts(){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
   var fmt=function(n){ return (n||0).toLocaleString()+' QAR'; };
@@ -1971,13 +2038,31 @@ function renderDebts(){
     });
   }
   // --- Credit purchases: unpaid (owed) and paid (settled) ---
-  var creditBuys=(allTransactions||[]).filter(function(t){ return t.is_credit && !t.paid; });
-  var creditPaid=(allTransactions||[]).filter(function(t){ return t.is_credit && t.paid; });
+  var creditBuysAll=(allTransactions||[]).filter(function(t){ return t.is_credit && !t.paid; });
+  var creditPaidAll=(allTransactions||[]).filter(function(t){ return t.is_credit && t.paid; });
+  // Supplier filter: name of the company to show only, '' = all
+  var supName=function(t){ return (t.supplier_name||t.description||'').trim(); };
+  var supMatch=function(t){ return !_debtsSupplier || supName(t)===_debtsSupplier; };
+  var creditBuys=creditBuysAll.filter(supMatch);
+  var creditPaid=creditPaidAll.filter(supMatch);
+  // Build the supplier dropdown from every credit purchase + manual debt (unfiltered)
+  var supSet={};
+  creditBuysAll.concat(creditPaidAll).forEach(function(t){ var n=supName(t); if(n) supSet[n]=true; });
+  (allDebts||[]).forEach(function(d){ var n=(d.creditor||'').trim(); if(n) supSet[n]=true; });
+  var supList=Object.keys(supSet).sort();
+  var supSel=document.getElementById('dbt-supplier');
+  if(supSel){
+    var cur=_debtsSupplier;
+    supSel.innerHTML='<option value="">'+L('كل الشركات','All companies','همه شرکت‌ها')+'</option>'+
+      supList.map(function(n){return '<option value="'+n.replace(/"/g,'&quot;')+'"'+(n===cur?' selected':'')+'>'+n+'</option>';}).join('');
+  }
   var creditTotal=creditBuys.reduce(function(s,t){return s+(t.amount||0);},0);
   var creditPaidTotal=creditPaid.reduce(function(s,t){return s+(t.amount||0);},0);
-  var list=allDebts.filter(function(d){ return _debtsShowPaid ? d.is_paid : !d.is_paid; });
-  var manualTotal=allDebts.filter(function(d){return !d.is_paid;}).reduce(function(s,d){return s+(d.amount||0);},0);
-  var manualPaidTotal=allDebts.filter(function(d){return d.is_paid;}).reduce(function(s,d){return s+(d.amount||0);},0);
+  // Manual debts match by creditor name; when a supplier is selected, only that one shows
+  var debtMatch=function(d){ return !_debtsSupplier || (d.creditor||'').trim()===_debtsSupplier; };
+  var list=allDebts.filter(function(d){ return (_debtsShowPaid ? d.is_paid : !d.is_paid) && debtMatch(d); });
+  var manualTotal=allDebts.filter(function(d){return !d.is_paid && debtMatch(d);}).reduce(function(s,d){return s+(d.amount||0);},0);
+  var manualPaidTotal=allDebts.filter(function(d){return d.is_paid && debtMatch(d);}).reduce(function(s,d){return s+(d.amount||0);},0);
   var openTotal=manualTotal+creditTotal;
   var paidTotal=manualPaidTotal+creditPaidTotal;
   // EQUATION: total credit purchases = paid + remaining
