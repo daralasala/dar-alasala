@@ -4796,6 +4796,9 @@ function renderPurchaseInvoices(){
       (p.created_by?('<div style="font-size:11px;color:var(--accent);margin-top:3px">👤 '+L('أدخلها','Entered by','ثبت توسط')+': '+p.created_by+'</div>'):'')+
       '<div style="font-size:13px;margin-top:4px;color:var(--blue);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
       img+
+      ((currentUser&&currentUser.role==='manager'&&p.transaction_id)
+        ? '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openEditPurchase('+p.transaction_id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>'
+        : '')+
     '</div>';
   }).join('');
 }
@@ -5269,7 +5272,8 @@ function viewPurchaseImage(transId){
 var _epImage=undefined; // undefined = keep existing, null = removed, string = new image
 function openEditPurchase(transId){
   var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
-  var t=allTransactions.find(x=>x.id===transId); if(!t) return;
+  // id may arrive as number or string depending on the caller
+  var t=allTransactions.find(function(x){return String(x.id)===String(transId);}); if(!t) return;
   var p=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(transId);});
   _epImage=undefined;
   var supplier=t.supplier_name||(p?p.supplier:'')||'';
@@ -5355,6 +5359,9 @@ async function saveEditPurchase(transId){
     closeModal('editPurchaseModal');
     await loadAll();
     renderFinance();
+    // keep the purchase-invoices list in sync if it's open behind the modal
+    var pim=document.getElementById('purchInvoicesModal');
+    if(pim&&pim.classList.contains('open')) renderPurchaseInvoices();
     showToast(L('تم حفظ التعديلات','Changes saved','تغییرات ذخیره شد'),'success');
   } catch(e){
     showToast(L('فشل الحفظ: ','Save failed: ','ذخیره نشد: ')+(e.message||''),'error');
