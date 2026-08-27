@@ -1112,6 +1112,16 @@ body.en .search-icon{right:auto;left:10px;}
   </div>
 </div>
 
+<div class="modal-overlay modal-top" id="editExpenseModal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">✏️ <span id="ee-title">ویرایش هزینه</span></div>
+      <button class="modal-close" onclick="closeModal('editExpenseModal')">✕</button>
+    </div>
+    <div id="edit-expense-body"></div>
+  </div>
+</div>
+
 <div class="modal-overlay modal-top" id="editPurchaseModal">
   <div class="modal">
     <div class="modal-header">
@@ -2123,6 +2133,7 @@ function renderDebts(){
         '<div style="display:flex;gap:6px;margin-top:8px">'+
           '<button class="btn btn-green btn-sm" onclick="markCreditPaid('+t.id+');setTimeout(function(){loadDebts().then(renderDebts);},400)">✅ '+L('تم الدفع','Mark paid','پرداخت شد')+'</button>'+
           ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-sm" onclick="openEditPurchase('+t.id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>':'')+
+          ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="deleteTransaction('+t.id+')">🗑️</button>':'')+
           (function(){var pp=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(t.id);});return (pp&&pp.invoice_image)?'<button class="btn btn-outline btn-sm" onclick="viewPurchaseImage(\''+t.id+'\')">🧾 '+L('صورة الفاتورة','Invoice image','عکس فاکتور')+'</button>':'';})()+
         '</div>'+
       '</div>';
@@ -4798,7 +4809,10 @@ function renderPurchaseInvoices(){
       '<div style="font-size:13px;margin-top:4px;color:var(--blue);font-weight:700">'+(p.total_price||0).toLocaleString()+' QAR</div>'+
       img+
       ((currentUser&&currentUser.role==='manager'&&p.transaction_id)
-        ? '<button class="btn btn-outline btn-sm" style="margin-top:8px" onclick="openEditPurchase('+p.transaction_id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>'
+        ? '<div style="display:flex;gap:6px;margin-top:8px">'+
+            '<button class="btn btn-outline btn-sm" onclick="openEditPurchase('+p.transaction_id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>'+
+            '<button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="deleteTransaction('+p.transaction_id+')">🗑️</button>'+
+          '</div>'
         : '')+
     '</div>';
   }).join('');
@@ -4859,6 +4873,12 @@ function renderExpenseInvoices(){
       '<div style="font-size:11px;color:var(--text2);margin-top:3px">🏷️ '+catName(t.category)+'</div>'+
       '<div style="font-size:13px;margin-top:4px;color:var(--red);font-weight:700">'+(t.amount||0).toLocaleString()+' QAR</div>'+
       img+
+      ((currentUser&&currentUser.role==='manager')
+        ? '<div style="display:flex;gap:6px;margin-top:8px">'+
+            '<button class="btn btn-outline btn-sm" onclick="openEditExpense('+t.id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>'+
+            '<button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="deleteTransaction('+t.id+')">🗑️</button>'+
+          '</div>'
+        : '')+
     '</div>';
   }).join('');
 }
@@ -5251,6 +5271,13 @@ async function deleteTransaction(id){
     allTransactions=allTransactions.filter(function(x){return String(x.id)!==String(id);});
     renderFinance();
     await loadAll();
+    // keep any open list modals in sync
+    var pim=document.getElementById('purchInvoicesModal');
+    if(pim&&pim.classList.contains('open')) renderPurchaseInvoices();
+    var eim=document.getElementById('expInvoicesModal');
+    if(eim&&eim.classList.contains('open')) renderExpenseInvoices();
+    var dbm=document.getElementById('debtsModal');
+    if(dbm&&dbm.classList.contains('open')){ await loadDebts(); renderDebts(); }
     showToast(L('تم الحذف','Deleted','حذف شد'),'success');
   } catch(e){
     showToast(L('فشل الحذف: ','Delete failed: ','حذف نشد: ')+(e.message||''),'error');
@@ -5266,6 +5293,84 @@ function viewPurchaseImage(transId){
   ov.onclick=function(){ document.body.removeChild(ov); };
   ov.innerHTML='<img src="'+p.invoice_image+'" style="max-width:100%;max-height:100%;border-radius:8px">';
   document.body.appendChild(ov);
+}
+
+// Edit an expense transaction (description, amount, category, date, image).
+var _eeImage=undefined; // undefined = keep, null = removed, string = new
+function openEditExpense(transId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var t=allTransactions.find(function(x){return String(x.id)===String(transId);}); if(!t) return;
+  _eeImage=undefined;
+  var cats=[['','—'],['حمل‌ونقل',L('نقل','Transport','حمل‌ونقل')],['بنزین',L('وقود','Fuel','بنزین')],
+    ['غذا',L('طعام','Food','غذا')],['مواد اولیه',L('مواد خام','Raw materials','مواد اولیه')],
+    ['تعمیرات',L('صيانة','Repairs','تعمیرات')]];
+  var curCat=t.category||'';
+  var inList=cats.some(function(c){return c[0]===curCat;});
+  if(!inList&&curCat) cats.push([curCat,curCat]);
+  var body=
+    '<div class="form-group"><label class="form-label">'+L('البيان','Description','شرح')+'</label>'+
+      '<input class="form-control" id="ee-desc" value="'+(t.description||'').replace(/"/g,'&quot;')+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('المبلغ','Amount','مبلغ')+' (QAR)</label>'+
+      '<input class="form-control" type="number" id="ee-amount" value="'+(t.amount||0)+'"></div>'+
+    '<div class="form-group"><label class="form-label">'+L('التصنيف','Category','دسته')+'</label>'+
+      '<select class="form-control" id="ee-cat">'+cats.map(function(c){
+        return '<option value="'+c[0]+'"'+(c[0]===curCat?' selected':'')+'>'+c[1]+'</option>';}).join('')+'</select></div>'+
+    '<div class="form-group"><label class="form-label">'+L('التاريخ','Date','تاریخ')+'</label>'+
+      '<input class="form-control" type="date" id="ee-date" value="'+((t.created_at||'').slice(0,10))+'"></div>'+
+    '<div class="form-group"><label class="form-label">🧾 '+L('صورة الفاتورة','Invoice image','عکس فاکتور')+'</label>'+
+      '<div id="ee-img-box" style="margin-bottom:6px">'+(t.image?'<img src="'+t.image+'" style="max-width:100%;border-radius:8px">':'<span style="font-size:12px;color:var(--text3)">'+L('لا توجد صورة','No image','عکسی نیست')+'</span>')+'</div>'+
+      '<button class="btn btn-outline btn-sm" onclick="pickEditExpenseImage()">📷 '+L('تغيير/إضافة','Change/Add','تغییر/افزودن')+'</button>'+
+      (t.image?' <button class="btn btn-outline btn-sm" style="border-color:var(--red);color:var(--red)" onclick="removeEditExpenseImage()">🗑️ '+L('حذف الصورة','Remove image','حذف عکس')+'</button>':'')+
+    '</div>'+
+    '<button class="btn btn-primary btn-block" style="margin-top:6px" onclick="saveEditExpense('+transId+')">💾 '+L('حفظ التعديلات','Save changes','ذخیره تغییرات')+'</button>';
+  document.getElementById('ee-title').textContent=L('تعديل المصروف','Edit expense','ویرایش هزینه');
+  document.getElementById('edit-expense-body').innerHTML=body;
+  openModal('editExpenseModal');
+}
+function pickEditExpenseImage(){
+  var input=document.createElement('input'); input.type='file'; input.accept='image/*'; input.style.display='none';
+  document.body.appendChild(input);
+  input.addEventListener('change',async function(){
+    if(input.files[0]){
+      try {
+        _eeImage=await compressImage(input.files[0],0.6,1000);
+        var box=document.getElementById('ee-img-box');
+        if(box) box.innerHTML='<img src="'+_eeImage+'" style="max-width:100%;border-radius:8px">';
+      } catch(e){ showToast('Error','error'); }
+    }
+    document.body.removeChild(input);
+  });
+  input.click();
+}
+function removeEditExpenseImage(){
+  _eeImage=null;
+  var box=document.getElementById('ee-img-box');
+  if(box) box.innerHTML='<span style="font-size:12px;color:var(--text3)">'+(lang==='ar'?'لا توجد صورة':lang==='en'?'No image':'عکسی نیست')+'</span>';
+}
+async function saveEditExpense(transId){
+  var L=function(ar,en,fa){return lang==='ar'?ar:lang==='en'?en:fa;};
+  var t=allTransactions.find(function(x){return String(x.id)===String(transId);}); if(!t) return;
+  var desc=(document.getElementById('ee-desc')||{}).value||'';
+  var amount=parseFloat((document.getElementById('ee-amount')||{}).value)||0;
+  var cat=(document.getElementById('ee-cat')||{}).value||'';
+  var date=(document.getElementById('ee-date')||{}).value||null;
+  if(amount<=0){ showToast(L('أدخل مبلغاً صحيحاً','Enter a valid amount','مبلغ معتبر وارد کنید'),'error'); return; }
+  if(!confirm(L('حفظ التعديلات؟','Save changes?','ذخیره تغییرات؟'))) return;
+  try {
+    var patch={description:desc,amount:amount,category:cat};
+    if(date) patch.created_at=date;
+    if(_eeImage!==undefined) patch.image=_eeImage;
+    await api('PATCH','transactions',patch,'?id=eq.'+transId);
+    Object.assign(t,patch);
+    closeModal('editExpenseModal');
+    await loadAll();
+    renderFinance();
+    var eim=document.getElementById('expInvoicesModal');
+    if(eim&&eim.classList.contains('open')) renderExpenseInvoices();
+    showToast(L('تم حفظ التعديلات','Changes saved','تغییرات ذخیره شد'),'success');
+  } catch(e){
+    showToast(L('فشل الحفظ: ','Save failed: ','ذخیره نشد: ')+(e.message||''),'error');
+  }
 }
 
 // Full edit of a purchase transaction + its linked purchase record (amount,
