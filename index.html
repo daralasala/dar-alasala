@@ -2122,6 +2122,7 @@ function renderDebts(){
         '</div>'+
         '<div style="display:flex;gap:6px;margin-top:8px">'+
           '<button class="btn btn-green btn-sm" onclick="markCreditPaid('+t.id+');setTimeout(function(){loadDebts().then(renderDebts);},400)">✅ '+L('تم الدفع','Mark paid','پرداخت شد')+'</button>'+
+          ((currentUser&&currentUser.role==='manager')?'<button class="btn btn-outline btn-sm" onclick="openEditPurchase('+t.id+')">✏️ '+L('تعديل','Edit','ویرایش')+'</button>':'')+
           (function(){var pp=(allPurchases||[]).find(function(x){return String(x.transaction_id)===String(t.id);});return (pp&&pp.invoice_image)?'<button class="btn btn-outline btn-sm" onclick="viewPurchaseImage(\''+t.id+'\')">🧾 '+L('صورة الفاتورة','Invoice image','عکس فاکتور')+'</button>':'';})()+
         '</div>'+
       '</div>';
@@ -5362,6 +5363,9 @@ async function saveEditPurchase(transId){
     // keep the purchase-invoices list in sync if it's open behind the modal
     var pim=document.getElementById('purchInvoicesModal');
     if(pim&&pim.classList.contains('open')) renderPurchaseInvoices();
+    // same for the debts list, where credit purchases can also be edited
+    var dbm=document.getElementById('debtsModal');
+    if(dbm&&dbm.classList.contains('open')){ await loadDebts(); renderDebts(); }
     showToast(L('تم حفظ التعديلات','Changes saved','تغییرات ذخیره شد'),'success');
   } catch(e){
     showToast(L('فشل الحفظ: ','Save failed: ','ذخیره نشد: ')+(e.message||''),'error');
